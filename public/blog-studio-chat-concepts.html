@@ -1084,178 +1084,179 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;style&gt;
   #blog-studio-chat-concepts {
     color-scheme: light dark;
-    --chat-canvas: light-dark(#e9e7e1, #10100f);
-    --chat-surface: light-dark(#f8f7f3, #1a1a18);
-    --chat-surface-2: light-dark(#efede7, #23221f);
-    --chat-surface-3: light-dark(#e5e1d8, #2d2b27);
-    --chat-ink: light-dark(#191917, #f2f0e9);
-    --chat-muted: light-dark(#706d64, #aaa79d);
-    --chat-line: light-dark(#cfcbc1, #3e3b35);
-    --chat-line-strong: light-dark(#99958a, #6c685e);
-    --chat-accent: light-dark(#a84835, #d87660);
-    --chat-accent-soft: light-dark(#f0dbd3, #452a24);
-    --chat-good: light-dark(#426955, #82b596);
-    --chat-shadow: light-dark(rgb(35 31 25 / .18), rgb(0 0 0 / .42));
-    --chat-glass: light-dark(rgb(248 247 243 / .94), rgb(26 26 24 / .94));
+    --studio-bg: light-dark(#e9e7e1, #10100f);
+    --studio-paper: light-dark(#faf9f6, #1b1b19);
+    --studio-panel: light-dark(#f0eee8, #24231f);
+    --studio-panel-2: light-dark(#e5e2d9, #2d2b27);
+    --studio-ink: light-dark(#191917, #f1efe8);
+    --studio-muted: light-dark(#716e65, #aaa79d);
+    --studio-line: light-dark(#d0ccc1, #3f3c36);
+    --studio-line-strong: light-dark(#9b968b, #6e695f);
+    --studio-accent: light-dark(#a84835, #d77660);
+    --studio-accent-soft: light-dark(#f1dcd4, #452b24);
+    --studio-good: light-dark(#426955, #83b596);
+    --studio-danger: light-dark(#913d36, #d7756c);
+    --studio-shadow: light-dark(rgb(36 31 25 / .18), rgb(0 0 0 / .42));
+    --studio-overlay: light-dark(rgb(30 28 24 / .48), rgb(0 0 0 / .66));
     width: 100%;
-    color: var(--chat-ink);
+    color: var(--studio-ink);
     font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif;
   }
 
   #blog-studio-chat-concepts * { box-sizing: border-box; }
   #blog-studio-chat-concepts button,
+  #blog-studio-chat-concepts input,
   #blog-studio-chat-concepts textarea { font: inherit; color: inherit; }
   #blog-studio-chat-concepts button { cursor: pointer; }
 
-  #blog-studio-chat-concepts .chat-concept-picker {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+  #blog-studio-chat-concepts .studio-concepts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
     margin-bottom: 10px;
   }
 
-  #blog-studio-chat-concepts .chat-concept-button,
-  #blog-studio-chat-concepts .chat-mode-button,
-  #blog-studio-chat-concepts .chat-prompt-button,
-  #blog-studio-chat-concepts .chat-mini-action {
-    border: 1px solid var(--chat-line);
-    border-radius: 6px;
-    background: var(--chat-surface);
-  }
-
-  #blog-studio-chat-concepts .chat-concept-button {
-    flex: 1 1 112px;
-    padding: 9px 10px;
-    color: var(--chat-muted);
+  #blog-studio-chat-concepts .studio-concept {
+    padding: 10px 12px;
+    border: 1px solid var(--studio-line);
+    border-radius: 7px;
+    background: var(--studio-paper);
+    color: var(--studio-muted);
     text-align: left;
   }
 
-  #blog-studio-chat-concepts .chat-concept-button strong {
+  #blog-studio-chat-concepts .studio-concept strong {
     display: block;
     margin-bottom: 2px;
-    color: var(--chat-ink);
+    color: var(--studio-ink);
     font-weight: 500;
   }
 
-  #blog-studio-chat-concepts .chat-concept-button span { font-size: .76rem; }
-  #blog-studio-chat-concepts .chat-concept-button[aria-pressed=&quot;true&quot;] {
-    border-color: var(--chat-ink);
-    background: var(--chat-ink);
-    color: var(--chat-surface);
+  #blog-studio-chat-concepts .studio-concept span { font-size: .78rem; }
+  #blog-studio-chat-concepts .studio-concept[aria-pressed=&quot;true&quot;] {
+    border-color: var(--studio-ink);
+    background: var(--studio-ink);
+    color: var(--studio-paper);
   }
+  #blog-studio-chat-concepts .studio-concept[aria-pressed=&quot;true&quot;] strong { color: var(--studio-paper); }
 
-  #blog-studio-chat-concepts .chat-concept-button[aria-pressed=&quot;true&quot;] strong { color: var(--chat-surface); }
-
-  #blog-studio-chat-concepts .chat-window {
+  #blog-studio-chat-concepts .studio-window-wrap { width: 100%; }
+  #blog-studio-chat-concepts .studio-window {
     position: relative;
     overflow: hidden;
     width: 100%;
-    min-height: 720px;
-    border: 1px solid var(--chat-line-strong);
+    min-height: 760px;
+    margin: 0 auto;
+    border: 1px solid var(--studio-line-strong);
     border-radius: 10px;
-    background: var(--chat-surface);
+    background: var(--studio-paper);
+    transition: max-width .2s ease;
   }
 
-  #blog-studio-chat-concepts .chat-topbar {
+  #blog-studio-chat-concepts .studio-window.is-mobile { max-width: 390px; }
+
+  #blog-studio-chat-concepts .studio-topbar {
     display: flex;
     min-height: 54px;
     align-items: center;
-    gap: 12px;
+    gap: 11px;
     padding: 9px 13px;
-    border-bottom: 1px solid var(--chat-line);
+    border-bottom: 1px solid var(--studio-line);
+    background: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-brand,
-  #blog-studio-chat-concepts .chat-mode-switch,
-  #blog-studio-chat-concepts .chat-thread-state,
-  #blog-studio-chat-concepts .chat-answer-head,
-  #blog-studio-chat-concepts .chat-composer-context,
-  #blog-studio-chat-concepts .chat-actions,
-  #blog-studio-chat-concepts .chat-anchor-label {
+  #blog-studio-chat-concepts .studio-brand,
+  #blog-studio-chat-concepts .studio-save-state,
+  #blog-studio-chat-concepts .studio-toolbar,
+  #blog-studio-chat-concepts .studio-toolbar-group,
+  #blog-studio-chat-concepts .studio-context,
+  #blog-studio-chat-concepts .studio-answer-head,
+  #blog-studio-chat-concepts .studio-actions,
+  #blog-studio-chat-concepts .studio-modal-head,
+  #blog-studio-chat-concepts .studio-source-head {
     display: flex;
     align-items: center;
     gap: 7px;
   }
 
-  #blog-studio-chat-concepts .chat-brand {
-    flex: 0 0 auto;
-    font-weight: 500;
-  }
-
-  #blog-studio-chat-concepts .chat-mark {
+  #blog-studio-chat-concepts .studio-brand { flex: 0 0 auto; font-weight: 500; }
+  #blog-studio-chat-concepts .studio-mark {
     display: grid;
     width: 24px;
     height: 24px;
     place-items: center;
-    background: var(--chat-ink);
-    color: var(--chat-surface);
+    background: var(--studio-ink);
+    color: var(--studio-paper);
     font-family: Georgia, serif;
   }
 
-  #blog-studio-chat-concepts .chat-version,
-  #blog-studio-chat-concepts .chat-context-chip,
-  #blog-studio-chat-concepts .chat-thread-chip,
-  #blog-studio-chat-concepts .chat-status-chip {
+  #blog-studio-chat-concepts .studio-version,
+  #blog-studio-chat-concepts .studio-chip,
+  #blog-studio-chat-concepts .studio-thread-chip,
+  #blog-studio-chat-concepts .studio-status {
     display: inline-flex;
-    align-items: center;
     min-height: 22px;
+    align-items: center;
     padding: 2px 7px;
-    border: 1px solid var(--chat-line);
+    border: 1px solid var(--studio-line);
     border-radius: 999px;
-    color: var(--chat-muted);
+    color: var(--studio-muted);
     font-size: .72rem;
     font-weight: 400;
     white-space: nowrap;
   }
 
-  #blog-studio-chat-concepts .chat-title {
+  #blog-studio-chat-concepts .studio-breadcrumb {
     min-width: 0;
     flex: 1;
-    color: var(--chat-muted);
+    color: var(--studio-muted);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  #blog-studio-chat-concepts .chat-thread-state { flex: 0 0 auto; color: var(--chat-muted); }
-  #blog-studio-chat-concepts .chat-running-dot {
+  #blog-studio-chat-concepts .studio-save-state { flex: 0 0 auto; color: var(--studio-muted); }
+  #blog-studio-chat-concepts .studio-save-dot {
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--chat-good);
+    background: var(--studio-good);
   }
 
-  #blog-studio-chat-concepts .chat-body {
+  #blog-studio-chat-concepts .studio-body {
     display: grid;
-    grid-template-columns: 184px minmax(0, 1fr);
-    min-height: 666px;
+    grid-template-columns: 192px minmax(0, 1fr);
+    min-height: 706px;
   }
 
-  #blog-studio-chat-concepts .chat-sidebar {
-    padding: 13px;
-    border-right: 1px solid var(--chat-line);
-    background: var(--chat-surface-2);
+  #blog-studio-chat-concepts .studio-body.is-focus { grid-template-columns: minmax(0, 1fr); }
+  #blog-studio-chat-concepts .studio-body.is-focus .studio-sidebar { display: none; }
+
+  #blog-studio-chat-concepts .studio-sidebar {
+    padding: 12px;
+    border-right: 1px solid var(--studio-line);
+    background: var(--studio-panel);
   }
 
-  #blog-studio-chat-concepts .chat-add {
+  #blog-studio-chat-concepts .studio-add {
     width: 100%;
-    margin-bottom: 15px;
+    margin-bottom: 14px;
     padding: 9px;
-    border: 1px solid var(--chat-ink);
+    border: 1px solid var(--studio-ink);
     border-radius: 6px;
-    background: var(--chat-ink);
-    color: var(--chat-surface);
+    background: var(--studio-ink);
+    color: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-sidebar-label {
+  #blog-studio-chat-concepts .studio-side-label {
     margin: 13px 0 6px;
-    color: var(--chat-muted);
-    font-size: .7rem;
-    letter-spacing: .07em;
+    color: var(--studio-muted);
+    font-size: .69rem;
+    letter-spacing: .08em;
     text-transform: uppercase;
   }
 
-  #blog-studio-chat-concepts .chat-draft {
+  #blog-studio-chat-concepts .studio-draft {
     width: 100%;
     margin-bottom: 4px;
     padding: 9px;
@@ -1265,417 +1266,420 @@ html&gt;body{padding:0}&lt;/style&gt;
     text-align: left;
   }
 
-  #blog-studio-chat-concepts .chat-draft[aria-pressed=&quot;true&quot;] {
-    border-color: var(--chat-line);
-    background: var(--chat-surface);
+  #blog-studio-chat-concepts .studio-draft:hover { background: var(--studio-panel-2); }
+  #blog-studio-chat-concepts .studio-draft[aria-pressed=&quot;true&quot;] {
+    border-color: var(--studio-line);
+    background: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-draft strong {
+  #blog-studio-chat-concepts .studio-draft strong {
     display: block;
     margin-bottom: 4px;
     font-size: .82rem;
     font-weight: 500;
   }
+  #blog-studio-chat-concepts .studio-draft span { color: var(--studio-muted); font-size: .7rem; }
 
-  #blog-studio-chat-concepts .chat-draft span { color: var(--chat-muted); font-size: .7rem; }
-
-  #blog-studio-chat-concepts .chat-workspace {
+  #blog-studio-chat-concepts .studio-workspace {
     position: relative;
     min-width: 0;
-    min-height: 666px;
-    background: var(--chat-surface);
+    min-height: 706px;
+    background: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-article-toolbar {
+  #blog-studio-chat-concepts .studio-toolbar {
     position: relative;
-    z-index: 8;
-    display: flex;
-    align-items: center;
-    gap: 9px;
+    z-index: 12;
+    justify-content: space-between;
     min-height: 48px;
-    padding: 8px 13px;
-    border-bottom: 1px solid var(--chat-line);
-    background: var(--chat-surface);
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--studio-line);
+    background: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-mode-switch {
-    padding: 3px;
-    border: 1px solid var(--chat-line);
-    border-radius: 7px;
-    background: var(--chat-surface-2);
-  }
-
-  #blog-studio-chat-concepts .chat-mode-button {
-    padding: 5px 9px;
-    border: 0;
-    background: transparent;
-    color: var(--chat-muted);
-  }
-
-  #blog-studio-chat-concepts .chat-mode-button[aria-pressed=&quot;true&quot;] {
-    background: var(--chat-ink);
-    color: var(--chat-surface);
-  }
-
-  #blog-studio-chat-concepts .chat-spacer { flex: 1; }
-  #blog-studio-chat-concepts .chat-thread-button {
-    padding: 6px 9px;
-    border: 1px solid var(--chat-line);
+  #blog-studio-chat-concepts .studio-tool,
+  #blog-studio-chat-concepts .studio-small-action,
+  #blog-studio-chat-concepts .studio-prompt,
+  #blog-studio-chat-concepts .studio-close {
+    padding: 6px 8px;
+    border: 1px solid var(--studio-line);
     border-radius: 6px;
-    background: var(--chat-surface);
+    background: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-work-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 618px;
+  #blog-studio-chat-concepts .studio-tool[aria-pressed=&quot;true&quot;],
+  #blog-studio-chat-concepts .studio-prompt[aria-pressed=&quot;true&quot;],
+  #blog-studio-chat-concepts .studio-small-action.primary {
+    border-color: var(--studio-ink);
+    background: var(--studio-ink);
+    color: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-work-grid.has-rail { grid-template-columns: minmax(260px, 1fr) minmax(235px, .68fr); }
+  #blog-studio-chat-concepts .studio-tool-label {
+    color: var(--studio-muted);
+    font-size: .76rem;
+  }
 
-  #blog-studio-chat-concepts .chat-article-stage {
+  #blog-studio-chat-concepts .studio-canvas {
     position: relative;
-    min-width: 0;
-    min-height: 618px;
-    padding: 38px 9% 120px;
-    background: var(--chat-surface);
+    min-height: 658px;
+    padding: 42px 10% 142px;
   }
 
-  #blog-studio-chat-concepts .chat-work-grid.has-sheet .chat-article-stage { padding-bottom: 310px; }
-  #blog-studio-chat-concepts .chat-work-grid.has-rail .chat-article-stage { padding-left: 7%; padding-right: 7%; }
+  #blog-studio-chat-concepts .studio-canvas.has-expand { padding-bottom: 330px; }
 
-  #blog-studio-chat-concepts .chat-article {
+  #blog-studio-chat-concepts .studio-article {
     max-width: 650px;
     margin: 0 auto;
     font-family: Georgia, &quot;Times New Roman&quot;, serif;
   }
 
-  #blog-studio-chat-concepts .chat-article h1 {
-    margin: 0 0 10px;
-    font-size: clamp(1.5rem, 4vw, 2.3rem);
+  #blog-studio-chat-concepts .studio-article h1 {
+    margin: 0 0 11px;
+    font-size: clamp(1.55rem, 4vw, 2.35rem);
     font-weight: 500;
     letter-spacing: -.035em;
   }
 
-  #blog-studio-chat-concepts .chat-deck {
+  #blog-studio-chat-concepts .studio-deck {
     margin: 0 0 28px;
-    color: var(--chat-muted);
+    color: var(--studio-muted);
     font-family: Inter, ui-sans-serif, sans-serif;
   }
 
-  #blog-studio-chat-concepts .chat-article p {
-    margin: 0 0 17px;
-    line-height: 1.72;
-  }
-
-  #blog-studio-chat-concepts .chat-selected {
+  #blog-studio-chat-concepts .studio-block {
     position: relative;
-    padding: 2px 3px;
-    background: var(--chat-accent-soft);
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
+    margin: 0 0 18px;
+    padding: 3px 5px;
+    border-radius: 4px;
+    line-height: 1.74;
+    outline: 0;
   }
 
-  #blog-studio-chat-concepts .chat-anchor-dot {
+  #blog-studio-chat-concepts .studio-block:hover,
+  #blog-studio-chat-concepts .studio-block:focus { background: var(--studio-panel); }
+  #blog-studio-chat-concepts .studio-block.is-selected { background: var(--studio-accent-soft); }
+  #blog-studio-chat-concepts .studio-block.is-selected::after {
     position: absolute;
-    right: -11px;
     top: 50%;
+    right: -12px;
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--chat-accent);
+    background: var(--studio-accent);
+    content: &quot;&quot;;
   }
 
-  #blog-studio-chat-concepts .chat-code-source {
-    min-height: 420px;
-    margin: 0;
-    padding: 18px;
-    border: 1px solid var(--chat-line);
-    border-radius: 7px;
-    background: var(--chat-surface-2);
-    color: var(--chat-ink);
-    font-family: &quot;SFMono-Regular&quot;, Consolas, monospace;
-    font-size: .82rem;
-    line-height: 1.65;
-    white-space: pre-wrap;
+  #blog-studio-chat-concepts .studio-edit-hint {
+    margin: 5px 0 0;
+    color: var(--studio-muted);
+    font-family: Inter, ui-sans-serif, sans-serif;
+    font-size: .72rem;
   }
 
-  #blog-studio-chat-concepts .chat-split-stage {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    padding: 22px 3.5% 130px;
-  }
-
-  #blog-studio-chat-concepts .chat-split-stage .chat-article {
-    padding: 16px;
-    border: 1px solid var(--chat-line);
-    border-radius: 7px;
-  }
-
-  #blog-studio-chat-concepts .chat-composer {
+  #blog-studio-chat-concepts .studio-outline {
     position: absolute;
-    z-index: 30;
-    right: max(18px, 8%);
+    z-index: 38;
+    top: 54px;
+    left: 12px;
+    width: 220px;
+    padding: 8px;
+    border: 1px solid var(--studio-line-strong);
+    border-radius: 8px;
+    background: var(--studio-paper);
+    box-shadow: 0 12px 30px var(--studio-shadow);
+  }
+
+  #blog-studio-chat-concepts .studio-outline button,
+  #blog-studio-chat-concepts .studio-thread-row {
+    width: 100%;
+    padding: 8px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    text-align: left;
+  }
+  #blog-studio-chat-concepts .studio-outline button:hover,
+  #blog-studio-chat-concepts .studio-thread-row:hover { background: var(--studio-panel); }
+
+  #blog-studio-chat-concepts .studio-prompts {
+    position: absolute;
+    z-index: 31;
+    right: max(16px, 8%);
+    bottom: 112px;
+    left: max(16px, 8%);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+  #blog-studio-chat-concepts .studio-prompt { font-size: .74rem; }
+
+  #blog-studio-chat-concepts .studio-composer {
+    position: absolute;
+    z-index: 32;
+    right: max(16px, 8%);
     bottom: 18px;
-    left: max(18px, 8%);
+    left: max(16px, 8%);
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 8px;
-    max-width: 720px;
+    max-width: 700px;
     margin: 0 auto;
     padding: 8px;
-    border: 1px solid var(--chat-line-strong);
+    border: 1px solid var(--studio-line-strong);
     border-radius: 12px;
-    background: var(--chat-glass);
-    box-shadow: 0 14px 34px var(--chat-shadow);
+    background: var(--studio-paper);
+    box-shadow: 0 14px 34px var(--studio-shadow);
   }
 
-  #blog-studio-chat-concepts .chat-composer-main { min-width: 0; }
-  #blog-studio-chat-concepts .chat-composer-context { margin: 0 0 6px 4px; }
-  #blog-studio-chat-concepts .chat-composer textarea {
+  #blog-studio-chat-concepts .studio-composer-main { min-width: 0; }
+  #blog-studio-chat-concepts .studio-context { margin: 0 0 5px 4px; }
+  #blog-studio-chat-concepts .studio-composer textarea {
     display: block;
     width: 100%;
-    min-height: 42px;
+    min-height: 39px;
+    padding: 8px 9px;
     resize: none;
-    padding: 9px 10px;
     border: 0;
     background: transparent;
   }
 
-  #blog-studio-chat-concepts .chat-send {
+  #blog-studio-chat-concepts .studio-send {
     align-self: end;
     padding: 9px 12px;
-    border: 1px solid var(--chat-ink);
+    border: 1px solid var(--studio-ink);
     border-radius: 7px;
-    background: var(--chat-ink);
-    color: var(--chat-surface);
+    background: var(--studio-ink);
+    color: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-bubble {
+  #blog-studio-chat-concepts .studio-answer {
     position: absolute;
-    z-index: 20;
-    top: 270px;
-    right: 5%;
-    width: min(330px, 47%);
+    z-index: 28;
+    top: 272px;
+    right: 4.5%;
+    width: min(330px, 48%);
     padding: 13px;
-    border: 1px solid var(--chat-line-strong);
+    border: 1px solid var(--studio-line-strong);
     border-radius: 10px;
-    background: var(--chat-glass);
-    box-shadow: 0 12px 30px var(--chat-shadow);
+    background: var(--studio-paper);
+    box-shadow: 0 12px 30px var(--studio-shadow);
   }
 
-  #blog-studio-chat-concepts .chat-bubble::before {
+  #blog-studio-chat-concepts .studio-answer::before {
     position: absolute;
     top: 18px;
     left: -7px;
     width: 12px;
     height: 12px;
-    border-bottom: 1px solid var(--chat-line-strong);
-    border-left: 1px solid var(--chat-line-strong);
-    background: var(--chat-glass);
+    border-bottom: 1px solid var(--studio-line-strong);
+    border-left: 1px solid var(--studio-line-strong);
+    background: var(--studio-paper);
     content: &quot;&quot;;
     transform: rotate(45deg);
   }
 
-  #blog-studio-chat-concepts .chat-answer-head { justify-content: space-between; margin-bottom: 8px; }
-  #blog-studio-chat-concepts .chat-answer-head strong { font-size: .82rem; font-weight: 500; }
-  #blog-studio-chat-concepts .chat-answer-copy { margin: 0; font-size: .84rem; line-height: 1.55; }
-  #blog-studio-chat-concepts .chat-actions { margin-top: 10px; flex-wrap: wrap; }
+  #blog-studio-chat-concepts .studio-answer-head,
+  #blog-studio-chat-concepts .studio-modal-head,
+  #blog-studio-chat-concepts .studio-source-head { justify-content: space-between; }
+  #blog-studio-chat-concepts .studio-answer-head strong { font-size: .82rem; font-weight: 500; }
+  #blog-studio-chat-concepts .studio-answer p { margin: 8px 0 0; font-size: .83rem; line-height: 1.55; }
+  #blog-studio-chat-concepts .studio-actions { flex-wrap: wrap; margin-top: 10px; }
+  #blog-studio-chat-concepts .studio-small-action { font-size: .74rem; }
 
-  #blog-studio-chat-concepts .chat-mini-action,
-  #blog-studio-chat-concepts .chat-prompt-button {
-    padding: 6px 8px;
-    background: var(--chat-surface);
-    font-size: .75rem;
-  }
-
-  #blog-studio-chat-concepts .chat-mini-action.primary {
-    border-color: var(--chat-ink);
-    background: var(--chat-ink);
-    color: var(--chat-surface);
-  }
-
-  #blog-studio-chat-concepts .chat-sheet {
+  #blog-studio-chat-concepts .studio-expand {
     position: absolute;
-    z-index: 25;
-    right: 14px;
-    bottom: 14px;
-    left: 14px;
-    min-height: 260px;
-    padding: 15px 17px 84px;
-    border: 1px solid var(--chat-line-strong);
+    z-index: 29;
+    right: 13px;
+    bottom: 13px;
+    left: 13px;
+    min-height: 270px;
+    padding: 15px 17px 92px;
+    border: 1px solid var(--studio-line-strong);
     border-radius: 12px;
-    background: var(--chat-glass);
-    box-shadow: 0 -10px 34px var(--chat-shadow);
+    background: var(--studio-paper);
+    box-shadow: 0 -10px 34px var(--studio-shadow);
   }
 
-  #blog-studio-chat-concepts .chat-sheet-copy {
+  #blog-studio-chat-concepts .studio-expand-copy {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-top: 10px;
   }
+  #blog-studio-chat-concepts .studio-expand-copy p { margin: 0; font-size: .82rem; line-height: 1.55; }
 
-  #blog-studio-chat-concepts .chat-sheet-copy p { margin: 0; font-size: .82rem; line-height: 1.55; }
-
-  #blog-studio-chat-concepts .chat-lens {
+  #blog-studio-chat-concepts .studio-focus-answer {
     position: absolute;
-    z-index: 24;
+    z-index: 42;
     inset: 48px 0 0;
     display: grid;
-    grid-template-columns: minmax(140px, .34fr) minmax(0, 1fr);
-    background: var(--chat-surface);
+    grid-template-columns: minmax(145px, .34fr) minmax(0, 1fr);
+    background: var(--studio-paper);
   }
 
-  #blog-studio-chat-concepts .chat-lens-context {
+  #blog-studio-chat-concepts .studio-focus-context {
     padding: 22px 16px;
-    border-right: 1px solid var(--chat-line);
-    background: var(--chat-surface-2);
+    border-right: 1px solid var(--studio-line);
+    background: var(--studio-panel);
   }
-
-  #blog-studio-chat-concepts .chat-lens-context blockquote {
+  #blog-studio-chat-concepts .studio-focus-context blockquote {
     margin: 18px 0;
     padding-left: 12px;
-    border-left: 2px solid var(--chat-accent);
-    color: var(--chat-muted);
+    border-left: 2px solid var(--studio-accent);
+    color: var(--studio-muted);
     font-family: Georgia, serif;
     line-height: 1.55;
   }
+  #blog-studio-chat-concepts .studio-focus-copy { padding: 26px clamp(18px, 5vw, 52px); }
+  #blog-studio-chat-concepts .studio-focus-copy h2 { margin: 18px 0 7px; font-size: 1.32rem; font-weight: 500; }
+  #blog-studio-chat-concepts .studio-focus-copy p { margin: 0 0 17px; line-height: 1.58; }
+  #blog-studio-chat-concepts .studio-focus-section { padding: 13px 0; border-bottom: 1px solid var(--studio-line); }
 
-  #blog-studio-chat-concepts .chat-lens-main { padding: 28px clamp(18px, 5vw, 52px) 110px; }
-  #blog-studio-chat-concepts .chat-lens-main h2 { margin: 0 0 8px; font-size: 1.35rem; font-weight: 500; }
-  #blog-studio-chat-concepts .chat-lens-main &gt; p { margin: 0 0 18px; color: var(--chat-muted); }
-
-  #blog-studio-chat-concepts .chat-reasoning-section {
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--chat-line);
-  }
-
-  #blog-studio-chat-concepts .chat-reasoning-section strong { font-weight: 500; }
-  #blog-studio-chat-concepts .chat-reasoning-section p { margin: 6px 0 0; line-height: 1.58; }
-
-  #blog-studio-chat-concepts .chat-rail {
-    min-width: 0;
-    padding: 15px;
-    border-left: 1px solid var(--chat-line);
-    background: var(--chat-surface-2);
-  }
-
-  #blog-studio-chat-concepts .chat-rail-message {
-    margin-top: 12px;
-    padding: 12px;
-    border: 1px solid var(--chat-line);
-    border-radius: 8px;
-    background: var(--chat-surface);
-    font-size: .82rem;
-    line-height: 1.55;
-  }
-
-  #blog-studio-chat-concepts .chat-inline-diff {
+  #blog-studio-chat-concepts .studio-diff {
     margin: 18px 0;
     padding: 13px;
-    border: 1px solid var(--chat-accent);
+    border: 1px solid var(--studio-accent);
     border-radius: 7px;
-    background: var(--chat-accent-soft);
+    background: var(--studio-accent-soft);
     font-family: Inter, ui-sans-serif, sans-serif;
   }
+  #blog-studio-chat-concepts .studio-diff del,
+  #blog-studio-chat-concepts .studio-diff ins { display: block; padding: 4px 0; text-decoration: none; }
+  #blog-studio-chat-concepts .studio-diff del { color: var(--studio-muted); text-decoration: line-through; }
 
-  #blog-studio-chat-concepts .chat-inline-diff del,
-  #blog-studio-chat-concepts .chat-inline-diff ins { display: block; padding: 4px 0; text-decoration: none; }
-  #blog-studio-chat-concepts .chat-inline-diff del { color: var(--chat-muted); text-decoration: line-through; }
-  #blog-studio-chat-concepts .chat-inline-diff ins { color: var(--chat-ink); }
-
-  #blog-studio-chat-concepts .chat-semantic-prompts {
+  #blog-studio-chat-concepts .studio-drawer {
     position: absolute;
-    z-index: 31;
-    right: max(18px, 8%);
-    bottom: 104px;
-    left: max(18px, 8%);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    max-width: 720px;
-    margin: 0 auto;
+    z-index: 52;
+    top: 48px;
+    right: 0;
+    bottom: 0;
+    width: min(460px, 72%);
+    padding: 15px;
+    border-left: 1px solid var(--studio-line-strong);
+    background: var(--studio-paper);
+    box-shadow: -14px 0 34px var(--studio-shadow);
   }
-
-  #blog-studio-chat-concepts .chat-prompt-button[aria-pressed=&quot;true&quot;] {
-    border-color: var(--chat-ink);
-    background: var(--chat-ink);
-    color: var(--chat-surface);
+  #blog-studio-chat-concepts .studio-drawer textarea {
+    width: 100%;
+    min-height: 500px;
+    margin-top: 12px;
+    padding: 13px;
+    resize: none;
+    border: 1px solid var(--studio-line);
+    border-radius: 7px;
+    background: var(--studio-panel);
+    font-family: &quot;SFMono-Regular&quot;, Consolas, monospace;
+    font-size: .8rem;
+    line-height: 1.6;
   }
+  #blog-studio-chat-concepts .studio-thread-row { border-bottom: 1px solid var(--studio-line); border-radius: 0; }
+  #blog-studio-chat-concepts .studio-thread-row strong { display: block; margin-bottom: 4px; font-weight: 500; }
+  #blog-studio-chat-concepts .studio-thread-row span { color: var(--studio-muted); font-size: .75rem; }
 
-  #blog-studio-chat-concepts .chat-concept-note {
+  #blog-studio-chat-concepts .studio-backdrop {
+    position: absolute;
+    z-index: 70;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: var(--studio-overlay);
+  }
+  #blog-studio-chat-concepts .studio-modal {
+    width: min(590px, 100%);
+    padding: 16px;
+    border: 1px solid var(--studio-line-strong);
+    border-radius: 10px;
+    background: var(--studio-paper);
+    box-shadow: 0 18px 44px var(--studio-shadow);
+  }
+  #blog-studio-chat-concepts .studio-modal h2,
+  #blog-studio-chat-concepts .studio-source-head h2 { margin: 0; font-size: 1rem; font-weight: 500; }
+  #blog-studio-chat-concepts .studio-field { display: grid; gap: 5px; margin-top: 12px; }
+  #blog-studio-chat-concepts .studio-field label { color: var(--studio-muted); font-size: .76rem; }
+  #blog-studio-chat-concepts .studio-field textarea,
+  #blog-studio-chat-concepts .studio-field input {
+    width: 100%;
+    padding: 9px;
+    border: 1px solid var(--studio-line);
+    border-radius: 6px;
+    background: var(--studio-panel);
+  }
+  #blog-studio-chat-concepts .studio-field textarea { min-height: 120px; resize: vertical; }
+  #blog-studio-chat-concepts .studio-modal-foot { display: flex; justify-content: flex-end; gap: 7px; margin-top: 14px; }
+
+  #blog-studio-chat-concepts .studio-note {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
     gap: 1px;
-    border-top: 1px solid var(--chat-line);
-    background: var(--chat-line);
+    border-top: 1px solid var(--studio-line);
+    background: var(--studio-line);
   }
-
-  #blog-studio-chat-concepts .chat-note-cell {
-    min-width: 0;
-    padding: 11px 13px;
-    background: var(--chat-surface);
-  }
-
-  #blog-studio-chat-concepts .chat-note-cell strong {
+  #blog-studio-chat-concepts .studio-note-cell { padding: 10px 12px; background: var(--studio-paper); }
+  #blog-studio-chat-concepts .studio-note-cell strong {
     display: block;
     margin-bottom: 3px;
-    font-size: .72rem;
+    font-size: .7rem;
     font-weight: 500;
-    text-transform: uppercase;
     letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+  #blog-studio-chat-concepts .studio-note-cell span { color: var(--studio-muted); font-size: .76rem; line-height: 1.45; }
+
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-body { display: block; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-sidebar { display: none; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-brand &gt; span:nth-child(2),
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-breadcrumb,
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-tool-label { display: none; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-canvas { padding: 28px 7% 148px; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-answer {
+    top: auto;
+    right: 10px;
+    bottom: 112px;
+    left: 10px;
+    width: auto;
+  }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-answer::before { display: none; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-focus-answer { grid-template-columns: 1fr; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-focus-context { display: none; }
+  #blog-studio-chat-concepts .studio-window.is-mobile .studio-drawer { width: 100%; }
+
+  @media (max-width: 650px) {
+    #blog-studio-chat-concepts .studio-body { grid-template-columns: 150px minmax(0, 1fr); }
+    #blog-studio-chat-concepts .studio-sidebar { padding: 9px; }
+    #blog-studio-chat-concepts .studio-toolbar { align-items: flex-start; }
+    #blog-studio-chat-concepts .studio-toolbar-group { flex-wrap: wrap; }
+    #blog-studio-chat-concepts .studio-expand-copy { grid-template-columns: 1fr; }
+    #blog-studio-chat-concepts .studio-answer { width: 58%; }
+    #blog-studio-chat-concepts .studio-note { grid-template-columns: 1fr; }
   }
 
-  #blog-studio-chat-concepts .chat-note-cell span { color: var(--chat-muted); font-size: .78rem; line-height: 1.45; }
-
-  @media (max-width: 720px) {
-    #blog-studio-chat-concepts .chat-body { grid-template-columns: 142px minmax(0, 1fr); }
-    #blog-studio-chat-concepts .chat-sidebar { padding: 9px; }
-    #blog-studio-chat-concepts .chat-work-grid.has-rail { grid-template-columns: 1fr; }
-    #blog-studio-chat-concepts .chat-work-grid.has-rail .chat-rail {
-      position: absolute;
-      z-index: 24;
-      right: 10px;
-      bottom: 90px;
-      left: 10px;
-      border: 1px solid var(--chat-line-strong);
-      border-radius: 10px;
-      box-shadow: 0 12px 30px var(--chat-shadow);
-    }
-    #blog-studio-chat-concepts .chat-sheet-copy { grid-template-columns: 1fr; }
-    #blog-studio-chat-concepts .chat-bubble { right: 4%; width: 58%; }
-    #blog-studio-chat-concepts .chat-concept-note { grid-template-columns: 1fr; }
-  }
-
-  @media (max-width: 520px) {
-    #blog-studio-chat-concepts .chat-window { min-height: 760px; }
-    #blog-studio-chat-concepts .chat-topbar { gap: 7px; }
-    #blog-studio-chat-concepts .chat-title,
-    #blog-studio-chat-concepts .chat-thread-state span:last-child,
-    #blog-studio-chat-concepts .chat-brand &gt; span:nth-child(2) { display: none; }
-    #blog-studio-chat-concepts .chat-body { display: block; min-height: 706px; }
-    #blog-studio-chat-concepts .chat-sidebar { display: none; }
-    #blog-studio-chat-concepts .chat-workspace { min-height: 706px; }
-    #blog-studio-chat-concepts .chat-work-grid,
-    #blog-studio-chat-concepts .chat-article-stage { min-height: 658px; }
-    #blog-studio-chat-concepts .chat-article-stage { padding: 26px 7% 128px; }
-    #blog-studio-chat-concepts .chat-split-stage { grid-template-columns: 1fr; padding: 14px 4% 130px; }
-    #blog-studio-chat-concepts .chat-split-stage .chat-article { display: none; }
-    #blog-studio-chat-concepts .chat-bubble {
+  @media (max-width: 500px) {
+    #blog-studio-chat-concepts .studio-concepts { grid-template-columns: 1fr; }
+    #blog-studio-chat-concepts .studio-body { display: block; }
+    #blog-studio-chat-concepts .studio-sidebar { display: none; }
+    #blog-studio-chat-concepts .studio-brand &gt; span:nth-child(2),
+    #blog-studio-chat-concepts .studio-breadcrumb,
+    #blog-studio-chat-concepts .studio-tool-label { display: none; }
+    #blog-studio-chat-concepts .studio-canvas { padding: 28px 7% 148px; }
+    #blog-studio-chat-concepts .studio-answer {
       top: auto;
       right: 10px;
       bottom: 112px;
       left: 10px;
       width: auto;
     }
-    #blog-studio-chat-concepts .chat-bubble::before { display: none; }
-    #blog-studio-chat-concepts .chat-lens { grid-template-columns: 1fr; }
-    #blog-studio-chat-concepts .chat-lens-context { display: none; }
-    #blog-studio-chat-concepts .chat-semantic-prompts { right: 10px; left: 10px; bottom: 110px; }
-    #blog-studio-chat-concepts .chat-composer { right: 10px; bottom: 10px; left: 10px; }
+    #blog-studio-chat-concepts .studio-answer::before { display: none; }
+    #blog-studio-chat-concepts .studio-focus-answer { grid-template-columns: 1fr; }
+    #blog-studio-chat-concepts .studio-focus-context { display: none; }
+    #blog-studio-chat-concepts .studio-drawer { width: 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #blog-studio-chat-concepts .studio-window { transition: none; }
   }
 &lt;/style&gt;
 
@@ -1684,163 +1688,258 @@ html&gt;body{padding:0}&lt;/style&gt;
     const root = document.getElementById(&quot;blog-studio-chat-concepts&quot;);
     if (!root) return;
 
-    const concepts = {
-      anchor: {
-        label: &quot;A · Anchor&quot;,
-        abstract: &quot;空间锚点&quot;,
-        fit: &quot;局部解释、单段核查、短改写&quot;,
-        cost: &quot;长回复遮挡；编辑后锚点漂移&quot;,
-        guard: &quot;6 行上限；超长升级 Sheet；语义 block anchor&quot;
+    const drafts = {
+      chat: {
+        title: &quot;把 Chat 从一个房间变成一种能力&quot;,
+        deck: &quot;输入可以悬浮，但回答需要找到正确的落点。&quot;,
+        meta: &quot;2 threads · just now&quot;,
+        blocks: [
+          &quot;固定 Chat 侧栏有一种诚实的简单：文章在这里，对话在那里。但这种清晰是用空间换来的，真正重要的正文反而最窄。&quot;,
+          &quot;我更想让对话从文章本身发生，而不是先离开文章，再进入另一个房间。&quot;,
+          &quot;Read 和 Edit 也不应该是两个页面。文章默认适合阅读，点击任意 Block 就能直接编辑，光标离开后恢复干净排版。&quot;,
+          &quot;这里的关键不是把右栏做成浮窗，而是拆开 Composer、Answer、Artifact 和 Memory。&quot;
+        ]
       },
-      sheet: {
-        label: &quot;B · Sheet&quot;,
-        abstract: &quot;时间焦点&quot;,
-        fit: &quot;来源比较、长解释、移动端&quot;,
-        cost: &quot;双滚动、软键盘、覆盖正文&quot;,
-        guard: &quot;Article inset；Peek / Half / Focus；Esc 逐级收起&quot;
+      boundary: {
+        title: &quot;Agent 的边界不是权限开关&quot;,
+        deck: &quot;真正可靠的边界来自可见状态、可逆操作和确定性校验。&quot;,
+        meta: &quot;5 sources · 12 min&quot;,
+        blocks: [
+          &quot;如果一个 Agent 能执行动作，权限开关只能回答它是否被允许，却不能解释它为何此刻应该执行。&quot;,
+          &quot;人需要看到计划、输入、影响范围和失败后的恢复路径，而不是只看到一个最终按钮。&quot;,
+          &quot;因此，建议和修改之间必须存在 Proposed Diff，批准和发布之间也必须存在确定性校验。&quot;,
+          &quot;自动化最适合处理重复且可验证的步骤，而不是替代内容判断。&quot;
+        ]
       },
-      lens: {
-        label: &quot;C · Lens&quot;,
-        abstract: &quot;认知模式&quot;,
-        fit: &quot;深度研究、多轮分支、后台任务&quot;,
-        cost: &quot;暂时失去文章全貌；模式切换&quot;,
-        guard: &quot;保留 excerpt；关闭后恢复选区、光标与滚动&quot;
-      },
-      rail: {
-        label: &quot;D · Rail&quot;,
-        abstract: &quot;空间让渡&quot;,
-        fit: &quot;长回复与正文持续并看&quot;,
-        cost: &quot;文章重排；Split 和窄屏过载&quot;,
-        guard: &quot;只在宽屏非 Split 启用；其余降级 Sheet&quot;
-      },
-      semantic: {
-        label: &quot;E · Semantic&quot;,
-        abstract: &quot;语义落点 · 推荐&quot;,
-        fit: &quot;一个入口覆盖局部问答、长分析、深聊与改文&quot;,
-        cost: &quot;状态迁移与实现复杂度最高&quot;,
-        guard: &quot;Input floats；answer lands；change becomes diff&quot;
+      canvas: {
+        title: &quot;Living Canvas 的编辑模型&quot;,
+        deck: &quot;阅读是静止状态，编辑是激活状态，Source 只是逃生舱。&quot;,
+        meta: &quot;1 thread · 28 min&quot;,
+        blocks: [
+          &quot;所见即所得并不意味着抛弃 Markdown，而是让 Markdown 退到可靠的数据层。&quot;,
+          &quot;用户点击段落即可编辑；复杂结构可以进入专门的 Block Editor。&quot;,
+          &quot;Source Drawer 仍然存在，用于 Frontmatter、Raw HTML、冲突和无损检查。&quot;,
+          &quot;Agent 的文字结果首先成为 Diff，只有接受之后才进入文章。&quot;
+        ]
       }
     };
 
-    const state = { concept: &quot;semantic&quot;, mode: &quot;read&quot;, intent: &quot;local&quot; };
+    const state = {
+      concept: &quot;semantic&quot;,
+      draft: &quot;chat&quot;,
+      focus: false,
+      mobile: false,
+      outline: false,
+      source: false,
+      threads: false,
+      addOpen: false,
+      answer: &quot;near&quot;,
+      selectedBlock: 1,
+      composer: &quot;&quot;,
+      addContext: &quot;&quot;,
+      addPrompt: &quot;&quot;,
+      saveLabel: &quot;Autosaved&quot;
+    };
 
-    const source = `# 把 Chat 从一个房间变成一种能力
-
-固定侧栏很清晰，但它会长期占据阅读和编辑真正需要的空间。
-
-如果输入框悬浮在文章上，回复不应该永远悬浮。短解释靠近原文，长分析进入 Sheet，真正的修改回到正文 Diff。`;
+    const escapeHtml = (value) =&gt; String(value)
+      .replaceAll(&quot;&amp;&quot;, &quot;&amp;amp;&quot;)
+      .replaceAll(&quot;&lt;&quot;, &quot;&amp;lt;&quot;)
+      .replaceAll(&quot;&gt;&quot;, &quot;&amp;gt;&quot;)
+      .replaceAll('&quot;', &quot;&amp;quot;&quot;);
 
     function conceptPicker() {
-      return `&lt;div class=&quot;chat-concept-picker&quot; aria-label=&quot;Chat design concepts&quot;&gt;
-        ${Object.entries(concepts).map(([key, item]) =&gt; `&lt;button class=&quot;chat-concept-button&quot; type=&quot;button&quot; data-action=&quot;concept&quot; data-value=&quot;${key}&quot; aria-pressed=&quot;${state.concept === key}&quot;&gt;&lt;strong&gt;${item.label}&lt;/strong&gt;&lt;span&gt;${item.abstract}&lt;/span&gt;&lt;/button&gt;`).join(&quot;&quot;)}
+      return `&lt;div class=&quot;studio-concepts&quot; aria-label=&quot;Retained chat concepts&quot;&gt;
+        &lt;button class=&quot;studio-concept&quot; type=&quot;button&quot; data-action=&quot;concept&quot; data-value=&quot;anchor&quot; aria-pressed=&quot;${state.concept === &quot;anchor&quot;}&quot;&gt;&lt;strong&gt;A · Anchored Bubble&lt;/strong&gt;&lt;span&gt;一种固定落点：局部问题始终贴着对应 Block&lt;/span&gt;&lt;/button&gt;
+        &lt;button class=&quot;studio-concept&quot; type=&quot;button&quot; data-action=&quot;concept&quot; data-value=&quot;semantic&quot; aria-pressed=&quot;${state.concept === &quot;semantic&quot;}&quot;&gt;&lt;strong&gt;E · Semantic Landing&lt;/strong&gt;&lt;span&gt;一个调度系统：Near / Expand / Focus / Inline Diff&lt;/span&gt;&lt;/button&gt;
       &lt;/div&gt;`;
     }
 
-    function toolbar() {
-      return `&lt;div class=&quot;chat-article-toolbar&quot;&gt;
-        &lt;div class=&quot;chat-mode-switch&quot; aria-label=&quot;Article mode&quot;&gt;
-          ${[&quot;read&quot;, &quot;edit&quot;, &quot;split&quot;].map(mode =&gt; `&lt;button class=&quot;chat-mode-button&quot; type=&quot;button&quot; data-action=&quot;mode&quot; data-value=&quot;${mode}&quot; aria-pressed=&quot;${state.mode === mode}&quot;&gt;${mode[0].toUpperCase() + mode.slice(1)}&lt;/button&gt;`).join(&quot;&quot;)}
-        &lt;/div&gt;
-        &lt;span class=&quot;chat-spacer&quot;&gt;&lt;/span&gt;
-        &lt;span class=&quot;chat-thread-chip&quot;&gt;2 anchored&lt;/span&gt;
-        &lt;button class=&quot;chat-thread-button&quot; type=&quot;button&quot;&gt;Threads · 4&lt;/button&gt;
-      &lt;/div&gt;`;
-    }
-
-    function articleContent(withDiff = false) {
-      return `&lt;article class=&quot;chat-article&quot;&gt;
-        &lt;h1&gt;把 Chat 从一个房间变成一种能力&lt;/h1&gt;
-        &lt;p class=&quot;chat-deck&quot;&gt;当对话离开固定侧栏，输入、回答、修改和历史应该去哪里？&lt;/p&gt;
-        &lt;p&gt;固定的 Chat 侧栏有一种诚实的简单：文章在这里，对话在那里。但这种清晰是用空间换来的。进入 Split 后，源码、预览和 Chat 同时争夺宽度，真正重要的正文反而最窄。&lt;/p&gt;
-        &lt;p&gt;&lt;span class=&quot;chat-selected&quot;&gt;我更想让对话从文章本身发生，而不是先离开文章，再进入另一个房间。&lt;span class=&quot;chat-anchor-dot&quot; aria-hidden=&quot;true&quot;&gt;&lt;/span&gt;&lt;/span&gt;&lt;/p&gt;
-        ${withDiff ? `&lt;div class=&quot;chat-inline-diff&quot;&gt;&lt;span class=&quot;chat-status-chip&quot;&gt;Proposed diff · paragraph 3&lt;/span&gt;&lt;del&gt;Chat 应该悬浮在文章上方。&lt;/del&gt;&lt;ins&gt;输入可以悬浮，但回答应根据长度与意图回到最适合的位置。&lt;/ins&gt;&lt;div class=&quot;chat-actions&quot;&gt;&lt;button class=&quot;chat-mini-action primary&quot; type=&quot;button&quot;&gt;Accept&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Reject&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Ask why&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;` : &quot;&quot;}
-        &lt;p&gt;这里的关键不是把右栏做成一个浮窗，而是拆开 Composer、Answer、Artifact 和 Memory。它们共享同一个上下文，却不需要共享同一个矩形。&lt;/p&gt;
-        &lt;p&gt;短解释可以停在段落旁，长分析需要一个稳定的阅读面，真正的文字修改则必须变成可接受或拒绝的 Diff。&lt;/p&gt;
-      &lt;/article&gt;`;
-    }
-
-    function articleStage(withDiff = false) {
-      if (state.mode === &quot;edit&quot;) return `&lt;div class=&quot;chat-article-stage&quot;&gt;&lt;pre class=&quot;chat-code-source&quot; aria-label=&quot;Markdown editor&quot;&gt;${source.replaceAll(&quot;&amp;&quot;, &quot;&amp;amp;&quot;).replaceAll(&quot;&lt;&quot;, &quot;&amp;lt;&quot;)}&lt;/pre&gt;&lt;/div&gt;`;
-      if (state.mode === &quot;split&quot;) return `&lt;div class=&quot;chat-split-stage&quot;&gt;&lt;pre class=&quot;chat-code-source&quot; aria-label=&quot;Markdown editor&quot;&gt;${source.replaceAll(&quot;&amp;&quot;, &quot;&amp;amp;&quot;).replaceAll(&quot;&lt;&quot;, &quot;&amp;lt;&quot;)}&lt;/pre&gt;${articleContent(withDiff)}&lt;/div&gt;`;
-      return `&lt;div class=&quot;chat-article-stage&quot;&gt;${articleContent(withDiff)}&lt;/div&gt;`;
-    }
-
-    function composer() {
-      return `&lt;div class=&quot;chat-composer&quot; aria-label=&quot;Floating article chat composer&quot;&gt;
-        &lt;div class=&quot;chat-composer-main&quot;&gt;
-          &lt;div class=&quot;chat-composer-context&quot;&gt;&lt;span class=&quot;chat-context-chip&quot;&gt;Current draft&lt;/span&gt;&lt;span class=&quot;chat-context-chip&quot;&gt;Selected paragraph&lt;/span&gt;&lt;span class=&quot;chat-context-chip&quot;&gt;5 sources&lt;/span&gt;&lt;/div&gt;
-          &lt;textarea aria-label=&quot;Ask Codex&quot; placeholder=&quot;Ask about this article…&quot;&gt;&lt;/textarea&gt;
-        &lt;/div&gt;
-        &lt;button class=&quot;chat-send&quot; type=&quot;button&quot;&gt;Send ↑&lt;/button&gt;
-      &lt;/div&gt;`;
-    }
-
-    function bubble(text = &quot;这句话表达的是空间关系：对话入口贴近文章，但回答不必一直覆盖文章。建议把它收紧为一句产品原则。&quot;) {
-      return `&lt;aside class=&quot;chat-bubble&quot; aria-label=&quot;Anchored answer&quot;&gt;&lt;div class=&quot;chat-answer-head&quot;&gt;&lt;strong&gt;Answer · paragraph 2&lt;/strong&gt;&lt;span class=&quot;chat-status-chip&quot;&gt;Anchor&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;chat-answer-copy&quot;&gt;${text}&lt;/p&gt;&lt;div class=&quot;chat-actions&quot;&gt;&lt;button class=&quot;chat-mini-action primary&quot; type=&quot;button&quot;&gt;Turn into diff&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Expand&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Collapse&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
-    }
-
-    function sheet() {
-      return `&lt;aside class=&quot;chat-sheet&quot; aria-label=&quot;Long answer sheet&quot;&gt;&lt;div class=&quot;chat-answer-head&quot;&gt;&lt;strong&gt;Source comparison · 5 sources&lt;/strong&gt;&lt;span class=&quot;chat-status-chip&quot;&gt;Half sheet&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;chat-sheet-copy&quot;&gt;&lt;p&gt;&lt;strong&gt;共同点&lt;/strong&gt;&lt;br&gt;几个来源都把固定 Chat 视为工作区，但忽略了文章本身已经是主要工作区。持续并列会让阅读宽度成为稀缺资源。&lt;/p&gt;&lt;p&gt;&lt;strong&gt;分歧&lt;/strong&gt;&lt;br&gt;一种思路让回答覆盖内容，另一种让布局临时重排。前者稳定正文宽度，后者保留并看能力；Split 模式需要自动降级。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;chat-actions&quot;&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Peek&lt;/button&gt;&lt;button class=&quot;chat-mini-action primary&quot; type=&quot;button&quot;&gt;Half&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Open focus&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Collapse to thread&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
-    }
-
-    function lens() {
-      return `&lt;section class=&quot;chat-lens&quot; aria-label=&quot;Conversation focus lens&quot;&gt;&lt;aside class=&quot;chat-lens-context&quot;&gt;&lt;span class=&quot;chat-status-chip&quot;&gt;Context preserved&lt;/span&gt;&lt;blockquote&gt;“我更想让对话从文章本身发生……”&lt;/blockquote&gt;&lt;span class=&quot;chat-context-chip&quot;&gt;5 sources&lt;/span&gt;&lt;span class=&quot;chat-context-chip&quot;&gt;revision 18&lt;/span&gt;&lt;/aside&gt;&lt;div class=&quot;chat-lens-main&quot;&gt;&lt;div class=&quot;chat-answer-head&quot;&gt;&lt;div&gt;&lt;span class=&quot;chat-status-chip&quot;&gt;Deep research&lt;/span&gt;&lt;/div&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Return to article&lt;/button&gt;&lt;/div&gt;&lt;h2&gt;Chat 不应该拥有一个永久地址&lt;/h2&gt;&lt;p&gt;深度讨论暂时占据注意力，但仍保持与原文的可逆连接。&lt;/p&gt;&lt;div class=&quot;chat-reasoning-section&quot;&gt;&lt;strong&gt;1 · 输入与回答解耦&lt;/strong&gt;&lt;p&gt;Composer 保持轻量，回答根据长度、意图和后续动作选择 Bubble、Sheet 或 Artifact。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;chat-reasoning-section&quot;&gt;&lt;strong&gt;2 · 修改回到文章&lt;/strong&gt;&lt;p&gt;所有改写结果都生成 Proposed Diff；聊天记录解释为什么改，文章层决定是否接受。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;chat-reasoning-section&quot;&gt;&lt;strong&gt;3 · 历史退到背景&lt;/strong&gt;&lt;p&gt;收起后只留下 Thread Chip。它保留锚点、revision 与阅读位置，但不永久消耗正文宽度。&lt;/p&gt;&lt;/div&gt;&lt;/div&gt;&lt;/section&gt;`;
-    }
-
-    function rail() {
-      return `&lt;aside class=&quot;chat-rail&quot; aria-label=&quot;Temporary chat rail&quot;&gt;&lt;div class=&quot;chat-answer-head&quot;&gt;&lt;strong&gt;Article chat&lt;/strong&gt;&lt;span class=&quot;chat-status-chip&quot;&gt;Temporary rail&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;chat-rail-message&quot;&gt;我把 5 个来源的分歧整理成了三组。当前段落的判断更接近“语义落点”，而不是单一浮层。&lt;/div&gt;&lt;div class=&quot;chat-rail-message&quot;&gt;如果你准备修改正文，我可以把结论转成一个逐段 Proposed Diff。&lt;/div&gt;&lt;div class=&quot;chat-actions&quot;&gt;&lt;button class=&quot;chat-mini-action primary&quot; type=&quot;button&quot;&gt;Create diff&lt;/button&gt;&lt;button class=&quot;chat-mini-action&quot; type=&quot;button&quot;&gt;Collapse&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
-    }
-
-    function semanticControls() {
-      return `&lt;div class=&quot;chat-semantic-prompts&quot; aria-label=&quot;Semantic answer examples&quot;&gt;
-        ${[
-          [&quot;local&quot;, &quot;Explain selection&quot;],
-          [&quot;compare&quot;, &quot;Compare sources&quot;],
-          [&quot;deep&quot;, &quot;Deep research&quot;],
-          [&quot;rewrite&quot;, &quot;Rewrite paragraph&quot;]
-        ].map(([key, label]) =&gt; `&lt;button class=&quot;chat-prompt-button&quot; type=&quot;button&quot; data-action=&quot;intent&quot; data-value=&quot;${key}&quot; aria-pressed=&quot;${state.intent === key}&quot;&gt;${label}&lt;/button&gt;`).join(&quot;&quot;)}
-      &lt;/div&gt;`;
-    }
-
-    function workspace() {
-      let gridClass = &quot;chat-work-grid&quot;;
-      let overlay = &quot;&quot;;
-      let side = &quot;&quot;;
-      let diff = false;
-
-      if (state.concept === &quot;anchor&quot;) overlay = bubble();
-      if (state.concept === &quot;sheet&quot;) { gridClass += &quot; has-sheet&quot;; overlay = sheet(); }
-      if (state.concept === &quot;lens&quot;) overlay = lens();
-      if (state.concept === &quot;rail&quot;) { gridClass += &quot; has-rail&quot;; side = rail(); }
-      if (state.concept === &quot;semantic&quot;) {
-        if (state.intent === &quot;local&quot;) overlay = bubble(&quot;这段的核心不是让整个 Chat 浮起来，而是让问题在原文附近发生；回答读完后可以收成一个段落锚点。&quot;);
-        if (state.intent === &quot;compare&quot;) { gridClass += &quot; has-sheet&quot;; overlay = sheet(); }
-        if (state.intent === &quot;deep&quot;) overlay = lens();
-        if (state.intent === &quot;rewrite&quot;) diff = true;
-      }
-
-      return `&lt;section class=&quot;chat-workspace&quot;&gt;${toolbar()}&lt;div class=&quot;${gridClass}&quot;&gt;${articleStage(diff)}${side}&lt;/div&gt;${overlay}${state.concept === &quot;semantic&quot; ? semanticControls() : &quot;&quot;}${state.concept === &quot;lens&quot; || (state.concept === &quot;semantic&quot; &amp;&amp; state.intent === &quot;deep&quot;) ? &quot;&quot; : composer()}&lt;/section&gt;`;
+    function topbar(item) {
+      return `&lt;header class=&quot;studio-topbar&quot;&gt;&lt;div class=&quot;studio-brand&quot;&gt;&lt;span class=&quot;studio-mark&quot;&gt;B&lt;/span&gt;&lt;span&gt;Blog Studio&lt;/span&gt;&lt;small class=&quot;studio-version&quot;&gt;v1 candidate&lt;/small&gt;&lt;/div&gt;&lt;div class=&quot;studio-breadcrumb&quot;&gt;Draft / ${escapeHtml(item.title)}&lt;/div&gt;&lt;div class=&quot;studio-save-state&quot;&gt;&lt;span class=&quot;studio-save-dot&quot;&gt;&lt;/span&gt;&lt;span&gt;${escapeHtml(state.saveLabel)}&lt;/span&gt;&lt;/div&gt;&lt;/header&gt;`;
     }
 
     function sidebar() {
-      return `&lt;aside class=&quot;chat-sidebar&quot;&gt;&lt;button class=&quot;chat-add&quot; type=&quot;button&quot;&gt;＋ Add draft&lt;/button&gt;&lt;div class=&quot;chat-sidebar-label&quot;&gt;Drafts&lt;/div&gt;&lt;button class=&quot;chat-draft&quot; type=&quot;button&quot; aria-pressed=&quot;true&quot;&gt;&lt;strong&gt;把 Chat 从一个房间变成一种能力&lt;/strong&gt;&lt;span&gt;2 threads · just now&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;chat-draft&quot; type=&quot;button&quot; aria-pressed=&quot;false&quot;&gt;&lt;strong&gt;Agent 的边界不是权限开关&lt;/strong&gt;&lt;span&gt;5 sources · 12 min&lt;/span&gt;&lt;/button&gt;&lt;div class=&quot;chat-sidebar-label&quot;&gt;Knowledge&lt;/div&gt;&lt;button class=&quot;chat-draft&quot; type=&quot;button&quot; aria-pressed=&quot;false&quot;&gt;&lt;strong&gt;Context engineering&lt;/strong&gt;&lt;span&gt;12 related items&lt;/span&gt;&lt;/button&gt;&lt;/aside&gt;`;
+      return `&lt;aside class=&quot;studio-sidebar&quot;&gt;&lt;button class=&quot;studio-add&quot; type=&quot;button&quot; data-action=&quot;open-add&quot;&gt;＋ Add draft&lt;/button&gt;&lt;div class=&quot;studio-side-label&quot;&gt;Drafts&lt;/div&gt;${Object.entries(drafts).map(([key, item]) =&gt; `&lt;button class=&quot;studio-draft&quot; type=&quot;button&quot; data-action=&quot;draft&quot; data-value=&quot;${key}&quot; aria-pressed=&quot;${state.draft === key}&quot;&gt;&lt;strong&gt;${escapeHtml(item.title)}&lt;/strong&gt;&lt;span&gt;${escapeHtml(item.meta)}&lt;/span&gt;&lt;/button&gt;`).join(&quot;&quot;)}&lt;div class=&quot;studio-side-label&quot;&gt;Knowledge&lt;/div&gt;&lt;div class=&quot;studio-draft&quot;&gt;&lt;strong&gt;Context engineering&lt;/strong&gt;&lt;span&gt;12 related items&lt;/span&gt;&lt;/div&gt;&lt;/aside&gt;`;
+    }
+
+    function toolbar() {
+      return `&lt;div class=&quot;studio-toolbar&quot;&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;focus&quot; aria-pressed=&quot;${state.focus}&quot;&gt;${state.focus ? &quot;Exit focus&quot; : &quot;Focus&quot;}&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;outline&quot; aria-pressed=&quot;${state.outline}&quot;&gt;Outline&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;source&quot; aria-pressed=&quot;${state.source}&quot;&gt;Source&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;mobile&quot; aria-pressed=&quot;${state.mobile}&quot;&gt;Mobile&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;span class=&quot;studio-tool-label&quot;&gt;Living Canvas · click any paragraph to edit&lt;/span&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;threads&quot; aria-pressed=&quot;${state.threads}&quot;&gt;Threads · 4&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;
+    }
+
+    function outline() {
+      if (!state.outline) return &quot;&quot;;
+      return `&lt;nav class=&quot;studio-outline&quot; aria-label=&quot;Article outline&quot;&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;0&quot;&gt;01 · 固定侧栏的问题&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;1&quot;&gt;02 · 对话从文章发生&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;2&quot;&gt;03 · Living Canvas&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;3&quot;&gt;04 · 四层模型&lt;/button&gt;&lt;/nav&gt;`;
+    }
+
+    function diffBlock() {
+      if (state.answer !== &quot;diff&quot;) return &quot;&quot;;
+      return `&lt;div class=&quot;studio-diff&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;Proposed diff · paragraph ${state.selectedBlock + 1}&lt;/span&gt;&lt;del&gt;Chat 应该悬浮在文章上方。&lt;/del&gt;&lt;ins&gt;输入可以悬浮，但回答应根据长度与意图回到最合适的位置。&lt;/ins&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;accept-diff&quot;&gt;Accept&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;reject-diff&quot;&gt;Reject&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;ask-diff&quot;&gt;Ask why&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;
+    }
+
+    function article(item) {
+      return `&lt;div class=&quot;studio-canvas ${state.answer === &quot;expand&quot; ? &quot;has-expand&quot; : &quot;&quot;}&quot;&gt;&lt;article class=&quot;studio-article&quot;&gt;&lt;h1&gt;${escapeHtml(item.title)}&lt;/h1&gt;&lt;p class=&quot;studio-deck&quot;&gt;${escapeHtml(item.deck)}&lt;/p&gt;${item.blocks.map((block, index) =&gt; `&lt;p class=&quot;studio-block ${state.selectedBlock === index ? &quot;is-selected&quot; : &quot;&quot;}&quot; contenteditable=&quot;true&quot; data-block=&quot;${index}&quot; spellcheck=&quot;false&quot;&gt;${escapeHtml(block)}&lt;/p&gt;${index === state.selectedBlock ? diffBlock() : &quot;&quot;}`).join(&quot;&quot;)}&lt;p class=&quot;studio-edit-hint&quot;&gt;Markdown-backed · click to edit · Source remains available as an escape hatch&lt;/p&gt;&lt;/article&gt;&lt;/div&gt;`;
+    }
+
+    function prompts() {
+      if (state.concept !== &quot;semantic&quot; || state.answer === &quot;focus&quot;) return &quot;&quot;;
+      const choices = [[&quot;near&quot;, &quot;Explain selection&quot;], [&quot;expand&quot;, &quot;Compare sources&quot;], [&quot;focus&quot;, &quot;Deep research&quot;], [&quot;diff&quot;, &quot;Rewrite paragraph&quot;]];
+      return `&lt;div class=&quot;studio-prompts&quot; aria-label=&quot;Semantic landing examples&quot;&gt;${choices.map(([key, label]) =&gt; `&lt;button class=&quot;studio-prompt&quot; type=&quot;button&quot; data-action=&quot;answer&quot; data-value=&quot;${key}&quot; aria-pressed=&quot;${state.answer === key}&quot;&gt;${label}&lt;/button&gt;`).join(&quot;&quot;)}&lt;/div&gt;`;
+    }
+
+    function composer() {
+      if (state.answer === &quot;focus&quot;) return &quot;&quot;;
+      return `&lt;form class=&quot;studio-composer&quot;&gt;&lt;div class=&quot;studio-composer-main&quot;&gt;&lt;div class=&quot;studio-context&quot;&gt;&lt;span class=&quot;studio-chip&quot;&gt;Current draft&lt;/span&gt;&lt;span class=&quot;studio-chip&quot;&gt;Paragraph ${state.selectedBlock + 1}&lt;/span&gt;&lt;span class=&quot;studio-chip&quot;&gt;5 sources&lt;/span&gt;&lt;/div&gt;&lt;textarea name=&quot;message&quot; aria-label=&quot;Ask Codex&quot; placeholder=&quot;Ask about this article…&quot;&gt;${escapeHtml(state.composer)}&lt;/textarea&gt;&lt;/div&gt;&lt;button class=&quot;studio-send&quot; type=&quot;submit&quot;&gt;Send ↑&lt;/button&gt;&lt;/form&gt;`;
+    }
+
+    function nearAnswer() {
+      if (state.answer !== &quot;near&quot;) return &quot;&quot;;
+      const text = state.concept === &quot;anchor&quot;
+        ? &quot;A 把回答绑定在当前 Block。它很适合局部解释，但严格限制为短回复；更长内容进入完整 Thread，避免气泡继续遮挡正文。&quot;
+        : &quot;这段适合 Near：它是在解释一个局部判断。回答贴近原文，读完后可以收成 Thread Chip，修改则转成 Proposed Diff。&quot;;
+      return `&lt;aside class=&quot;studio-answer&quot; style=&quot;top:${210 + state.selectedBlock * 82}px&quot; aria-label=&quot;Anchored answer&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;strong&gt;Answer · paragraph ${state.selectedBlock + 1}&lt;/strong&gt;&lt;span class=&quot;studio-status&quot;&gt;${state.concept === &quot;anchor&quot; ? &quot;A · Anchor&quot; : &quot;E · Near&quot;}&lt;/span&gt;&lt;/div&gt;&lt;p&gt;${text}&lt;/p&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Turn into diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;open-thread&quot;&gt;Open full answer&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Collapse&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
+    }
+
+    function expandAnswer() {
+      if (state.concept !== &quot;semantic&quot; || state.answer !== &quot;expand&quot;) return &quot;&quot;;
+      return `&lt;aside class=&quot;studio-expand&quot; aria-label=&quot;Expanded long answer&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;strong&gt;Source comparison · 5 sources&lt;/strong&gt;&lt;span class=&quot;studio-status&quot;&gt;E · Expand&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-expand-copy&quot;&gt;&lt;p&gt;&lt;strong&gt;共同点&lt;/strong&gt;&lt;br&gt;几个来源都把固定 Chat 当作工作区，却忽略了文章本身已经是主要工作区。持续并列会让正文宽度成为稀缺资源。&lt;/p&gt;&lt;p&gt;&lt;strong&gt;分歧&lt;/strong&gt;&lt;br&gt;有的方案让回复覆盖内容，有的让布局重排。Semantic Landing 的优势是根据任务选择表面，而不是强迫所有回复进入同一矩形。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;answer&quot; data-value=&quot;focus&quot;&gt;Open focus&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Create diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Collapse to thread&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
+    }
+
+    function focusAnswer() {
+      if (state.concept !== &quot;semantic&quot; || state.answer !== &quot;focus&quot;) return &quot;&quot;;
+      return `&lt;section class=&quot;studio-focus-answer&quot; aria-label=&quot;Focused conversation&quot;&gt;&lt;aside class=&quot;studio-focus-context&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;Context preserved&lt;/span&gt;&lt;blockquote&gt;“${escapeHtml(drafts[state.draft].blocks[state.selectedBlock])}”&lt;/blockquote&gt;&lt;span class=&quot;studio-chip&quot;&gt;5 sources&lt;/span&gt; &lt;span class=&quot;studio-chip&quot;&gt;revision 18&lt;/span&gt;&lt;/aside&gt;&lt;div class=&quot;studio-focus-copy&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;E · Focus&lt;/span&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;return-canvas&quot;&gt;Return to canvas&lt;/button&gt;&lt;/div&gt;&lt;h2&gt;Chat 不应该拥有一个永久地址&lt;/h2&gt;&lt;p&gt;深度讨论可以暂时占据注意力，但仍保持与原文的可逆连接。&lt;/p&gt;&lt;div class=&quot;studio-focus-section&quot;&gt;&lt;strong&gt;输入和回答解耦&lt;/strong&gt;&lt;p&gt;Composer 保持轻量，回答根据意图选择 Near、Expand、Focus 或 Artifact。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;studio-focus-section&quot;&gt;&lt;strong&gt;修改回到文章&lt;/strong&gt;&lt;p&gt;聊天记录解释为什么改，Living Canvas 负责展示 Diff 并决定是否接受。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Create proposed diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Save to thread&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/section&gt;`;
+    }
+
+    function sourceDrawer(item) {
+      if (!state.source) return &quot;&quot;;
+      const markdown = `# ${item.title}\n\n${item.deck}\n\n${item.blocks.join(&quot;\n\n&quot;)}`;
+      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Markdown source drawer&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Markdown Source&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-source&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;textarea aria-label=&quot;Markdown source&quot;&gt;${escapeHtml(markdown)}&lt;/textarea&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;apply-source&quot;&gt;Apply &amp; return&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;close-source&quot;&gt;Cancel&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
+    }
+
+    function threadsDrawer() {
+      if (!state.threads) return &quot;&quot;;
+      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Article threads&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Article threads&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-threads&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;near&quot;&gt;&lt;strong&gt;Why should input float?&lt;/strong&gt;&lt;span&gt;Paragraph 2 · 3 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;expand&quot;&gt;&lt;strong&gt;Compare five interface references&lt;/strong&gt;&lt;span&gt;Article context · 6 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;diff&quot;&gt;&lt;strong&gt;Rewrite the product principle&lt;/strong&gt;&lt;span&gt;Paragraph 3 · proposed diff&lt;/span&gt;&lt;/button&gt;&lt;/aside&gt;`;
+    }
+
+    function addModal() {
+      if (!state.addOpen) return &quot;&quot;;
+      return `&lt;div class=&quot;studio-backdrop&quot; data-action=&quot;close-add&quot;&gt;&lt;section class=&quot;studio-modal&quot; aria-label=&quot;Add draft&quot;&gt;&lt;div class=&quot;studio-modal-head&quot;&gt;&lt;h2&gt;Add draft&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-add&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-field&quot;&gt;&lt;label for=&quot;studio-add-context&quot;&gt;Context or links&lt;/label&gt;&lt;textarea id=&quot;studio-add-context&quot; data-add-field=&quot;addContext&quot; placeholder=&quot;Paste raw context, links, or notes…&quot;&gt;${escapeHtml(state.addContext)}&lt;/textarea&gt;&lt;/div&gt;&lt;div class=&quot;studio-field&quot;&gt;&lt;label for=&quot;studio-add-prompt&quot;&gt;Your prompt&lt;/label&gt;&lt;input id=&quot;studio-add-prompt&quot; data-add-field=&quot;addPrompt&quot; value=&quot;${escapeHtml(state.addPrompt)}&quot; placeholder=&quot;Turn these materials into a concise blog draft&quot;&gt;&lt;/div&gt;&lt;div class=&quot;studio-modal-foot&quot;&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;close-add&quot;&gt;Keep for later&lt;/button&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;create-draft&quot;&gt;Create draft&lt;/button&gt;&lt;/div&gt;&lt;/section&gt;&lt;/div&gt;`;
     }
 
     function note() {
-      const item = concepts[state.concept];
-      return `&lt;div class=&quot;chat-concept-note&quot;&gt;&lt;div class=&quot;chat-note-cell&quot;&gt;&lt;strong&gt;Best for&lt;/strong&gt;&lt;span&gt;${item.fit}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;chat-note-cell&quot;&gt;&lt;strong&gt;Main cost&lt;/strong&gt;&lt;span&gt;${item.cost}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;chat-note-cell&quot;&gt;&lt;strong&gt;Guardrail&lt;/strong&gt;&lt;span&gt;${item.guard}&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;`;
+      const anchor = state.concept === &quot;anchor&quot;;
+      return `&lt;div class=&quot;studio-note&quot;&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Logic&lt;/strong&gt;&lt;span&gt;${anchor ? &quot;回答属于内容位置：所有回复先成为 Block 旁的 Bubble。&quot; : &quot;输入统一，回答按照意图落到 Near、Expand、Focus 或 Diff。&quot;}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Best for&lt;/strong&gt;&lt;span&gt;${anchor ? &quot;局部解释、核查和短改写，规则简单可预测。&quot; : &quot;同时覆盖短答、长分析、深聊和直接改文。&quot;}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Main guardrail&lt;/strong&gt;&lt;span&gt;${anchor ? &quot;Bubble 最多约 6 行，超长只给摘要和完整 Thread 入口。&quot; : &quot;表面迁移必须保留 Block、revision、光标和滚动位置。&quot;}&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;`;
+    }
+
+    function workspace(item) {
+      return `&lt;main class=&quot;studio-workspace&quot;&gt;${toolbar()}${outline()}${article(item)}${prompts()}${composer()}${nearAnswer()}${expandAnswer()}${focusAnswer()}${sourceDrawer(item)}${threadsDrawer()}&lt;/main&gt;`;
     }
 
     function render() {
-      root.innerHTML = `${conceptPicker()}&lt;section class=&quot;chat-window&quot; aria-label=&quot;Blog Studio chat concept explorer&quot;&gt;&lt;header class=&quot;chat-topbar&quot;&gt;&lt;div class=&quot;chat-brand&quot;&gt;&lt;span class=&quot;chat-mark&quot;&gt;B&lt;/span&gt;&lt;span&gt;Blog Studio&lt;/span&gt;&lt;small class=&quot;chat-version&quot;&gt;after v0&lt;/small&gt;&lt;/div&gt;&lt;div class=&quot;chat-title&quot;&gt;Draft / 把 Chat 从一个房间变成一种能力&lt;/div&gt;&lt;div class=&quot;chat-thread-state&quot;&gt;&lt;span class=&quot;chat-running-dot&quot;&gt;&lt;/span&gt;&lt;span&gt;Autosaved&lt;/span&gt;&lt;/div&gt;&lt;/header&gt;&lt;div class=&quot;chat-body&quot;&gt;${sidebar()}${workspace()}&lt;/div&gt;${note()}&lt;/section&gt;`;
+      const item = drafts[state.draft];
+      root.innerHTML = `${conceptPicker()}&lt;div class=&quot;studio-window-wrap&quot;&gt;&lt;section class=&quot;studio-window ${state.mobile ? &quot;is-mobile&quot; : &quot;&quot;}&quot; aria-label=&quot;Blog Studio A and E prototype&quot;&gt;${topbar(item)}&lt;div class=&quot;studio-body ${state.focus ? &quot;is-focus&quot; : &quot;&quot;}&quot;&gt;${sidebar()}${workspace(item)}&lt;/div&gt;${note()}${addModal()}&lt;/section&gt;&lt;/div&gt;`;
     }
+
+    root.addEventListener(&quot;input&quot;, (event) =&gt; {
+      if (event.target.matches(&quot;.studio-composer textarea&quot;)) state.composer = event.target.value;
+      if (event.target.dataset.addField) state[event.target.dataset.addField] = event.target.value;
+      if (event.target.dataset.block !== undefined) {
+        drafts[state.draft].blocks[Number(event.target.dataset.block)] = event.target.textContent;
+        state.saveLabel = &quot;Saving…&quot;;
+        setTimeout(() =&gt; {
+          state.saveLabel = &quot;Autosaved&quot;;
+          const label = root.querySelector(&quot;.studio-save-state span:last-child&quot;);
+          if (label) label.textContent = state.saveLabel;
+        }, 450);
+      }
+    });
+
+    root.addEventListener(&quot;focusin&quot;, (event) =&gt; {
+      if (event.target.dataset.block === undefined) return;
+      state.selectedBlock = Number(event.target.dataset.block);
+      root.querySelectorAll(&quot;[data-block]&quot;).forEach(node =&gt; node.classList.toggle(&quot;is-selected&quot;, Number(node.dataset.block) === state.selectedBlock));
+    });
+
+    root.addEventListener(&quot;submit&quot;, (event) =&gt; {
+      if (!event.target.matches(&quot;.studio-composer&quot;)) return;
+      event.preventDefault();
+      const message = new FormData(event.target).get(&quot;message&quot;)?.toString().trim() || &quot;&quot;;
+      state.composer = message;
+      if (state.concept === &quot;anchor&quot;) state.answer = &quot;near&quot;;
+      else if (/rewrite|改写|重写/i.test(message)) state.answer = &quot;diff&quot;;
+      else if (/deep|研究|深入/i.test(message)) state.answer = &quot;focus&quot;;
+      else if (/compare|比较|来源/i.test(message) || message.length &gt; 60) state.answer = &quot;expand&quot;;
+      else state.answer = &quot;near&quot;;
+      render();
+    });
 
     root.addEventListener(&quot;click&quot;, (event) =&gt; {
       const target = event.target.closest(&quot;[data-action]&quot;);
       if (!target) return;
-      if (target.dataset.action === &quot;concept&quot;) state.concept = target.dataset.value;
-      if (target.dataset.action === &quot;mode&quot;) state.mode = target.dataset.value;
-      if (target.dataset.action === &quot;intent&quot;) state.intent = target.dataset.value;
+      const action = target.dataset.action;
+      const value = target.dataset.value;
+
+      if (action === &quot;close-add&quot; &amp;&amp; event.target.closest(&quot;.studio-modal&quot;) &amp;&amp; !event.target.closest(&quot;button[data-action='close-add']&quot;)) return;
+      if (action === &quot;concept&quot;) {
+        state.concept = value;
+        state.answer = &quot;near&quot;;
+      }
+      if (action === &quot;draft&quot;) {
+        state.draft = value;
+        state.selectedBlock = 1;
+        state.answer = &quot;near&quot;;
+        state.source = false;
+        state.threads = false;
+      }
+      if (action === &quot;focus&quot;) state.focus = !state.focus;
+      if (action === &quot;mobile&quot;) state.mobile = !state.mobile;
+      if (action === &quot;outline&quot;) state.outline = !state.outline;
+      if (action === &quot;source&quot;) { state.source = true; state.threads = false; }
+      if (action === &quot;close-source&quot;) state.source = false;
+      if (action === &quot;apply-source&quot;) { state.source = false; state.saveLabel = &quot;Source applied&quot;; }
+      if (action === &quot;threads&quot; || action === &quot;open-thread&quot;) { state.threads = true; state.source = false; }
+      if (action === &quot;close-threads&quot;) state.threads = false;
+      if (action === &quot;answer&quot;) state.answer = value;
+      if (action === &quot;make-diff&quot;) { state.answer = &quot;diff&quot;; state.threads = false; }
+      if (action === &quot;collapse&quot;) state.answer = &quot;none&quot;;
+      if (action === &quot;return-canvas&quot;) state.answer = &quot;near&quot;;
+      if (action === &quot;open-answer&quot;) { state.answer = value; state.threads = false; }
+      if (action === &quot;accept-diff&quot;) { state.answer = &quot;none&quot;; state.saveLabel = &quot;Diff accepted · autosaved&quot;; }
+      if (action === &quot;reject-diff&quot;) { state.answer = &quot;near&quot;; state.saveLabel = &quot;Diff rejected&quot;; }
+      if (action === &quot;ask-diff&quot;) { state.answer = state.concept === &quot;semantic&quot; ? &quot;expand&quot; : &quot;near&quot;; }
+      if (action === &quot;jump&quot;) { state.selectedBlock = Number(value); state.outline = false; }
+      if (action === &quot;open-add&quot;) state.addOpen = true;
+      if (action === &quot;close-add&quot;) state.addOpen = false;
+      if (action === &quot;create-draft&quot;) {
+        drafts.generated = {
+          title: state.addPrompt.trim() || &quot;Untitled agent draft&quot;,
+          deck: &quot;Generated from the saved creation context.&quot;,
+          meta: &quot;new · autosaved&quot;,
+          blocks: [
+            state.addContext.trim() || &quot;Start writing here. This Living Canvas is ready for direct editing.&quot;,
+            &quot;The source context remains attached to this draft and can be inspected from the article thread.&quot;,
+            &quot;Ask Codex from the floating composer when you want to explain, compare, research, or rewrite.&quot;,
+            &quot;Any generated change will appear as a Proposed Diff before it enters the article.&quot;
+          ]
+        };
+        state.draft = &quot;generated&quot;;
+        state.selectedBlock = 0;
+        state.answer = &quot;none&quot;;
+        state.addOpen = false;
+        state.saveLabel = &quot;Draft created&quot;;
+        state.addContext = &quot;&quot;;
+        state.addPrompt = &quot;&quot;;
+      }
+      render();
+    });
+
+    root.addEventListener(&quot;keydown&quot;, (event) =&gt; {
+      if (event.key !== &quot;Escape&quot;) return;
+      if (state.addOpen) state.addOpen = false;
+      else if (state.source) state.source = false;
+      else if (state.threads) state.threads = false;
+      else if (state.outline) state.outline = false;
+      else if (state.answer === &quot;focus&quot; || state.answer === &quot;expand&quot;) state.answer = &quot;near&quot;;
+      else if (state.answer !== &quot;none&quot;) state.answer = &quot;none&quot;;
       render();
     });
 
