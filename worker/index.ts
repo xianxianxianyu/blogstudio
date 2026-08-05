@@ -29,7 +29,15 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    if (url.pathname === "/" || url.pathname === "/index.html") {
+    const visualizationRoutes = new Set([
+      "/",
+      "/index.html",
+      "/blog-studio-chat-concepts",
+      "/blog-studio-chat-concepts/",
+      "/blog-studio-chat-concepts.html",
+    ]);
+
+    if (visualizationRoutes.has(url.pathname)) {
       return env.ASSETS.fetch(
         new Request(new URL("/blog-studio-chat-concepts.html", request.url), request),
       );
