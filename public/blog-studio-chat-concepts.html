@@ -1297,6 +1297,13 @@ html&gt;body{padding:0}&lt;/style&gt;
     background: var(--studio-paper);
   }
 
+  #blog-studio-chat-concepts .studio-toolbar-group:last-child {
+    justify-content: flex-end;
+    min-width: 0;
+  }
+
+  #blog-studio-chat-concepts .studio-toolbar-menu-wrap { position: relative; }
+
   #blog-studio-chat-concepts .studio-tool,
   #blog-studio-chat-concepts .studio-small-action,
   #blog-studio-chat-concepts .studio-prompt,
@@ -1318,6 +1325,77 @@ html&gt;body{padding:0}&lt;/style&gt;
   #blog-studio-chat-concepts .studio-tool-label {
     color: var(--studio-muted);
     font-size: .76rem;
+  }
+
+  #blog-studio-chat-concepts .studio-icon-tool {
+    position: relative;
+    display: inline-grid;
+    min-width: 32px;
+    height: 32px;
+    padding: 0 8px;
+    place-items: center;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--studio-muted);
+    font-size: .96rem;
+    line-height: 1;
+  }
+
+  #blog-studio-chat-concepts .studio-icon-tool:hover,
+  #blog-studio-chat-concepts .studio-icon-tool[aria-pressed=&quot;true&quot;],
+  #blog-studio-chat-concepts .studio-icon-tool[aria-expanded=&quot;true&quot;] {
+    border-color: var(--studio-line);
+    background: var(--studio-panel);
+    color: var(--studio-ink);
+  }
+
+  #blog-studio-chat-concepts .studio-history-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    display: grid;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    place-items: center;
+    border: 1px solid var(--studio-paper);
+    border-radius: 999px;
+    background: var(--studio-ink);
+    color: var(--studio-paper);
+    font-size: .58rem;
+  }
+
+  #blog-studio-chat-concepts .studio-toolbar-menu {
+    position: absolute;
+    z-index: 60;
+    top: 38px;
+    right: 0;
+    width: 190px;
+    padding: 6px;
+    border: 1px solid var(--studio-line-strong);
+    border-radius: 8px;
+    background: var(--studio-paper);
+    box-shadow: 0 12px 30px var(--studio-shadow);
+  }
+
+  #blog-studio-chat-concepts .studio-menu-action {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 9px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    text-align: left;
+  }
+
+  #blog-studio-chat-concepts .studio-menu-action:hover { background: var(--studio-panel); }
+  #blog-studio-chat-concepts .studio-menu-action span:last-child {
+    color: var(--studio-muted);
+    font-size: .7rem;
   }
 
   #blog-studio-chat-concepts .studio-canvas {
@@ -1730,7 +1808,9 @@ html&gt;body{padding:0}&lt;/style&gt;
       focus: false,
       mobile: false,
       outline: false,
+      menu: false,
       source: false,
+      frontmatter: false,
       threads: false,
       addOpen: false,
       answer: &quot;near&quot;,
@@ -1763,7 +1843,10 @@ html&gt;body{padding:0}&lt;/style&gt;
     }
 
     function toolbar() {
-      return `&lt;div class=&quot;studio-toolbar&quot;&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;focus&quot; aria-pressed=&quot;${state.focus}&quot;&gt;${state.focus ? &quot;Exit focus&quot; : &quot;Focus&quot;}&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;outline&quot; aria-pressed=&quot;${state.outline}&quot;&gt;Outline&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;source&quot; aria-pressed=&quot;${state.source}&quot;&gt;Source&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;mobile&quot; aria-pressed=&quot;${state.mobile}&quot;&gt;Mobile&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;span class=&quot;studio-tool-label&quot;&gt;Living Canvas · click any paragraph to edit&lt;/span&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;threads&quot; aria-pressed=&quot;${state.threads}&quot;&gt;Threads · 4&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;
+      const menu = state.menu
+        ? `&lt;div class=&quot;studio-toolbar-menu&quot; role=&quot;menu&quot;&gt;&lt;button class=&quot;studio-menu-action&quot; type=&quot;button&quot; role=&quot;menuitem&quot; data-action=&quot;source&quot;&gt;&lt;span&gt;Markdown source&lt;/span&gt;&lt;span&gt;⌘ /&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-menu-action&quot; type=&quot;button&quot; role=&quot;menuitem&quot; data-action=&quot;mobile&quot;&gt;&lt;span&gt;${state.mobile ? &quot;Exit mobile preview&quot; : &quot;Mobile preview&quot;}&lt;/span&gt;&lt;span&gt;Preview&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-menu-action&quot; type=&quot;button&quot; role=&quot;menuitem&quot; data-action=&quot;frontmatter&quot;&gt;&lt;span&gt;Frontmatter&lt;/span&gt;&lt;span&gt;Metadata&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;`
+        : &quot;&quot;;
+      return `&lt;div class=&quot;studio-toolbar&quot;&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;focus&quot; aria-pressed=&quot;${state.focus}&quot;&gt;${state.focus ? &quot;Exit focus&quot; : &quot;Focus&quot;}&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;outline&quot; aria-pressed=&quot;${state.outline}&quot;&gt;Outline&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;span class=&quot;studio-tool-label&quot;&gt;Living Canvas · click any paragraph to edit&lt;/span&gt;&lt;button class=&quot;studio-icon-tool&quot; type=&quot;button&quot; data-action=&quot;threads&quot; aria-label=&quot;Open chat history&quot; title=&quot;Chat history&quot; aria-pressed=&quot;${state.threads}&quot;&gt;↺&lt;span class=&quot;studio-history-badge&quot;&gt;3&lt;/span&gt;&lt;/button&gt;&lt;div class=&quot;studio-toolbar-menu-wrap&quot;&gt;&lt;button class=&quot;studio-icon-tool&quot; type=&quot;button&quot; data-action=&quot;menu&quot; aria-label=&quot;More article tools&quot; aria-haspopup=&quot;menu&quot; aria-expanded=&quot;${state.menu}&quot;&gt;···&lt;/button&gt;${menu}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`;
     }
 
     function outline() {
@@ -1815,9 +1898,14 @@ html&gt;body{padding:0}&lt;/style&gt;
       return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Markdown source drawer&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Markdown Source&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-source&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;textarea aria-label=&quot;Markdown source&quot;&gt;${escapeHtml(markdown)}&lt;/textarea&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;apply-source&quot;&gt;Apply &amp; return&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;close-source&quot;&gt;Cancel&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
     }
 
+    function frontmatterDrawer() {
+      if (!state.frontmatter) return &quot;&quot;;
+      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Frontmatter inspector&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Frontmatter&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-frontmatter&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-field&quot;&gt;&lt;label for=&quot;studio-frontmatter-description&quot;&gt;Description&lt;/label&gt;&lt;textarea id=&quot;studio-frontmatter-description&quot;&gt;输入可以悬浮，但回答需要找到正确的落点。&lt;/textarea&gt;&lt;/div&gt;&lt;div class=&quot;studio-field&quot;&gt;&lt;label for=&quot;studio-frontmatter-tags&quot;&gt;Tags&lt;/label&gt;&lt;input id=&quot;studio-frontmatter-tags&quot; value=&quot;design, agents, writing&quot;&gt;&lt;/div&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;apply-frontmatter&quot;&gt;Save metadata&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;close-frontmatter&quot;&gt;Cancel&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
+    }
+
     function threadsDrawer() {
       if (!state.threads) return &quot;&quot;;
-      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Article threads&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Article threads&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-threads&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;near&quot;&gt;&lt;strong&gt;Why should input float?&lt;/strong&gt;&lt;span&gt;Paragraph 2 · 3 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;expand&quot;&gt;&lt;strong&gt;Compare five interface references&lt;/strong&gt;&lt;span&gt;Article context · 6 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;diff&quot;&gt;&lt;strong&gt;Rewrite the product principle&lt;/strong&gt;&lt;span&gt;Paragraph 3 · proposed diff&lt;/span&gt;&lt;/button&gt;&lt;/aside&gt;`;
+      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Chat history&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Chat history&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-threads&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;near&quot;&gt;&lt;strong&gt;Why should input float?&lt;/strong&gt;&lt;span&gt;Paragraph 2 · 3 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;expand&quot;&gt;&lt;strong&gt;Compare five interface references&lt;/strong&gt;&lt;span&gt;Article context · 6 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;diff&quot;&gt;&lt;strong&gt;Rewrite the product principle&lt;/strong&gt;&lt;span&gt;Paragraph 3 · proposed diff&lt;/span&gt;&lt;/button&gt;&lt;/aside&gt;`;
     }
 
     function addModal() {
@@ -1831,7 +1919,7 @@ html&gt;body{padding:0}&lt;/style&gt;
     }
 
     function workspace(item) {
-      return `&lt;main class=&quot;studio-workspace&quot;&gt;${toolbar()}${outline()}${article(item)}${prompts()}${composer()}${nearAnswer()}${expandAnswer()}${focusAnswer()}${sourceDrawer(item)}${threadsDrawer()}&lt;/main&gt;`;
+      return `&lt;main class=&quot;studio-workspace&quot;&gt;${toolbar()}${outline()}${article(item)}${prompts()}${composer()}${nearAnswer()}${expandAnswer()}${focusAnswer()}${sourceDrawer(item)}${frontmatterDrawer()}${threadsDrawer()}&lt;/main&gt;`;
     }
 
     function render() {
@@ -1888,15 +1976,21 @@ html&gt;body{padding:0}&lt;/style&gt;
         state.selectedBlock = 1;
         state.answer = &quot;near&quot;;
         state.source = false;
+        state.frontmatter = false;
         state.threads = false;
+        state.menu = false;
       }
       if (action === &quot;focus&quot;) state.focus = !state.focus;
-      if (action === &quot;mobile&quot;) state.mobile = !state.mobile;
+      if (action === &quot;menu&quot;) state.menu = !state.menu;
+      if (action === &quot;mobile&quot;) { state.mobile = !state.mobile; state.menu = false; }
       if (action === &quot;outline&quot;) state.outline = !state.outline;
-      if (action === &quot;source&quot;) { state.source = true; state.threads = false; }
+      if (action === &quot;source&quot;) { state.source = true; state.frontmatter = false; state.threads = false; state.menu = false; }
       if (action === &quot;close-source&quot;) state.source = false;
       if (action === &quot;apply-source&quot;) { state.source = false; state.saveLabel = &quot;Source applied&quot;; }
-      if (action === &quot;threads&quot; || action === &quot;open-thread&quot;) { state.threads = true; state.source = false; }
+      if (action === &quot;frontmatter&quot;) { state.frontmatter = true; state.source = false; state.threads = false; state.menu = false; }
+      if (action === &quot;close-frontmatter&quot;) state.frontmatter = false;
+      if (action === &quot;apply-frontmatter&quot;) { state.frontmatter = false; state.saveLabel = &quot;Metadata saved&quot;; }
+      if (action === &quot;threads&quot; || action === &quot;open-thread&quot;) { state.threads = true; state.source = false; state.frontmatter = false; state.menu = false; }
       if (action === &quot;close-threads&quot;) state.threads = false;
       if (action === &quot;answer&quot;) state.answer = value;
       if (action === &quot;make-diff&quot;) { state.answer = &quot;diff&quot;; state.threads = false; }
