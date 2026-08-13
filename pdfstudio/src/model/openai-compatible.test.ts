@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createModelClient } from "./openai-compatible";
+import { ModelError } from "./model-client";
 
 const CONFIG = {
   baseURL: "https://example.invalid/v1",
@@ -141,5 +142,92 @@ describe("ModelClient adapter — streamComplete", () => {
     // 具体切在第几个 delta 取决于缓冲，只断言收到的是真实前缀、且没有凭空多出内容。
     expect("四张人脸".startsWith(deltas.join(""))).toBe(true);
     expect(deltas.length).toBeGreaterThan(0);
+  });
+});
+
+describe("ModelClient adapter — 图片", () => {
+  it("ModelRequest.images 进到请求里，Recognizer 的视觉路由才有图可读", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => completionResponse("ok"));
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+    await client.complete({
+      messages: [{ role: "user", content: "描述这个区域" }],
+      images: [{ mime: "image/png", bytes: new Uint8Array([0x89, 0x50, 0x4e, 0x47]) }],
+    });
+
+    const body = calls[0].body as {
+      messages: { role: string; content: string | { type: string; image_url?: { url: string } }[] }[];
+    };
+    const parts = body.messages.at(-1)!.content;
+
+    expect(Array.isArray(parts)).toBe(true);
+    const image = (parts as { type: string; image_url?: { url: string } }[]).find(
+      (part) => part.type === "image_url",
+    );
+    expect(image?.image_url?.url).toMatch(/^data:image\/png;base64,/);
+  });
+});
+
+describe("ModelClient adapter — 错误映射", () => {
+  it("HTTP 错误映射成 ModelError，不漏 SDK 的错误类型", async () => {
+    const { fetchImpl } = recordingFetch(
+      () =>
+        new Response(JSON.stringify({ error: { message: "invalid api key" } }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+    const error = await client
+      .complete({ messages: [{ role: "user", content: "hi" }] })
+      .catch((thrown: unknown) => thrown);
+
+    // ADR-0007：SDK 的 provider / error 类型不得泄漏出 adapter。
+    expect(error).toBeInstanceOf(ModelError);
+    expect((error as ModelError).kind).toBe("http");
+    expect((error as ModelError).status).toBe(401);
+  });
+
+  it("200 但没有内容，映射成 empty-response", async () => {
+    const { fetchImpl } = recordingFetch(() => completionResponse(""));
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+    const error = await client
+      .complete({ messages: [{ role: "user", content: "hi" }] })
+      .catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(ModelError);
+    expect((error as ModelError).kind).toBe("empty-response");
+  });
+  it("坏掉的流映射成 malformed-stream", async () => {
+    const { fetchImpl } = recordingFetch(
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("data: {不是 JSON\n\n"));
+              controller.close();
+            },
+          }),
+          { status: 200, headers: { "content-type": "text/event-stream" } },
+        ),
+    );
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+    const drain = async () => {
+      const chunks: string[] = [];
+      for await (const chunk of client.streamComplete({
+        messages: [{ role: "user", content: "hi" }],
+      })) {
+        chunks.push(chunk.textDelta);
+      }
+      return chunks;
+    };
+
+    const error = await drain().catch((thrown: unknown) => thrown);
+
+    expect(error).toBeInstanceOf(ModelError);
+    expect((error as ModelError).kind).toBe("malformed-stream");
   });
 });

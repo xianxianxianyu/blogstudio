@@ -27,6 +27,25 @@ export interface ModelChunk {
   textDelta: string;
 }
 
+/**
+ * 模型调用失败的统一类型。adapter 必须把底层错误映射成它——
+ * 漏一个 SDK 的错误类出去就是 ADR-0007 禁止的类型泄漏，调用方也就被绑到了某个 SDK。
+ */
+export class ModelError extends Error {
+  constructor(
+    readonly kind: "http" | "empty-response" | "malformed-stream",
+    message: string,
+    options?: ErrorOptions & { status?: number },
+  ) {
+    super(message, options);
+    this.name = "ModelError";
+    this.status = options?.status;
+  }
+
+  /** HTTP 状态码，仅 kind === 'http' 时有值。 */
+  readonly status?: number;
+}
+
 export interface ModelClient {
   complete(request: ModelRequest): Promise<ModelResponse>;
   streamComplete(request: ModelRequest): AsyncIterable<ModelChunk>;
