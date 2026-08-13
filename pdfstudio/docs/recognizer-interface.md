@@ -62,7 +62,11 @@ function createRecognizer(deps: RecognizerDeps): Recognizer
 
 ## 关键设计决策
 
-- **覆盖检测路由**：不预分类。`getTextContent()` 量文本覆盖度（文本包围盒并集面积占比 + 非空白字符密度），高 → `text`，低/0 → `vision`。纯图在文本层无 item，覆盖度塌 0、落视觉；**公式不然**——LaTeX 生成的 PDF 会把数学字形放进文本层，公式区照样有 item，只是抽出来是扁的（`Attention(Q, K, V ) = softmax( QKT√dk)V`，分式与上标全丢），靠覆盖度低而非「无 item」落视觉。实测（`eval/samples/`）：正文段落 87.2%、公式 f05 30.8%、纯图 g01 0%。
+- **覆盖检测路由**：不预分类。`getTextContent()` 量文本覆盖度（文本包围盒并集面积占比 + 非空白字符密度），高 → `text`，低/0 → `vision`。纯图在文本层无 item，覆盖度塌 0、落视觉；**公式不然**——LaTeX 生成的 PDF 会把数学字形放进文本层，公式区照样有 item，只是抽出来是扁的（`Attention(Q, K, V ) = softmax( QKT√dk)V`，分式与上标全丢），靠覆盖度低而非「无 item」落视觉。实测：落 text 的正文段落 89.2%；落 vision 的图内密集标签 m01 40.0%、叠绘的图 38.7%、公式 f05 30.3%、混排 m02 15.2%、纯图 g01 0%——阈值 0.5 在这条谷里。
+
+面积必须取**并集**而非求和：attention 可视化那类图会把同一批词反复叠绘，求和会重复计数、把区域虚高进 text 路由（p.13 那处求和 52.1%、并集 38.7%）。三篇论文 22265 个候选区域里求和与并集在 0.5 处分歧仅 2 处，都是这一类。
+
+canonical 原写的第二维「非空白字符密度」实测加不了分：唯一逼近正文的 vision 样本 m01 密度 11.64，而松散框选的正文密度 11.44——密度上交叠，覆盖度上反而分得开。没有反例就不加维。
 - **LaTeX 归原文**：公式的 LaTeX 是逐字无损编码，写入 `sourceText` 而非 `multimodal`——使公式摘录有 evidence、能入库。这修正了早期 brief 里「formula→LaTeX 进描述」的措辞（见 ADR-0001）。
 - **`null` 编码可入库性**：`sourceText === null ⟺ 纯图 ⟺ 入库 blocked`，单个 `null` 承载整条规则，不另设 `kind` 字段泄漏给调用方。
 - **回显免组装**：`pixels`→`screenshot`、`page+rect`→`anchor`，调用方拿到完整 `ClipContent`，不再把手势产物粘回去。

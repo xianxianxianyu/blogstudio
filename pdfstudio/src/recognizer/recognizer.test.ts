@@ -33,6 +33,12 @@ const FORMULA_RECT = { x: 215, y: 792 - 494, width: 180, height: 32 };
 // 文本层只剩图题和段落，覆盖度 15.2%。
 const MIXED_RECT = { x: 107, y: 792 - 470, width: 399, height: 170 };
 
+// arXiv:1706.03762 p.13 的 attention 可视化图：整页是 <pad> 词元的叠绘，同一批词被
+// 反复画在同一处。文本包围盒求和后覆盖度 52.1%（判 text），去重取并集只有 40.5%（判 vision）。
+// poppler 在这里抽出的是残缺的 "Input-Input L Attention Visualiza"——叠绘让文本层不可用，
+// 该走视觉。这是全部三篇论文 22265 个候选区域里仅有的两处求和/并集分歧之一。
+const OVERDRAWN_FIGURE_RECT = { x: 100, y: 700, width: 100, height: 50 };
+
 const ATTENTION_LATEX =
   "\\mathrm{Attention}(Q, K, V) = \\mathrm{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V";
 
@@ -241,6 +247,23 @@ describe("Recognizer — 误触的框", () => {
     );
 
     expect(model.completeCalls).toHaveLength(0);
+  });
+});
+
+describe("Recognizer — 叠绘的图", () => {
+  it("覆盖度取并集而非求和：反复叠绘的文字不该把区域抬成 text 路由", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf", {
+      completeText: JSON.stringify({
+        kind: "figure",
+        sourceText: null,
+        multimodal: "attention 头的可视化图",
+      }),
+    });
+
+    const content = await recognizer.recognize(regionAt(13, OVERDRAWN_FIGURE_RECT));
+
+    expect(content.route).toBe("vision");
+    expect(model.completeCalls).toHaveLength(1);
   });
 });
 
