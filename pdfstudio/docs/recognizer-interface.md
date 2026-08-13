@@ -66,6 +66,8 @@ function createRecognizer(deps: RecognizerDeps): Recognizer
 
 面积必须取**并集**而非求和：attention 可视化那类图会把同一批词反复叠绘，求和会重复计数、把区域虚高进 text 路由（p.13 那处求和 52.1%、并集 38.7%）。三篇论文 22265 个候选区域里求和与并集在 0.5 处分歧仅 2 处，都是这一类。
 
+text 一侧另用 poppler 版面分析（独立于 pdf.js）采了 326 个真实段落 block 验证：紧贴框选时中位数 72.2%，落在 0.5 以下的 8.3% 全是公式推导、表格、算法伪代码和含行内公式的段落——路由表本来就要它们走 vision，判对了。敏感面是**小区域被框得松**，逃生口是 `options.engine`。
+
 canonical 原写的第二维「非空白字符密度」实测加不了分：唯一逼近正文的 vision 样本 m01 密度 11.64，而松散框选的正文密度 11.44——密度上交叠，覆盖度上反而分得开。没有反例就不加维。
 - **LaTeX 归原文**：公式的 LaTeX 是逐字无损编码，写入 `sourceText` 而非 `multimodal`——使公式摘录有 evidence、能入库。这修正了早期 brief 里「formula→LaTeX 进描述」的措辞（见 ADR-0001）。
 - **`null` 编码可入库性**：`sourceText === null ⟺ 纯图 ⟺ 入库 blocked`，单个 `null` 承载整条规则，不另设 `kind` 字段泄漏给调用方。
