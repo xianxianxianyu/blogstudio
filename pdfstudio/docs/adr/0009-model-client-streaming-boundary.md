@@ -49,7 +49,7 @@ interface ModelClient {
 
 - `Recognizer` / OCR 使用 `complete`，因为视觉模型输出需要完整 JSON/Markdown 后才能校验和组装 `ClipContent`。
 - `Chat` 使用 `streamComplete`，由 Chat 或其 UI adapter 累积 `ModelChunk.textDelta`；结束时再生成最终 `Answer`、`citations` 和 `grounding`。
-- `AbortSignal` 是调用级取消机制。调用方显式取消时，adapter 应停止读取远端流；没有隐式后台调用。
+- `AbortSignal` 是调用级取消机制。调用方显式取消时，adapter 应停止读取远端流；没有隐式后台调用。取消时流**优雅结束、不抛**——读者按下停止不是异常，已收到的部分答案照样留着；调用方要区分就看 `signal.aborted`。网络中途断掉仍然会抛，两种情况依旧分得开。
 - 两个方法共享同一套 `ModelRequest`，但 response 形态不同：一次性返回完整结果，流式返回增量 chunk。
 
 ## 边界
