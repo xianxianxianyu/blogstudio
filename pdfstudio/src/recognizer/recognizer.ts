@@ -50,8 +50,14 @@ export interface RecognizerDeps {
   targetLang?: string;
 }
 
+/** rare，可省。`engine` 是覆盖检测误判时的逃生口。 */
+export interface RecognizeOptions {
+  engine?: "auto" | "text" | "vision";
+  targetLang?: string;
+}
+
 export interface Recognizer {
-  recognize(region: Region): Promise<ClipContent>;
+  recognize(region: Region, options?: RecognizeOptions): Promise<ClipContent>;
 }
 
 /**
@@ -159,18 +165,21 @@ const VISION_TABLE: Record<VisionKind, { translation: boolean; multimodal: boole
  * prompt 按区域类型分支——但只有一次调用：不先分类再选 prompt（那是两次，
  * 违反「恰好一次」），而是让模型在同一次回答里报出 kind，出口再按路由表强制。
  */
-const VISION_PROMPT = [
-  "读这个区域，判断它属于哪一类，返回 JSON。kind 取 formula | figure | image | mixed，",
-  "其余字段按类型填：",
-  "- formula（公式区）：sourceText 放 LaTeX（逐字无损编码），translation 与 multimodal 一律 null。",
-  "- figure（图/表区）：sourceText 放图内文字（没有就 null），translation 为 null，multimodal 放一句话描述。",
-  "- image（纯图区）：sourceText 与 translation 一律 null，multimodal 放一句话描述。",
-  "- mixed（图文混排区）：sourceText 放原文逐字，translation 放中文译文，multimodal 放一句话描述。",
-].join("\n");
+const DEFAULT_TARGET_LANG = "zh";
+
+const visionPrompt = (targetLang: string) =>
+  [
+    "读这个区域，判断它属于哪一类，返回 JSON。kind 取 formula | figure | image | mixed，",
+    "其余字段按类型填：",
+    "- formula（公式区）：sourceText 放 LaTeX（逐字无损编码），translation 与 multimodal 一律 null。",
+    "- figure（图/表区）：sourceText 放图内文字（没有就 null），translation 为 null，multimodal 放一句话描述。",
+    "- image（纯图区）：sourceText 与 translation 一律 null，multimodal 放一句话描述。",
+    `- mixed（图文混排区）：sourceText 放原文逐字，translation 放原文译成 ${targetLang} 的结果，multimodal 放一句话描述。`,
+  ].join("\n");
 
 export function createRecognizer(deps: RecognizerDeps): Recognizer {
   return {
-    async recognize(region: Region): Promise<ClipContent> {
+    async recognize(region: Region, options?: RecognizeOptions): Promise<ClipContent> {
       if (region.rect.width < MIN_REGION_SIDE || region.rect.height < MIN_REGION_SIDE) {
         throw new RecognizeError("region-too-small", "框选区域小到装不下内容，按误触处理");
       }
@@ -182,11 +191,24 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         (item): item is TextItem => "str" in item && baselineIntersectsRect(region.rect, item),
       );
       // 覆盖检测路由：不预分类，量文本覆盖度，低 ⟹ 落视觉。
-      if (textCoverage(region.rect, inRegion) < TEXT_COVERAGE_THRESHOLD) {
+      // options.engine 是逃生口，启发式误判时由调用方强制走某条路。
+      const engine = options?.engine ?? "auto";
+      const goesVision =
+        engine === "vision" ||
+        (engine === "auto" && textCoverage(region.rect, inRegion) < TEXT_COVERAGE_THRESHOLD);
+
+      if (goesVision) {
         let response: ModelResponse;
         try {
           response = await deps.model.complete({
-            messages: [{ role: "user", content: VISION_PROMPT }],
+            messages: [
+              {
+                role: "user",
+                content: visionPrompt(
+                  options?.targetLang ?? deps.targetLang ?? DEFAULT_TARGET_LANG,
+                ),
+              },
+            ],
             // Screenshot 结构上就是 ModelImage 的子集，逐字段手抄只会制造漂移。
             images: [region.pixels],
           });
@@ -213,7 +235,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
           sourceText: blankToNull(output.sourceText),
           translation: allow.translation ? (output.translation ?? undefined) : undefined,
           multimodal: allow.multimodal ? (output.multimodal ?? undefined) : undefined,
-          images: [],
+          images: [region.pixels],
           screenshot: region.pixels,
         };
       }
@@ -221,7 +243,9 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
       return {
         route: "text",
         anchor,
-        sourceText: joinVerbatim(inRegion),
+        // 这里也归一：强制 engine: 'text' 打在无字区域上会拼出空串，
+        // 而 '' 不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
+        sourceText: blankToNull(joinVerbatim(inRegion)),
         images: [],
         screenshot: region.pixels,
       };

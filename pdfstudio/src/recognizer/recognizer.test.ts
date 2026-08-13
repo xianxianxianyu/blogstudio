@@ -49,10 +49,15 @@ function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
-async function setup(paper: string, modelOptions?: FakeModelOptions) {
+async function setup(paper: string, modelOptions?: FakeModelOptions, targetLang?: string) {
   const document = await openFixturePdf(paper);
   const model = createFakeModelClient(modelOptions);
-  return { model, recognizer: createRecognizer({ document, model }) };
+  return { model, recognizer: createRecognizer({ document, model, targetLang }) };
+}
+
+/** 发给模型的那段 prompt——ModelClient 是真外部缝，跨过它的东西可观测。 */
+function promptOf(model: { completeCalls: { messages: { content: string }[] }[] }): string {
+  return model.completeCalls[0].messages.map((message) => message.content).join("\n");
 }
 
 function regionAt(page: number, rect: Rect): Region {
@@ -94,6 +99,18 @@ describe("Recognizer — 纯图区", () => {
 
     expect(content.route).toBe("vision");
     expect(model.completeCalls).toHaveLength(1);
+  });
+
+  it("把区域截图放进 images——路由表四行 vision 都要", async () => {
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeText: JSON.stringify({ kind: "image", sourceText: null, multimodal: "样本图阵列" }),
+    });
+
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT));
+
+    // images 是抠出来给 markdown 用的图；screenshot 是同一块区域的 ground truth 回显。
+    expect(content.images).toEqual([STUB_PIXELS]);
+    expect(content.screenshot).toBe(STUB_PIXELS);
   });
 
   it("模型把原文回成空白时归一成 null", async () => {
@@ -224,6 +241,81 @@ describe("Recognizer — 误触的框", () => {
     );
 
     expect(model.completeCalls).toHaveLength(0);
+  });
+});
+
+describe("Recognizer — engine 逃生口", () => {
+  it("engine: 'vision' 让文本区也走视觉——覆盖度误判时的出口", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf", {
+      completeText: JSON.stringify({
+        kind: "mixed",
+        sourceText: "The dominant sequence transduction models",
+        translation: "主流的序列转导模型",
+        multimodal: "一段正文",
+      }),
+    });
+
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT), { engine: "vision" });
+
+    expect(content.route).toBe("vision");
+    expect(model.completeCalls).toHaveLength(1);
+  });
+
+  it("engine: 'text' 让纯图区不调模型，且原文是 null 而非空串", async () => {
+    const { model, recognizer } = await setup("2006.11239.pdf");
+
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT), { engine: "text" });
+
+    expect(content.route).toBe("text");
+    expect(model.completeCalls).toHaveLength(0);
+    // 不变量 5 压过候选文档里「强制 text 但无字 → 返回 ''」的写法：
+    // '' 不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
+    expect(content.sourceText).toBeNull();
+  });
+});
+
+describe("Recognizer — 译文语言", () => {
+  const MIXED_OUTPUT = JSON.stringify({
+    kind: "mixed",
+    sourceText: "Figure 1: The Transformer - model architecture.",
+    translation: "figure 1: the Transformer model architecture.",
+    multimodal: "架构图",
+  });
+
+  it("默认译成 zh", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf", { completeText: MIXED_OUTPUT });
+
+    await recognizer.recognize(regionAt(3, MIXED_RECT));
+
+    expect(promptOf(model)).toContain("zh");
+  });
+
+  it("构造配置的 targetLang 决定译文语言", async () => {
+    const { model, recognizer } = await setup(
+      "1706.03762.pdf",
+      { completeText: MIXED_OUTPUT },
+      "en",
+    );
+
+    await recognizer.recognize(regionAt(3, MIXED_RECT));
+
+    const prompt = promptOf(model);
+    expect(prompt).toContain("en");
+    expect(prompt).not.toContain("zh");
+  });
+
+  it("单次调用的 options.targetLang 压过构造配置", async () => {
+    const { model, recognizer } = await setup(
+      "1706.03762.pdf",
+      { completeText: MIXED_OUTPUT },
+      "en",
+    );
+
+    await recognizer.recognize(regionAt(3, MIXED_RECT), { targetLang: "ja" });
+
+    const prompt = promptOf(model);
+    expect(prompt).toContain("ja");
+    expect(prompt).not.toContain("en");
   });
 });
 

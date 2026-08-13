@@ -71,7 +71,7 @@ function createRecognizer(deps: RecognizerDeps): Recognizer
 - **throw 而非 Result**：默认调用方只 `catch` 一次；返回并集类型会逼每个调用点做模式匹配。
 - **没有 `model-refused`**：早期 kind 联合里有它，实现时删掉了——拒答回的也是白话、一样解析失败，与坏输出在 `ModelResponse`（只有 `text`，见 ADR-0009）这一层根本分不开。要区分就得往共享契约里加 `refusal` 字段，而第三方 OpenAI-compatible 端点常常不返回它，加了也大半降级成 `bad-output`。宁可少一个假装能区分的 kind。候选文档 `design-recognizer-3-common-caller.md` 和 `design-chat-1-common-caller.md` 里仍留着三个 kind 的写法，那是探索记录，不再是接口。
 - **不做**流式 / 批量 / 取消：pending Promise 就是进度；批量 = 调用方 `Promise.all`；取消 = 忽略（纯被动，一次一个区域）。若将来流式成硬需求，升级路径见 `design-recognizer-1-extensible.md`。
-- **逃生口**：`options.engine = 'vision' | 'text'`，覆盖启发式误判时强制走某条路。
+- **逃生口**：`options.engine = 'vision' | 'text'`，覆盖启发式误判时强制走某条路。强制 `text` 打在无字区域上，`sourceText` 是 **`null` 而非 `''`**——候选文档 `design-recognizer-3-common-caller.md` 写的是「返回 `''` 不抛错」，但不变量 5 是 canonical：`''` 不是 `null`，会让 Clip reducer 以为有 evidence 而放行入库。两条路由的空白原文一律归一成 `null`。
 
 ## 依赖策略
 
