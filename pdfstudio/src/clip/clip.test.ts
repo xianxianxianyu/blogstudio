@@ -86,6 +86,35 @@ describe("Clip reducer — 原文只准修错字", () => {
   });
 });
 
+describe("Clip reducer — 译文与标签", () => {
+  it("译文自由编辑，入库后也照样能改——冻结的只有原文", () => {
+    const promoted = reduce(readyClip("The dominant sequence transduction models"), {
+      type: "promote",
+      id: "c1",
+      contextId: "ctx1",
+    });
+
+    const state = reduce(promoted, { type: "edit-translation", id: "c1", text: "主流的序列转导模型" });
+
+    expect(state.clips[0].translation).toBe("主流的序列转导模型");
+    // evidence 是入库那一刻的原文副本，改译文碰不到它。
+    expect(state.contexts[0].evidence).toBe("The dominant sequence transduction models");
+  });
+
+  it("识别完成前没有译文可改", () => {
+    const capturing = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+
+    expect(can(capturing, { type: "edit-translation", id: "c1", text: "x" }).ok).toBe(false);
+  });
+
+  it("标签在圆点与小窗之间切换", () => {
+    const ready = readyClip("The dominant sequence transduction models");
+
+    expect(ready.clips[0].label).toBe("dot");
+    expect(reduce(ready, { type: "toggle-label", id: "c1" }).clips[0].label).toBe("panel");
+  });
+});
+
 describe("Clip reducer — 同一区域重复截图", () => {
   it("合并进已有标签：不新建摘录，回到 recognizing，笔记留下、修错字的改动不留", () => {
     const ready = [

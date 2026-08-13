@@ -43,6 +43,8 @@ export type Action =
   | { type: "promote"; id: string; contextId: string }
   | { type: "fix-source"; id: string; text: string }
   | { type: "add-note"; id: string; text: string }
+  | { type: "edit-translation"; id: string; text: string }
+  | { type: "toggle-label"; id: string }
   | { type: "recapture"; id: string; region: Region }
   | { type: "delete"; id: string };
 
@@ -78,12 +80,25 @@ const denied = (reason: string): Verdict => ({ ok: false, reason });
 
 /** `reduce` 的前置判定，也供 UI 置灰按钮。 */
 export function can(state: ClipsState, action: Action): Verdict {
-  if (action.type !== "promote" && action.type !== "fix-source" && action.type !== "recapture") {
+  // 逐个写而非用数组 includes：只有这种形式能让 TS 收窄 action 的联合类型。
+  if (
+    action.type !== "promote" &&
+    action.type !== "fix-source" &&
+    action.type !== "recapture" &&
+    action.type !== "edit-translation"
+  ) {
     return ALLOWED;
   }
 
   const clip = state.clips.find((candidate) => candidate.id === action.id);
   if (!clip) return denied("没有这条摘录。");
+
+  if (action.type === "edit-translation") {
+    // 自由编辑，入库后也不冻结——冻结的只有原文。
+    return clip.state === "capturing" || clip.state === "recognizing"
+      ? denied("还没识别完成，译文还没出来。")
+      : ALLOWED;
+  }
 
   if (action.type === "recapture") {
     return clip.state === "promoted"
@@ -158,6 +173,14 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 
     case "add-note":
       return replaceClip(state, action.id, { note: action.text });
+
+    case "edit-translation":
+      return replaceClip(state, action.id, { translation: action.text });
+
+    case "toggle-label": {
+      const clip = state.clips.find((candidate) => candidate.id === action.id);
+      return clip ? replaceClip(state, action.id, { label: clip.label === "dot" ? "panel" : "dot" }) : state;
+    }
 
     // 合并进已有标签，不新建第二个摘录：同一区域两个标签会让锚点回跳有歧义。
     // 笔记是读者的、留下；原文换了一张，之前修的错字随之作废。
