@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
+import { ModelError } from "../model/model-client";
 import type { ModelClient, ModelResponse } from "../model/model-client";
 
 // canonical 接口见 pdfstudio/docs/recognizer-interface.md
@@ -282,7 +283,13 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
             images: [region.pixels],
           });
         } catch (cause) {
-          throw new RecognizeError("model-unavailable", "模型调用失败", { cause });
+          // 端点通了但没给出能用的东西，算坏输出；只有真的调不通才是 model-unavailable。
+          const unusable =
+            cause instanceof ModelError &&
+            (cause.kind === "empty-response" || cause.kind === "malformed-stream");
+          throw unusable
+            ? new RecognizeError("bad-output", "模型没有给出可用的回答", { cause })
+            : new RecognizeError("model-unavailable", "模型调用失败", { cause });
         }
 
         let output: VisionOutput;

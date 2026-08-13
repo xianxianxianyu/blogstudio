@@ -3,6 +3,7 @@ import { createRecognizer, RecognizeError } from "./recognizer";
 import type { Rect, Recognizer, Region, Screenshot } from "./recognizer";
 import { openFixturePdf } from "../../test/fixtures";
 import { createFakeModelClient } from "../../test/fake-model-client";
+import { ModelError } from "../model/model-client";
 import type { FakeModelOptions } from "../../test/fake-model-client";
 
 // 真值独立于实现：用 poppler（`pdftotext -f 1 -l 1 -x 140 -y 411 -W 332 -H 78`）
@@ -359,5 +360,27 @@ describe("Recognizer — 图文混排区", () => {
     // 混排区有原文 ⟹ 有 evidence ⟹ 可入库，与纯图的 null 相对。
     expect(content.sourceText).toBe("Figure 1: The Transformer - model architecture.");
     expect(content.translation).toBe("图 1：Transformer —— 模型架构。");
+  });
+});
+
+describe("Recognizer — 模型给了空回答时", () => {
+  it("算 bad-output 而不是 model-unavailable——端点是通的，只是没给出能用的东西", async () => {
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeError: new ModelError("empty-response", "模型返回了空回答"),
+    });
+
+    const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));
+
+    expect(error.kind).toBe("bad-output");
+  });
+
+  it("端点不通仍然是 model-unavailable", async () => {
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeError: new ModelError("http", "模型端点返回 HTTP 401", { status: 401 }),
+    });
+
+    const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));
+
+    expect(error.kind).toBe("model-unavailable");
   });
 });
