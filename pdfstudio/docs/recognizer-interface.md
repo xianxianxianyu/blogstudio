@@ -35,7 +35,7 @@ interface RecognizeOptions {
 // 统一见 ADR-0009；Recognizer 只使用 model.complete(request)。
 interface RecognizerDeps { document: PDFDocumentProxy; model: ModelClient; targetLang?: string }
 
-class RecognizeError extends Error { kind: 'model-unavailable' | 'bad-output' }
+class RecognizeError extends Error { kind: 'region-too-small' | 'model-unavailable' | 'bad-output' }
 
 // —— 模块 ——
 interface Recognizer { recognize(region: Region, options?: RecognizeOptions): Promise<ClipContent> }
@@ -66,6 +66,8 @@ function createRecognizer(deps: RecognizerDeps): Recognizer
 - **LaTeX 归原文**：公式的 LaTeX 是逐字无损编码，写入 `sourceText` 而非 `multimodal`——使公式摘录有 evidence、能入库。这修正了早期 brief 里「formula→LaTeX 进描述」的措辞（见 ADR-0001）。
 - **`null` 编码可入库性**：`sourceText === null ⟺ 纯图 ⟺ 入库 blocked`，单个 `null` 承载整条规则，不另设 `kind` 字段泄漏给调用方。
 - **回显免组装**：`pixels`→`screenshot`、`page+rect`→`anchor`，调用方拿到完整 `ClipContent`，不再把手势产物粘回去。
+- **误触先挡掉**：`rect` 任一边短于 4pt 就抛 `region-too-small`，在读 PDF 和调模型之前。4pt 取在任何真实摘录之下（脚注约 7pt、公式上标约 5pt），所以框住单个字符仍然合法；只看面积不行，沿行间划过去的细长条面积可以很大。挡掉的既是无内容的摘录，也是一次白烧的云模型调用。
+- **路由表在出口强制，不只写进 prompt**：vision 的四种区域类型（公式/图表/纯图/混排）由模型在**同一次** `complete` 里报出（不先分类再调一次，那会破坏「恰好一次」），Recognizer 按上表裁剪——公式区的 `multimodal`、非混排区的 `translation` 一律丢弃，模型多回了也不透出去。模型不报类型即 `bad-output`：放行等于给它留一个绕过裁剪的口子。
 - **throw 而非 Result**：默认调用方只 `catch` 一次；返回并集类型会逼每个调用点做模式匹配。
 - **没有 `model-refused`**：早期 kind 联合里有它，实现时删掉了——拒答回的也是白话、一样解析失败，与坏输出在 `ModelResponse`（只有 `text`，见 ADR-0009）这一层根本分不开。要区分就得往共享契约里加 `refusal` 字段，而第三方 OpenAI-compatible 端点常常不返回它，加了也大半降级成 `bad-output`。宁可少一个假装能区分的 kind。候选文档 `design-recognizer-3-common-caller.md` 和 `design-chat-1-common-caller.md` 里仍留着三个 kind 的写法，那是探索记录，不再是接口。
 - **不做**流式 / 批量 / 取消：pending Promise 就是进度；批量 = 调用方 `Promise.all`；取消 = 忽略（纯被动，一次一个区域）。若将来流式成硬需求，升级路径见 `design-recognizer-1-extensible.md`。

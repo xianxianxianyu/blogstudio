@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createRecognizer, RecognizeError } from "./recognizer";
-import type { Region, Screenshot } from "./recognizer";
+import type { Rect, Recognizer, Region, Screenshot } from "./recognizer";
 import { openFixturePdf } from "../../test/fixtures";
 import { createFakeModelClient } from "../../test/fake-model-client";
+import type { FakeModelOptions } from "../../test/fake-model-client";
 
 // 真值独立于实现：用 poppler（`pdftotext -f 1 -l 1 -x 140 -y 411 -W 332 -H 78`）
 // 从 arXiv:1706.03762 抽出 Abstract 前 7 行；实现走的是 pdf.js，两条链路互不相干。
@@ -48,19 +49,31 @@ function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+async function setup(paper: string, modelOptions?: FakeModelOptions) {
+  const document = await openFixturePdf(paper);
+  const model = createFakeModelClient(modelOptions);
+  return { model, recognizer: createRecognizer({ document, model }) };
+}
+
+function regionAt(page: number, rect: Rect): Region {
+  return { page, rect, pixels: STUB_PIXELS };
+}
+
+/** 取出 recognize 抛出的 RecognizeError；抛的若不是它，断言就在这里失败。 */
+async function catchRecognizeError(
+  recognizer: Recognizer,
+  region: Region,
+): Promise<RecognizeError> {
+  const thrown = await recognizer.recognize(region).catch((error: unknown) => error);
+  expect(thrown).toBeInstanceOf(RecognizeError);
+  return thrown as RecognizeError;
+}
+
 describe("Recognizer — 数字 PDF 文本区", () => {
   it("返回逐字 sourceText，且不调用 ModelClient", async () => {
-    const document = await openFixturePdf("1706.03762.pdf");
-    const model = createFakeModelClient();
-    const recognizer = createRecognizer({ document, model });
+    const { model, recognizer } = await setup("1706.03762.pdf");
 
-    const region: Region = {
-      page: 1,
-      rect: ABSTRACT_RECT,
-      pixels: STUB_PIXELS,
-    };
-
-    const content = await recognizer.recognize(region);
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT));
 
     expect(normalizeWhitespace(content.sourceText ?? "")).toBe(ABSTRACT_HEAD);
     expect(model.completeCalls).toHaveLength(0);
@@ -69,65 +82,79 @@ describe("Recognizer — 数字 PDF 文本区", () => {
 
 describe("Recognizer — 纯图区", () => {
   it("走 vision，且恰好调用一次 model.complete", async () => {
-    const document = await openFixturePdf("2006.11239.pdf");
-    const model = createFakeModelClient({
+    const { model, recognizer } = await setup("2006.11239.pdf", {
       completeText: JSON.stringify({
+        kind: "image",
         sourceText: null,
         multimodal: "四张人脸样本与一格 CIFAR10 样本阵列",
       }),
     });
-    const recognizer = createRecognizer({ document, model });
 
-    const region: Region = {
-      page: 1,
-      rect: FIGURE_RECT,
-      pixels: STUB_PIXELS,
-    };
-
-    const content = await recognizer.recognize(region);
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT));
 
     expect(content.route).toBe("vision");
     expect(model.completeCalls).toHaveLength(1);
   });
 
   it("模型把原文回成空白时归一成 null", async () => {
-    const document = await openFixturePdf("2006.11239.pdf");
     // 视觉模型常把「没有原文」回成空串而不是 null。
-    const model = createFakeModelClient({
-      completeText: JSON.stringify({ sourceText: "   ", multimodal: "样本图阵列" }),
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeText: JSON.stringify({ kind: "image", sourceText: "   ", multimodal: "样本图阵列" }),
     });
-    const recognizer = createRecognizer({ document, model });
 
-    const content = await recognizer.recognize({
-      page: 1,
-      rect: FIGURE_RECT,
-      pixels: STUB_PIXELS,
-    });
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT));
 
     // sourceText === null ⟺ 纯图 ⟺ 入库 blocked。空串不是 null，
     // 会让 Clip reducer 以为有 evidence 而放行 promote。
     expect(content.sourceText).toBeNull();
   });
+
+  it("模型多回了 translation 也丢弃——路由表只有混排行有译文栏", async () => {
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeText: JSON.stringify({
+        kind: "image",
+        sourceText: null,
+        translation: "样本图阵列",
+        multimodal: "四张人脸样本与一格 CIFAR10 样本阵列",
+      }),
+    });
+
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT));
+
+    expect(content.translation).toBeUndefined();
+    expect(content.multimodal).toBe("四张人脸样本与一格 CIFAR10 样本阵列");
+  });
 });
 
 describe("Recognizer — 公式区", () => {
   it("把模型给的 LaTeX 放进 sourceText，而不是 multimodal", async () => {
-    const document = await openFixturePdf("1706.03762.pdf");
-    const model = createFakeModelClient({
-      completeText: JSON.stringify({ sourceText: ATTENTION_LATEX, multimodal: null }),
+    const { recognizer } = await setup("1706.03762.pdf", {
+      completeText: JSON.stringify({
+        kind: "formula",
+        sourceText: ATTENTION_LATEX,
+        multimodal: null,
+      }),
     });
-    const recognizer = createRecognizer({ document, model });
 
-    const region: Region = {
-      page: 4,
-      rect: FORMULA_RECT,
-      pixels: STUB_PIXELS,
-    };
-
-    const content = await recognizer.recognize(region);
+    const content = await recognizer.recognize(regionAt(4, FORMULA_RECT));
 
     // LaTeX 是逐字无损编码，所以归原文——公式摘录才有 evidence、才能入库。
     expect(content.route).toBe("vision");
+    expect(content.sourceText).toBe(ATTENTION_LATEX);
+    expect(content.multimodal).toBeUndefined();
+  });
+
+  it("模型多回了 multimodal 也丢弃——路由表的公式行没有描述栏", async () => {
+    const { recognizer } = await setup("1706.03762.pdf", {
+      completeText: JSON.stringify({
+        kind: "formula",
+        sourceText: ATTENTION_LATEX,
+        multimodal: "一个注意力机制的公式",
+      }),
+    });
+
+    const content = await recognizer.recognize(regionAt(4, FORMULA_RECT));
+
     expect(content.sourceText).toBe(ATTENTION_LATEX);
     expect(content.multimodal).toBeUndefined();
   });
@@ -135,57 +162,83 @@ describe("Recognizer — 公式区", () => {
 
 describe("Recognizer — 模型输出坏掉时", () => {
   it("抛 RecognizeError{kind:'bad-output'}，不漏 SyntaxError 给调用方", async () => {
-    const document = await openFixturePdf("2006.11239.pdf");
     // 模型没按约定回 JSON，直接回了一句白话。拒答（「抱歉，我无法…」）也落这一类：
     // 在只有 text 的 ModelResponse 上，拒答和坏输出分不开。
-    const model = createFakeModelClient({ completeText: "这个区域是一组人脸样本图。" });
-    const recognizer = createRecognizer({ document, model });
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeText: "这个区域是一组人脸样本图。",
+    });
 
-    const error = await recognizer
-      .recognize({ page: 1, rect: FIGURE_RECT, pixels: STUB_PIXELS })
-      .catch((thrown: unknown) => thrown);
+    const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));
 
     // 调用方只 catch 一次、按 kind 分支；裸 SyntaxError 会让它无从区分失败原因。
-    expect(error).toBeInstanceOf(RecognizeError);
-    expect((error as RecognizeError).kind).toBe("bad-output");
+    expect(error.kind).toBe("bad-output");
+  });
+
+  it("模型没报区域类型时也算坏输出——否则它能绕过路由表的裁剪", async () => {
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeText: JSON.stringify({ sourceText: null, multimodal: "样本图阵列" }),
+    });
+
+    const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));
+
+    expect(error.kind).toBe("bad-output");
   });
 });
 
 describe("Recognizer — 模型调不通时", () => {
   it("抛 RecognizeError{kind:'model-unavailable'}，并保留原始错误", async () => {
-    const document = await openFixturePdf("2006.11239.pdf");
     const networkFailure = new Error("fetch failed");
-    const model = createFakeModelClient({ completeError: networkFailure });
-    const recognizer = createRecognizer({ document, model });
+    const { recognizer } = await setup("2006.11239.pdf", { completeError: networkFailure });
 
-    const error = await recognizer
-      .recognize({ page: 1, rect: FIGURE_RECT, pixels: STUB_PIXELS })
-      .catch((thrown: unknown) => thrown);
+    const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));
 
-    expect(error).toBeInstanceOf(RecognizeError);
-    expect((error as RecognizeError).kind).toBe("model-unavailable");
+    expect(error.kind).toBe("model-unavailable");
     // 原始错误留在 cause 上，排查时才知道是网络还是鉴权。
-    expect((error as RecognizeError).cause).toBe(networkFailure);
+    expect(error.cause).toBe(networkFailure);
+  });
+});
+
+describe("Recognizer — 误触的框", () => {
+  const misTouch = (width: number, height: number) =>
+    regionAt(1, { x: ABSTRACT_RECT.x, y: ABSTRACT_RECT.y, width, height });
+
+  it("零面积的框抛 RecognizeError{kind:'region-too-small'}，且不调模型", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf");
+
+    // 读者只点了一下、没拖出框。
+    const error = await catchRecognizeError(recognizer, misTouch(0, 0));
+
+    expect(error.kind).toBe("region-too-small");
+    // 误触不该烧掉一次云模型调用（ADR-0005 是用户自配的付费端点）。
+    expect(model.completeCalls).toHaveLength(0);
+  });
+
+  it("边长小到装不下一个字的框同样算误触", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf");
+
+    // 手抖拖出的小方块。
+    expect((await catchRecognizeError(recognizer, misTouch(3, 3))).kind).toBe("region-too-small");
+    // 面积够大但薄成一条线的框——沿着行间划过去就会产生。
+    expect((await catchRecognizeError(recognizer, misTouch(200, 0.5))).kind).toBe(
+      "region-too-small",
+    );
+
+    expect(model.completeCalls).toHaveLength(0);
   });
 });
 
 describe("Recognizer — 图文混排区", () => {
   it("原文进 sourceText，译文进 translation", async () => {
-    const document = await openFixturePdf("1706.03762.pdf");
-    const model = createFakeModelClient({
+    const { recognizer } = await setup("1706.03762.pdf", {
       completeText: JSON.stringify({
+        kind: "mixed",
         sourceText: "Figure 1: The Transformer - model architecture.",
         translation: "图 1：Transformer —— 模型架构。",
         multimodal: "编码器与解码器堆叠的架构图",
       }),
     });
-    const recognizer = createRecognizer({ document, model });
 
-    const content = await recognizer.recognize({
-      page: 3,
-      rect: MIXED_RECT,
-      pixels: STUB_PIXELS,
-    });
+    const content = await recognizer.recognize(regionAt(3, MIXED_RECT));
 
     expect(content.route).toBe("vision");
     // 混排区有原文 ⟹ 有 evidence ⟹ 可入库，与纯图的 null 相对。

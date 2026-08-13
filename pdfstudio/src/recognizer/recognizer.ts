@@ -63,7 +63,7 @@ export interface Recognizer {
  */
 export class RecognizeError extends Error {
   constructor(
-    readonly kind: "model-unavailable" | "bad-output",
+    readonly kind: "region-too-small" | "model-unavailable" | "bad-output",
     message: string,
     options?: ErrorOptions,
   ) {
@@ -80,7 +80,7 @@ export class RecognizeError extends Error {
  * `width` 沿基线方向而非水平方向，所以线段终点要按 transform 的旋转量走，
  * 否则页边那条竖排的 arXiv 戳会被算成一条横跨半页的文字。
  */
-function isInRegion(rect: Rect, item: TextItem): boolean {
+function baselineIntersectsRect(rect: Rect, item: TextItem): boolean {
   const [a, b, , , x, y] = item.transform;
   const length = Math.hypot(a, b) || 1;
   const endX = x + (item.width * a) / length;
@@ -93,6 +93,16 @@ function isInRegion(rect: Rect, item: TextItem): boolean {
     Math.max(y, endY) >= rect.y
   );
 }
+
+/**
+ * 框选区域的最小边长（PDF 点，1pt = 1/72 英寸）。两条边都得够长——
+ * 只看面积挡不住「沿行间划过去」拖出的细长条。
+ *
+ * 4pt 取在任何真实摘录之下：论文最小的脚注字号约 7pt，公式里的上标字形约 5pt，
+ * 所以框住单个字符仍然合法。低于它的框装不下任何内容，按误触处理：
+ * 既不产出摘录，也不烧掉一次云模型调用（ADR-0005 是用户自配的付费端点）。
+ */
+const MIN_REGION_SIDE = 4;
 
 /**
  * 覆盖度阈值。目前只按 eval 的三个样本标定：
@@ -113,8 +123,12 @@ function joinVerbatim(items: TextItem[]): string {
   return items.map((item) => (item.hasEOL ? `${item.str}\n` : item.str)).join("");
 }
 
+/** vision 路由下的四种区域类型，对应 canonical 路由规则表的后四行。 */
+type VisionKind = "formula" | "figure" | "image" | "mixed";
+
 /** 视觉路由的线上格式：prompt 与解析都归 Recognizer 所有，adapter 保持极薄。 */
 interface VisionOutput {
+  kind?: VisionKind;
   sourceText?: string | null;
   translation?: string | null;
   multimodal?: string | null;
@@ -129,19 +143,43 @@ function blankToNull(text: string | null | undefined): string | null {
   return text != null && text.trim() !== "" ? text : null;
 }
 
-const VISION_PROMPT =
-  "读这个区域，返回 JSON：sourceText 放区域内的原文逐字（公式用 LaTeX；纯图为 null），" +
-  "translation 放原文的中文译文（无原文为 null），" +
-  "multimodal 放图/表的一句话描述（无图为 null）。";
+/**
+ * canonical 路由规则表的后四行，只保留「哪一栏该有值」这一维。
+ * 出口按它裁剪，约束才不会只活在 prompt 里——模型多回的字段一律丢弃。
+ * kind 缺失或不认识就是坏输出：放行等于给模型留一个绕过裁剪的口子。
+ */
+const VISION_TABLE: Record<VisionKind, { translation: boolean; multimodal: boolean }> = {
+  formula: { translation: false, multimodal: false },
+  figure: { translation: false, multimodal: true },
+  image: { translation: false, multimodal: true },
+  mixed: { translation: true, multimodal: true },
+};
+
+/**
+ * prompt 按区域类型分支——但只有一次调用：不先分类再选 prompt（那是两次，
+ * 违反「恰好一次」），而是让模型在同一次回答里报出 kind，出口再按路由表强制。
+ */
+const VISION_PROMPT = [
+  "读这个区域，判断它属于哪一类，返回 JSON。kind 取 formula | figure | image | mixed，",
+  "其余字段按类型填：",
+  "- formula（公式区）：sourceText 放 LaTeX（逐字无损编码），translation 与 multimodal 一律 null。",
+  "- figure（图/表区）：sourceText 放图内文字（没有就 null），translation 为 null，multimodal 放一句话描述。",
+  "- image（纯图区）：sourceText 与 translation 一律 null，multimodal 放一句话描述。",
+  "- mixed（图文混排区）：sourceText 放原文逐字，translation 放中文译文，multimodal 放一句话描述。",
+].join("\n");
 
 export function createRecognizer(deps: RecognizerDeps): Recognizer {
   return {
     async recognize(region: Region): Promise<ClipContent> {
+      if (region.rect.width < MIN_REGION_SIDE || region.rect.height < MIN_REGION_SIDE) {
+        throw new RecognizeError("region-too-small", "框选区域小到装不下内容，按误触处理");
+      }
+
       const anchor: Anchor = { page: region.page, rect: region.rect };
       const page = await deps.document.getPage(region.page);
       const { items } = await page.getTextContent();
       const inRegion = items.filter(
-        (item): item is TextItem => "str" in item && isInRegion(region.rect, item),
+        (item): item is TextItem => "str" in item && baselineIntersectsRect(region.rect, item),
       );
       // 覆盖检测路由：不预分类，量文本覆盖度，低 ⟹ 落视觉。
       if (textCoverage(region.rect, inRegion) < TEXT_COVERAGE_THRESHOLD) {
@@ -149,14 +187,8 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         try {
           response = await deps.model.complete({
             messages: [{ role: "user", content: VISION_PROMPT }],
-            images: [
-              {
-                mime: region.pixels.mime,
-                bytes: region.pixels.bytes,
-                width: region.pixels.width,
-                height: region.pixels.height,
-              },
-            ],
+            // Screenshot 结构上就是 ModelImage 的子集，逐字段手抄只会制造漂移。
+            images: [region.pixels],
           });
         } catch (cause) {
           throw new RecognizeError("model-unavailable", "模型调用失败", { cause });
@@ -169,13 +201,18 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
           throw new RecognizeError("bad-output", "模型没有按约定返回 JSON", { cause });
         }
 
+        const allow = output.kind && VISION_TABLE[output.kind];
+        if (!allow) {
+          throw new RecognizeError("bad-output", "模型没有报出区域类型");
+        }
+
         return {
           route: "vision",
           anchor,
           // 公式的 LaTeX 也走 sourceText：它是逐字无损编码，公式摘录因此有 evidence、能入库。
           sourceText: blankToNull(output.sourceText),
-          translation: output.translation ?? undefined,
-          multimodal: output.multimodal ?? undefined,
+          translation: allow.translation ? (output.translation ?? undefined) : undefined,
+          multimodal: allow.multimodal ? (output.multimodal ?? undefined) : undefined,
           images: [],
           screenshot: region.pixels,
         };

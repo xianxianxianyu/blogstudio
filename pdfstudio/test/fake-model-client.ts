@@ -10,9 +10,12 @@ export interface FakeModelClient extends ModelClient {
   readonly completeCalls: ModelRequest[];
 }
 
-export function createFakeModelClient(
-  options: { completeText?: string; completeError?: Error } = {},
-): FakeModelClient {
+export interface FakeModelOptions {
+  completeText?: string;
+  completeError?: Error;
+}
+
+export function createFakeModelClient(options: FakeModelOptions = {}): FakeModelClient {
   const completeCalls: ModelRequest[] = [];
 
   return {
