@@ -18,6 +18,9 @@
 /.vinext/
 /out/
 
+# typescript
+*.tsbuildinfo
+
 # misc
 .DS_Store
 *.pem
@@ -38,3 +41,6 @@ yarn-error.log*
 /.wrangler/
 /outputs/
 /work/
+
+# local issue tracker (see docs/agents/issue-tracker.md)
+/.scratch/
