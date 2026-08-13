@@ -4,6 +4,8 @@ import type { ModelChunk, ModelClient, ModelRequest, ModelResponse } from "../sr
 export interface FakeModelClient extends ModelClient {
   /** 记录每一次 complete 调用，用来断言「零成本」不变量。 */
   readonly completeCalls: ModelRequest[];
+  /** 记录每一次 streamComplete 调用——Chat 该走流式而非一次性。 */
+  readonly streamCalls: ModelRequest[];
 }
 
 export interface FakeModelOptions {
@@ -15,10 +17,12 @@ export interface FakeModelOptions {
 
 export function createFakeModelClient(options: FakeModelOptions = {}): FakeModelClient {
   const completeCalls: ModelRequest[] = [];
+  const streamCalls: ModelRequest[] = [];
   const text = options.completeText ?? "";
 
   return {
     completeCalls,
+    streamCalls,
 
     async complete(request: ModelRequest): Promise<ModelResponse> {
       completeCalls.push(request);
@@ -30,6 +34,7 @@ export function createFakeModelClient(options: FakeModelOptions = {}): FakeModel
     },
 
     async *streamComplete(request: ModelRequest): AsyncIterable<ModelChunk> {
+      streamCalls.push(request);
       if (options.completeError) throw options.completeError;
       if (request.signal?.aborted) return;
 
