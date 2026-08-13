@@ -1,4 +1,5 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { ModelClient, ModelMessage } from "../model/model-client";
 import type { Screenshot } from "../recognizer/recognizer";
 
@@ -89,14 +90,84 @@ function collectImages(turns: Turn[]): Screenshot[] {
   );
 }
 
+/** 索引的最小单位。切块策略是内部缝，调用方只看得到 citation。 */
+interface Chunk {
+  page: number;
+  text: string;
+}
+
+const CHUNK_CHARS = 600;
+
+/**
+ * 读序还原目前还是 pdf.js 的原始顺序——双栏页会把左右栏交错读进来。
+ * 那是 architecture.md 点名的「分块缺口」，等一条真实的双栏反例来驱动。
+ */
+async function buildIndex(document: PDFDocumentProxy): Promise<Chunk[]> {
+  const chunks: Chunk[] = [];
+
+  for (let page = 1; page <= document.numPages; page++) {
+    const { items } = await (await document.getPage(page)).getTextContent();
+    const text = items
+      .filter((item): item is TextItem => "str" in item)
+      .map((item) => (item.hasEOL ? `${item.str}\n` : item.str))
+      .join("");
+
+    for (let start = 0; start < text.length; start += CHUNK_CHARS) {
+      const slice = text.slice(start, start + CHUNK_CHARS).trim();
+      if (slice !== "") chunks.push({ page, text: slice });
+    }
+  }
+
+  return chunks;
+}
+
+/**
+ * 关键词重合打分。这是**已知不够用**的基线：读者用中文问英文论文时它一分也打不出来，
+ * 而那正是 ADR-0003 选 bge-m3 的理由。等跨语言那条红灯来驱动再换。
+ */
+function score(chunk: Chunk, query: string): number {
+  const terms = query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [];
+  const haystack = chunk.text.toLowerCase();
+  return terms.filter((term) => haystack.includes(term)).length;
+}
+
+function queryOf(turns: Turn[]): string {
+  const last = turns.at(-1);
+  return (
+    last?.parts
+      .filter((part): part is { kind: "text"; text: string } => part.kind === "text")
+      .map((part) => part.text)
+      .join(" ") ?? ""
+  );
+}
+
 export function createChat(deps: ChatDeps): Chat {
+  // 懒加载 + 只建一次（不变量 ④）。索引绑在这个实例上，天然不可能串到别的文档。
+  let index: Promise<Chunk[]> | null = null;
+  const ensureIndex = () => (index ??= buildIndex(deps.document));
+
   return {
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
+      const chunks = await ensureIndex();
+      const query = queryOf(turns);
+      const hit = chunks
+        .map((chunk) => ({ chunk, score: score(chunk, query) }))
+        .filter((scored) => scored.score > 0)
+        .sort((a, b) => b.score - a.score)[0];
+
+      const messages = turns.map(toMessage);
+      if (hit) {
+        messages.unshift({
+          role: "system",
+          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${hit.chunk.text}`,
+        });
+      }
+
       let text = "";
       for await (const chunk of deps.model.streamComplete({
-        messages: turns.map(toMessage),
+        messages,
         ...(images.length > 0 ? { images } : {}),
         signal: options?.signal,
       })) {
@@ -105,7 +176,14 @@ export function createChat(deps: ChatDeps): Chat {
         if (options?.signal?.aborted) break;
       }
 
-      return { text, citations: [], grounding: "none" };
+      // grounding 由检索结果判定，不看模型说了什么（不变量 ⑤）。
+      return hit
+        ? {
+            text,
+            citations: [{ kind: "chunk", page: hit.chunk.page, snippet: hit.chunk.text }],
+            grounding: "retrieved",
+          }
+        : { text, citations: [], grounding: "none" };
     },
   };
 }

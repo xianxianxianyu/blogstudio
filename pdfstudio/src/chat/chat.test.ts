@@ -119,3 +119,34 @@ describe("Chat — 停止", () => {
     expect(model.streamCalls[0].signal).toBe(controller.signal);
   });
 });
+
+describe("Chat — 检索与出处", () => {
+  it("答案在文中时，citation 指向正确的页，grounding 是 retrieved", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "退化问题指的是更深的网络反而训练误差更高。" });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model });
+
+    const answer = await chat.ask(ask("What is the degradation problem?"));
+
+    // grounding 由 Chat 判定，与模型输出无关（不变量 ⑤）。
+    expect(answer.grounding).toBe("retrieved");
+    expect(answer.citations.length).toBeGreaterThan(0);
+
+    const [citation] = answer.citations;
+    expect(citation.kind).toBe("chunk");
+    // "degradation" 在 ResNet 里首次出现在第 1 页摘要。
+    expect(citation.page).toBe(1);
+    expect(citation.snippet?.toLowerCase()).toContain("degradation");
+  });
+
+  it("检索到的原文进 prompt——不然模型无从作答", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "答案" });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model });
+
+    await chat.ask(ask("What is the degradation problem?"));
+
+    const prompt = model.streamCalls[0].messages.map((message) => message.content).join("\n");
+    expect(prompt.toLowerCase()).toContain("degradation");
+  });
+});

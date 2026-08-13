@@ -53,9 +53,10 @@ export function createModelClient(config: ModelClientConfig): ModelClient {
         role: "user",
         content: [
           { type: "text", text: message.content },
+          // 用 file part 而非已弃用的 image part（SDK 会按 mediaType 认出它是图）。
           ...images.map((image) => ({
-            type: "image" as const,
-            image: image.bytes,
+            type: "file" as const,
+            data: image.bytes,
             mediaType: image.mime,
           })),
         ],
