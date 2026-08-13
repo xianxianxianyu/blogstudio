@@ -22,6 +22,15 @@ import { openFixturePdf } from "../test/fixtures";
 const HERE = import.meta.dirname;
 const ROOT = path.join(HERE, "..");
 
+/** manifest 的 type 与 prompt 里 kind 词表的对应。 */
+const EXPECTED_KIND: Record<string, string> = {
+  formula: "formula",
+  figure: "figure",
+  table: "figure",
+  paragraph: "mixed", // 强制 vision 的纯文本区，没有更贴切的选项
+  mixed: "mixed",
+};
+
 interface Sample {
   id: string;
   type: string;
@@ -38,8 +47,10 @@ async function readManifest(): Promise<Sample[]> {
   for (const line of markdown.split("\n")) {
     const cells = line.split("|").map((cell) => cell.trim());
     if (cells.length < 6) continue;
-    const [, id, type, source, note] = cells;
+    const [, id, type, source] = cells;
     if (!/^[fgpm]\d\d$/.test(id)) continue;
+    // 说明一栏里本身含 `|`（数学条件概率），按列切会把它截断——重新拼回去。
+    const note = cells.slice(4, -2).join("|");
 
     const arxiv = source.match(/arXiv:([\d.]+)/);
     const page = source.match(/p\.(\d+)/);
@@ -100,8 +111,26 @@ async function main(): Promise<void> {
     return;
   }
 
-  const model = createModelClient(config);
+  // 包一层录音：模型自报的 kind 被 Recognizer 在出口消费掉，不进 ClipContent
+  // （canonical 接口本来就没这个字段）。但 eval 要判的恰恰是它分得准不准，
+  // 所以在缝上录下原始回答。
+  const raw: string[] = [];
+  const inner = createModelClient(config);
+  const model: typeof inner = {
+    async complete(request) {
+      const response = await inner.complete(request);
+      raw.push(response.text);
+      return response;
+    },
+    streamComplete: inner.streamComplete.bind(inner),
+  };
+
   console.log(`模型 ${config.model} @ ${config.baseURL}，共 ${samples.length} 张\n`);
+
+  // kind 是确定性可判的，自动算合规率；内容正确性（LaTeX 对不对、描述准不准）
+  // 仍然人眼看——manifest 明写本 eval 不做自动打分。
+  let matched = 0;
+  let failed = 0;
 
   for (const sample of samples) {
     const document = await openFixturePdf(sample.paper);
@@ -109,6 +138,7 @@ async function main(): Promise<void> {
     const pixels = await loadScreenshot(sample.id);
 
     console.log(`── ${sample.id}  [manifest: ${sample.type}]  ${sample.note}`);
+    raw.length = 0;
 
     try {
       // 强制 vision：样本是裁好的 PNG，manifest 没记页面坐标，覆盖检测无从下手。
@@ -117,15 +147,23 @@ async function main(): Promise<void> {
         { engine: "vision" },
       );
 
+      const kind = (JSON.parse(raw[0] ?? "{}") as { kind?: string }).kind ?? "（没报）";
+      const expected = EXPECTED_KIND[sample.type];
+      if (kind === expected) matched++;
+      console.log(`   kind        ${kind}${kind === expected ? "" : `  ← manifest 期待 ${expected}`}`);
       console.log(`   sourceText  ${preview(content.sourceText)}`);
       console.log(`   translation ${preview(content.translation ?? null)}`);
       console.log(`   multimodal  ${preview(content.multimodal ?? null)}`);
     } catch (error) {
       const { kind, message } = error as { kind?: string; message: string };
+      failed++;
       console.log(`   ✗ ${kind ?? "error"}：${message}`);
     }
     console.log();
   }
+
+  console.log(`kind 与 manifest 一致 ${matched}/${samples.length}${failed > 0 ? `，另有 ${failed} 张调用失败` : ""}`);
+  console.log("内容正确性（LaTeX、描述、译文）请对照 PDF 目检。");
 }
 
 function preview(value: string | null): string {

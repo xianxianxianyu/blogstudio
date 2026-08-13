@@ -239,8 +239,15 @@ const DEFAULT_TARGET_LANG = "zh";
 
 const visionPrompt = (targetLang: string) =>
   [
-    "读这个区域，判断它属于哪一类，返回 JSON。kind 取 formula | figure | image | mixed，",
-    "其余字段按类型填：",
+    "读这个区域，判断它属于哪一类，返回 JSON。kind 取 formula | figure | image | mixed。",
+    "按这个顺序判定，取第一个成立的：",
+    "1. 整块就是一条或几条公式 → formula",
+    "2. 区域内除了图题和标签之外还有**成块的文字**（正文段落、算法伪代码、列表）→ mixed。",
+    "   图题、表题、图内标签、表格单元格、坐标轴文字都**不算**——图题写满六行也仍然是图题，",
+    "   看的是它在不在解释这张图，不是长度。",
+    "3. 有图或表，但文字只有图题和图内标签 → figure",
+    "4. 连图题和标签都没有 → image",
+    "各类型的字段这样填：",
     "- formula（公式区）：sourceText 放 LaTeX（逐字无损编码），translation 与 multimodal 一律 null。",
     "- figure（图/表区）：sourceText 放图内文字（没有就 null），translation 为 null，multimodal 放一句话描述。",
     "- image（纯图区）：sourceText 与 translation 一律 null，multimodal 放一句话描述。",
