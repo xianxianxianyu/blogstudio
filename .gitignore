@@ -44,3 +44,6 @@ yarn-error.log*
 
 # local issue tracker (see docs/agents/issue-tracker.md)
 /.scratch/
+
+# real model credentials (ADR-0005: key never enters source or build output)
+/pdfstudio/config.json
