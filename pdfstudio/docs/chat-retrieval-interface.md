@@ -36,9 +36,10 @@
 
 // —— 一个 Chat 实例绑定一个文档（单文档是类型层面保证，不可能串文档）——
 interface Chat {
-  ask(turns: Turn[]): Promise<Answer>;
+  ask(turns: Turn[], options?: AskOptions): Promise<Answer>;
   reindex(): Promise<void>;          // rare 逃生口：OCR 修正 / 换切块策略后重建
 }
+interface AskOptions { signal?: AbortSignal }   // 停止按钮的入口（ADR-0008 的 LocalRuntime 要它）
 function createChat(deps: { document: PDFDocumentProxy; docId: string; model: ModelClient }): Chat;
 
 // —— 一轮对话：文字 + 可选贴入的摘录/图（快照）——
@@ -96,5 +97,7 @@ const a2 = await chat.ask([
 ```
 
 **藏在 `ask` 后面的（内部缝，调用方永远看不见）：** 双栏阅读顺序还原（pdf.js 坐标）、结构递归切块、bge-m3 embedding + FTS5 hybrid 打分、`ModelRequest` 组装、`streamComplete` 消费与 `ModelChunk` 累积、prompt 组装、citation 解析、`grounding` 判定。
+
+**取消语义：** 读者按下停止不是失败——`ask` 返回**已收到的那半段**作为合法 `Answer`（不变量 ⑥），不 reject。`signal` 透给 `ModelRequest`，adapter 据此断开远端流（ADR-0009）。
 
 **不变量：** ① 单文档封闭（绝不读写 `docId` 以外的索引）；② 快照语义（贴入是深拷贝）；③ 纯被动无会话状态（历史由调用方传入）；④ 幂等索引（内容哈希只建一次）；⑤ 诚实性（`grounding` 独立于模型输出判定）；⑥ `ask` 只 reject 模型失败或契约违反，其余一律降级成合法 `Answer`。

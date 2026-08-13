@@ -13,6 +13,8 @@ export interface FakeModelOptions {
   completeError?: Error;
   /** streamComplete 的切分方式；省略则整段一次给出。 */
   deltas?: string[];
+  /** 每吐出一个增量后回调，给测试一个确定的时机去 abort。 */
+  onDelta?: (index: number) => void;
 }
 
 export function createFakeModelClient(options: FakeModelOptions = {}): FakeModelClient {
@@ -38,8 +40,10 @@ export function createFakeModelClient(options: FakeModelOptions = {}): FakeModel
       if (options.completeError) throw options.completeError;
       if (request.signal?.aborted) return;
 
-      for (const textDelta of options.deltas ?? [text]) {
+      for (const [index, textDelta] of (options.deltas ?? [text]).entries()) {
+        if (request.signal?.aborted) return;
         yield { textDelta };
+        options.onDelta?.(index);
         // 取消时优雅结束、不抛（ADR-0009）。
         if (request.signal?.aborted) return;
       }
