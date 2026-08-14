@@ -14,7 +14,7 @@
 import * as pdfjs from "pdfjs-dist";
 // @ts-expect-error ——`?url` 是 Vite 的产物，TS 不认识这种导入
 import worker from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { toPageRect } from "../src/capture/capture";
+import { isMisTouch, toPageRect } from "../src/capture/capture";
 import { createRecognizer } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../src/config/config";
@@ -118,6 +118,13 @@ canvas.addEventListener("pointerup", async (event) => {
   const end = atCanvas(event);
   const drag = { x0: start.x, y0: start.y, x1: end.x, y1: end.y };
   start = null;
+
+  // 误触就当一次点击：收掉选框，什么都不做。不弹错——手滑本来就常见，
+  // 每次都报一句「区域太小」只是噪音；真正要防的是白烧一次付费调用。
+  if (isMisTouch(drag)) {
+    box.style.display = "none";
+    return;
+  }
 
   const pageRect = toPageRect(viewport, drag);
   const pixels = await crop(drag);

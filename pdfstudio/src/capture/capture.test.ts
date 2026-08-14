@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { toPageRect } from "./capture";
+import { isMisTouch, toPageRect } from "./capture";
 import { openFixturePdf } from "../../test/fixtures";
 
 /**
@@ -38,6 +38,33 @@ describe("框选 → 页面坐标", () => {
     expect(rect.y).toBeCloseTo(PAGE_HEIGHT - 489, 6);
     expect(rect.width).toBeCloseTo(332, 6);
     expect(rect.height).toBeCloseTo(78, 6);
+  });
+
+  it("轻点一下算误触，不管当前缩放是多少", async () => {
+    // 实测：scale 2 下点一下，拖出 13.5 画布像素，换算成 6.75pt——Recognizer 那条
+    // 4pt 的守卫放行了，白烧一次云模型调用。
+    //
+    // 关键在**单位**：手抖的大小是固定的屏幕像素，而那条守卫用的是页面点。同样一下
+    // 13.5px 的手抖，scale 3 下是 4.5pt（勉强拦住）、scale 1 下是 13.5pt（拦不住）——
+    // 越是缩小看全页、误触越没意义的时候，守卫越不管用，方向是反的。
+    //
+    // 所以误触判定必须在画布像素上做，与缩放无关。
+    expect(isMisTouch({ x0: 300, y0: 400, x1: 313.5, y1: 409 })).toBe(true);
+  });
+
+  it("细长条也是误触——沿着行间划过去，一条边够长另一条不够", () => {
+    // 只看面积或只看一条边都挡不住：400×3 的面积远超任何阈值，但它装不下内容。
+    expect(isMisTouch({ x0: 100, y0: 200, x1: 500, y1: 203 })).toBe(true);
+  });
+
+  it("真框住一块地方就不是误触", () => {
+    expect(isMisTouch({ x0: 140, y0: 411, x1: 472, y1: 489 })).toBe(false);
+  });
+
+  it("反向拖动的误触判定与方向无关", () => {
+    // 与 toPageRect 同一个坑：宽高为负会让任何 `< 阈值` 的比较直接判成误触，
+    // 于是从右下往左上拖的**正常框选**会被当成误触丢掉。
+    expect(isMisTouch({ x0: 472, y0: 489, x1: 140, y1: 411 })).toBe(false);
   });
 
   it("反向拖动（从右下拖到左上）得到同一个矩形", async () => {
