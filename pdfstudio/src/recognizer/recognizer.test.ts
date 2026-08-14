@@ -59,7 +59,7 @@ function normalizeWhitespace(text: string): string {
 async function setup(paper: string, modelOptions?: FakeModelOptions, targetLang?: string) {
   const document = await openFixturePdf(paper);
   const model = createFakeModelClient(modelOptions);
-  return { model, recognizer: createRecognizer({ document, model, targetLang }) };
+  return { model, recognizer: createRecognizer({ document, recognition: model, targetLang }) };
 }
 
 /** 发给模型的那段 prompt——ModelClient 是真外部缝，跨过它的东西可观测。 */
@@ -382,5 +382,33 @@ describe("Recognizer — 模型给了空回答时", () => {
     const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));
 
     expect(error.kind).toBe("model-unavailable");
+  });
+});
+
+describe("Recognizer — 译文由独立的翻译模块产出", () => {
+  it("数字 PDF 文本区也有译文，且不碰识别模块", async () => {
+    const document = await openFixturePdf("1706.03762.pdf");
+    const recognition = createFakeModelClient();
+    const translation = createFakeModelClient({ completeText: "主流的序列转导模型……" });
+    const recognizer = createRecognizer({ document, recognition, translation });
+
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT));
+
+    // CONTEXT.md：摘录持有双语 markdown——逐字的原文、其译文。
+    // 焊在一起时补不了这条（补它就要为纯文本区调一次视觉模型）。
+    expect(content.route).toBe("text");
+    expect(content.translation).toBe("主流的序列转导模型……");
+    // 「零成本」收窄后仍然成立：text 路由从不调用识别模块。
+    expect(recognition.completeCalls).toHaveLength(0);
+    expect(translation.completeCalls).toHaveLength(1);
+  });
+
+  it("没配翻译模块就不产出译文——不去麻烦识别模块代劳", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf");
+
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT));
+
+    expect(content.translation).toBeUndefined();
+    expect(model.completeCalls).toHaveLength(0);
   });
 });

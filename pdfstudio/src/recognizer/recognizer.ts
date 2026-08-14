@@ -45,9 +45,13 @@ export interface ClipContent {
   screenshot: Screenshot;
 }
 
+/** 每个功能各配各的模型端点，见 ADR-0010。 */
 export interface RecognizerDeps {
   document: PDFDocumentProxy;
-  model: ModelClient;
+  /** 识别：OCR / 公式 → LaTeX / 图理解。text 路由从不调它。 */
+  recognition: ModelClient;
+  /** 翻译：独立配置，通常是一个高速文本 LLM。不配就不产出译文。 */
+  translation?: ModelClient;
   targetLang?: string;
 }
 
@@ -254,6 +258,34 @@ const visionPrompt = (targetLang: string) =>
     `- mixed（图文混排区）：sourceText 放原文逐字，translation 放原文译成 ${targetLang} 的结果，multimodal 放一句话描述。`,
   ].join("\n");
 
+/**
+ * 翻译是独立配置的一个功能（ADR-0010），通常接一个高速文本 LLM。
+ * 没配就不产出译文——不去麻烦识别模块代劳，那是另一种活。
+ */
+async function translate(
+  deps: RecognizerDeps,
+  sourceText: string | null,
+  targetLang: string,
+): Promise<string | undefined> {
+  if (!deps.translation || sourceText === null) return undefined;
+
+  try {
+    const { text } = await deps.translation.complete({
+      messages: [
+        {
+          role: "user",
+          content: `把下面的内容译成 ${targetLang}。只回译文本身，不要解释、不要加引号。\n\n${sourceText}`,
+        },
+      ],
+    });
+    return blankToNull(text) ?? undefined;
+  } catch (cause) {
+    // 译文没出来不该让整条摘录作废——原文还在，摘录仍然可用、可入库。
+    if (cause instanceof ModelError) return undefined;
+    throw cause;
+  }
+}
+
 export function createRecognizer(deps: RecognizerDeps): Recognizer {
   return {
     async recognize(region: Region, options?: RecognizeOptions): Promise<ClipContent> {
@@ -262,6 +294,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
       }
 
       const anchor: Anchor = { page: region.page, rect: region.rect };
+      const targetLang = options?.targetLang ?? deps.targetLang ?? DEFAULT_TARGET_LANG;
       const page = await deps.document.getPage(region.page);
       const { items } = await page.getTextContent();
       const inRegion = items.filter(
@@ -277,13 +310,11 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
       if (goesVision) {
         let response: ModelResponse;
         try {
-          response = await deps.model.complete({
+          response = await deps.recognition.complete({
             messages: [
               {
                 role: "user",
-                content: visionPrompt(
-                  options?.targetLang ?? deps.targetLang ?? DEFAULT_TARGET_LANG,
-                ),
+                content: visionPrompt(targetLang),
               },
             ],
             // Screenshot 结构上就是 ModelImage 的子集，逐字段手抄只会制造漂移。
@@ -323,12 +354,15 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         };
       }
 
+      // 这里也归一：强制 engine: 'text' 打在无字区域上会拼出空串，
+      // 而 '' 不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
+      const sourceText = blankToNull(joinVerbatim(inRegion));
+
       return {
         route: "text",
         anchor,
-        // 这里也归一：强制 engine: 'text' 打在无字区域上会拼出空串，
-        // 而 '' 不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
-        sourceText: blankToNull(joinVerbatim(inRegion)),
+        sourceText,
+        translation: await translate(deps, sourceText, targetLang),
         images: [],
         screenshot: region.pixels,
       };
