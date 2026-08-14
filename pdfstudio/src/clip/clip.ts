@@ -1,4 +1,7 @@
 import type { ClipContent, Region } from "../recognizer/recognizer";
+import type { Context } from "../knowledge/context";
+
+export type { Context };
 
 // canonical 接口见 pdfstudio/docs/clip-interface.md
 
@@ -17,18 +20,6 @@ export interface Clip {
   translation: string | null;
   note: string | null;
   label: Label;
-}
-
-export interface Context {
-  id: string;
-  /** 指回产出它的摘录。摘录被删后 id 仍留着，配合 sourceClipDeleted 说明来源去向。 */
-  sourceClipId: string;
-  source: string;
-  claim: string | null;
-  evidence: string;
-  stance: "support" | "refute" | "neutral" | null;
-  status: "pending" | "approved" | "rejected" | "disputed";
-  sourceClipDeleted: boolean;
 }
 
 export interface ClipsState {

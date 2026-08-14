@@ -9,7 +9,7 @@
 | `Recognizer`（识别） | 区域 → ClipContent。**两件事**：按文本覆盖度选路由（文本层 / 视觉模型），以及编排识别与翻译两个模块 | `recognize(region, options?) → ClipContent`（异步） | pdf.js（in-process）、ModelClient ×2（external 端口，识别与翻译各一个实例） | **深** |
 | `Clip`（摘录） | 状态机（框选→识别→待编辑→已入库）+ 合法性 + 入库 | 纯 reducer：`reduce(state, action)` / `can(state, action)` | 无 I/O（in-process） | **深**（原型已验证） |
 | `Chat`（问文档） | 单文档问答：全文检索 + 贴入摘录/图 → 答案 | `ask(turns) → Answer`（含 citations + grounding） | ModelClient（+ 内部缝：读序/分块/embedding/FTS5） | **深** |
-| `KnowledgeBase`（知识库） | context 聚合，入库 + 查询，供 blogstudio 消费 | `promote(clip, {claim,stance}) → context` / `list` / `get` | 持久化 | 中 |
+| ~~`KnowledgeBase`~~ | **不是 PDF Studio 的模块**——知识库是第三个系统，两个产品都不拥有它、都读写它（`docs/adr/0001-shared-knowledge-base.md`）。PDF Studio 这一侧只有一个出站端口 `ContextSink`（`src/knowledge/context.ts`），职责到「交出一条 context」为止 | `publish(context)` / `markSourceDeleted(id)` | true external | 端口（**无实现**） |
 | `ModelClient`（模型客户端） | 用户配的 OpenAI 兼容端点。**一个契约、多个实例**——识别 / 翻译 / chat 各注入各的（ADR-0010） | `complete(request) → response` / `streamComplete(request) → chunks` | true external | 浅（adapter） |
 | `ModelLibrary`（本地模型库） | 本地模型的下载、校验、存放与进程生命周期（ADR-0001 修订的「一键下载」） | 未定 | 文件系统 + 子进程 | 浅（**尚未实现**） |
 | `ClipStore`（摘录库） | 摘录持久化（锚定到 PDF） | `save` / `listByPdf` / `delete` | 持久化 | 浅（adapter） |
@@ -41,6 +41,12 @@
 1. **`Recognizer`** —— 接口最开放、隐藏复杂度最大（覆盖度路由、transform 坐标、抠图、markdown 组装、编排识别与翻译）。
 2. `Chat`（含内部检索缝）—— 分块缺口（双栏阅读顺序）落在这里；Retrieval 不独立开缝，见 `chat-retrieval-interface.md`。
 3. `Clip` —— reducer 已定型，主要是把它从原型提进来并补齐 4 个未定 case 的最终语义。
+
+## 边界：知识库不在这里
+
+`context (Context Item)` 是**跨边界的共享类型**，术语起源于 Blog Studio 的领域，PDF Studio 在入库时产出它。所以它定义在 `src/knowledge/context.ts` 而不是 `clip.ts`——`Clip` 是 PDF Studio 的内部概念，而 `Context` 是**交出去的东西**，改动它会波及另一个产品，目录结构上就该看得出来。
+
+`Clip` 的 reducer 产出 `Context` 之后由**应用层**交给 `ContextSink`，不是 reducer 自己调——reducer 保持纯、无 I/O。
 
 ## 落地进度（2026-08-14）
 
