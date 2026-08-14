@@ -1,5 +1,7 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
+import { cosineSimilarity } from "../model/embedder";
+import type { Embedder } from "../model/embedder";
 
 // Chat 的**内部缝**：`chat-retrieval-interface.md` 判定 Retrieval 不独立成模块，
 // 所以这个文件不从 `chat.ts` 再导出去。将来真出现第二个调用方时原样提级即可，
@@ -9,7 +11,21 @@ import type { TextItem } from "pdfjs-dist/types/src/display/api";
 export interface Chunk {
   page: number;
   text: string;
+  /** 配了 embedder 才有。没有就退回关键词打分。 */
+  vector?: Float32Array;
 }
+
+/**
+ * 向量检索的相似度下限。低于它就当没检索到，`grounding` 才能诚实地报 `none`。
+ *
+ * 关键词检索天然有这个下限（没有区分度的词一个都不匹配就返回空），向量检索没有
+ * ——任何两段文本都有一个余弦值。不设下限的话，`eval/retrieval/` 那 3 条
+ * 「文档答不了」的题会全部被硬凑出一段原文当出处，而那是不变量⑤ 明令禁止的。
+ *
+ * 0.5 是待标定的初值，用 `npm run eval:retrieval` 的 abstention 与中文 recall
+ * 一起定——两者是此消彼长的，只看一个会调歪。
+ */
+const MIN_SIMILARITY = 0.5;
 
 /** 一块目标大小。只在行边界上切，宁可略微超出也不切断一行。 */
 const CHUNK_CHARS = 600;
@@ -108,7 +124,10 @@ function packLines(lines: Line[], page: number): Chunk[] {
   return chunks;
 }
 
-export async function buildIndex(document: PDFDocumentProxy): Promise<Chunk[]> {
+export async function buildIndex(
+  document: PDFDocumentProxy,
+  embedder?: Embedder,
+): Promise<Chunk[]> {
   const chunks: Chunk[] = [];
 
   for (let page = 1; page <= document.numPages; page++) {
@@ -123,6 +142,11 @@ export async function buildIndex(document: PDFDocumentProxy): Promise<Chunk[]> {
     chunks.push(...packLines(lines, page));
   }
 
+  if (embedder) {
+    const vectors = await embedder.embedDocuments(chunks.map((chunk) => chunk.text));
+    chunks.forEach((chunk, index) => (chunk.vector = vectors[index]));
+  }
+
   return chunks;
 }
 
@@ -131,7 +155,26 @@ export async function buildIndex(document: PDFDocumentProxy): Promise<Chunk[]> {
  * （`eval/retrieval/` 实测中文 recall@3 为 0%、英文 100%），
  * 而那正是 ADR-0003 选多语言 embedding 的理由。等跨语言那条红灯来驱动再换。
  */
-export function searchChunks(chunks: Chunk[], query: string, limit = 1): Chunk[] {
+export async function searchChunks(
+  chunks: Chunk[],
+  query: string,
+  limit = 1,
+  embedder?: Embedder,
+): Promise<Chunk[]> {
+  if (embedder && chunks.every((chunk) => chunk.vector)) {
+    const queryVector = await embedder.embedQuery(query);
+    return chunks
+      .map((chunk) => ({ chunk, score: cosineSimilarity(queryVector, chunk.vector!) }))
+      .filter((scored) => scored.score >= MIN_SIMILARITY)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((scored) => scored.chunk);
+  }
+
+  return keywordSearch(chunks, query, limit);
+}
+
+function keywordSearch(chunks: Chunk[], query: string, limit: number): Chunk[] {
   const terms = [...new Set(query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])];
   const haystacks = chunks.map((chunk) => chunk.text.toLowerCase());
 

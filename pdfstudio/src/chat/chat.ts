@@ -1,5 +1,6 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { buildIndex, searchChunks } from "./retrieval";
+import type { Embedder } from "../model/embedder";
 import type { Chunk } from "./retrieval";
 import type { ModelClient, ModelMessage } from "../model/model-client";
 import type { Screenshot } from "../recognizer/recognizer";
@@ -50,6 +51,8 @@ export interface ChatDeps {
   document: PDFDocumentProxy;
   docId: string;
   model: ModelClient;
+  /** 检索用的向量端口（ADR-0010）。不配就退回关键词打分——中文问英文论文时那是 0 召回。 */
+  embedder?: Embedder;
 }
 
 /** rare，可省。`signal` 是停止按钮的入口（ADR-0008 的 LocalRuntime 要它）。 */
@@ -118,7 +121,7 @@ function queryOf(turns: Turn[]): string {
 export function createChat(deps: ChatDeps): Chat {
   // 懒加载 + 只建一次（不变量 ④）。索引绑在这个实例上，天然不可能串到别的文档。
   let index: Promise<Chunk[]> | null = null;
-  const ensureIndex = () => (index ??= buildIndex(deps.document));
+  const ensureIndex = () => (index ??= buildIndex(deps.document, deps.embedder));
 
   return {
     async reindex(): Promise<void> {
@@ -128,7 +131,7 @@ export function createChat(deps: ChatDeps): Chat {
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
-      const [hit] = searchChunks(await ensureIndex(), queryOf(turns));
+      const [hit] = await searchChunks(await ensureIndex(), queryOf(turns), 1, deps.embedder);
 
       const messages = turns.map(toMessage);
       if (hit) {

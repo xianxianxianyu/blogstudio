@@ -15,6 +15,7 @@ import path from "node:path";
 import { openFixturePdf } from "../../test/fixtures";
 import { buildIndex, searchChunks } from "../../src/chat/retrieval";
 import type { Chunk } from "../../src/chat/retrieval";
+import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
 
 const HERE = import.meta.dirname;
 
@@ -72,15 +73,30 @@ function rate(outcomes: Outcome[], k: number): string {
 }
 
 async function main(): Promise<void> {
+  // --embed：接本地 embedding（首次会下载权重）。不加就是关键词基线。
+  const useEmbedder = process.argv.slice(2).includes("--embed");
+  const embedder = useEmbedder ? createTransformersEmbedder() : undefined;
+
   const questions = await readQuestions();
   const indexes = new Map<string, Chunk[]>();
+
+  if (useEmbedder) console.log("检索：本地 embedding（首次运行要下载权重，请稍候）\n");
+  else console.log("检索：关键词基线\n");
 
   const outcomes: Outcome[] = [];
   for (const question of questions) {
     if (!indexes.has(question.paper)) {
-      indexes.set(question.paper, await buildIndex(await openFixturePdf(question.paper)));
+      indexes.set(
+        question.paper,
+        await buildIndex(await openFixturePdf(question.paper), embedder),
+      );
     }
-    const chunks = searchChunks(indexes.get(question.paper)!, question.question, Math.max(...KS));
+    const chunks = await searchChunks(
+      indexes.get(question.paper)!,
+      question.question,
+      Math.max(...KS),
+      embedder,
+    );
     outcomes.push({ question, pages: chunks.map((chunk) => chunk.page) });
   }
 

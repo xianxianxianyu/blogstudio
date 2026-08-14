@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.30",
+    "@huggingface/transformers": "^4.2.0",
     "ai": "^7.0.64",
     "drizzle-orm": "0.45.2",
     "pdfjs-dist": "^6.2.108",
