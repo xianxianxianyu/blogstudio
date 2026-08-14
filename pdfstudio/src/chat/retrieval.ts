@@ -45,11 +45,9 @@ const MIN_PEAK_MARGIN = 0.1;
  * 0.10 由 `npm run eval:retrieval -- --embed` 标定，是曲线上的支配点：
  *
  *   margin  zh@1   zh@3   en@3   abstention
- *   0.05   60.0%  85.0%  83.3%   0/3
- *   0.08   60.0%  80.0%  83.3%   1/3
- *   0.10   60.0%  80.0%  83.3%   2/3   ← 比 0.08 诚实、比 0.12 召回高一倍
- *   0.12   40.0%  60.0%  66.7%   2/3
- *   0.15   10.0%  15.0%  66.7%   3/3
+ *   0.10   60.0%  80.0% 100.0%   2/3   ← 当前取值
+ *   0.12   40.0%  60.0%  83.3%   2/3
+ *   0.15   10.0%  15.0%  83.3%   3/3
  *
  * 换判据把代价降了一个量级：同样拿到 2/3 的 abstention，绝对阈值要把 zh@3 砍到
  * 40%，尖峰判据只掉到 80%。
@@ -225,6 +223,32 @@ export async function scoreChunks(
     .sort((a, b) => b.score - a.score);
 }
 
+/**
+ * 倒数排名融合（RRF）：只看名次，不看分数。
+ *
+ * 关键词打的是词元命中数（整数、上不封顶），向量打的是余弦（[-1,1]）——两个量纲
+ * 根本不可比，加权求和先得各自归一化，而归一化参数又是语料相关的。RRF 绕开这一整
+ * 类问题：`1/(K + 名次)` 与分数量纲无关，跟尖峰判据用相对量而非绝对量是同一个道理。
+ *
+ * K = 60 是原论文的取值，作用是压低头部名次之间的差距，让两路都排得靠前的块胜出。
+ */
+const RRF_K = 60;
+
+function fuse(ranked: Chunk[][], limit: number): Chunk[] {
+  const scores = new Map<Chunk, number>();
+
+  for (const list of ranked) {
+    list.forEach((chunk, rank) => {
+      scores.set(chunk, (scores.get(chunk) ?? 0) + 1 / (RRF_K + rank));
+    });
+  }
+
+  return [...scores.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([chunk]) => chunk);
+}
+
 export async function searchChunks(
   chunks: Chunk[],
   query: string,
@@ -232,14 +256,22 @@ export async function searchChunks(
   embedder?: Embedder,
   minPeakMargin = MIN_PEAK_MARGIN,
 ): Promise<Chunk[]> {
-  if (embedder && chunks.every((chunk) => chunk.vector)) {
-    const scored = await scoreChunks(chunks, query, embedder);
-    // 没有尖峰就是没检索到——宁可报 grounding: 'none'，也不编造一段出处。
-    if (peakMargin(scored) < minPeakMargin) return [];
-    return scored.slice(0, limit).map((entry) => entry.chunk);
+  if (!embedder || !chunks.every((chunk) => chunk.vector)) {
+    return keywordSearch(chunks, query, limit);
   }
 
-  return keywordSearch(chunks, query, limit);
+  const scored = await scoreChunks(chunks, query, embedder);
+  // 没有尖峰就是没检索到——宁可报 grounding: 'none'，也不编造一段出处。
+  // 判据只看向量那一路：中文问句抽不出词元，关键词那一路对它恒为空，
+  // 拿它当否决条件会把中文全毙掉。
+  if (peakMargin(scored) < minPeakMargin) return [];
+
+  // 排序两路都用：关键词在英文和「中文夹英文术语」上很强（它在英文题上曾是满分），
+  // 向量负责跨语言。RRF 让两路都排得靠前的块胜出。
+  return fuse(
+    [scored.map((entry) => entry.chunk), keywordSearch(chunks, query, limit * 3)],
+    limit,
+  );
 }
 
 function keywordSearch(chunks: Chunk[], query: string, limit: number): Chunk[] {

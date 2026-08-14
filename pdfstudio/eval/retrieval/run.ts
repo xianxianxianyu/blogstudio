@@ -99,10 +99,12 @@ async function main(): Promise<void> {
 
     if (embedder) {
       // 一次打分、多个阈值：扫描时不重跑 embedding。
+      // 主结果走 searchChunks（含 RRF 融合），曲线那段另用 margin 扫。
+      const chunks = await searchChunks(index, question.question, Math.max(...KS), embedder);
       const scored = await scoreChunks(index, question.question, embedder);
       outcomes.push({
         question,
-        pages: scored.slice(0, Math.max(...KS)).map((s) => s.chunk.page),
+        pages: chunks.map((chunk) => chunk.page),
         scores: scored.slice(0, Math.max(...KS)).map((s) => s.score),
         margin: peakMargin(scored),
       });
@@ -168,6 +170,13 @@ async function main(): Promise<void> {
       console.log(
         `  ${label} 最低 ${margins[0].toFixed(3)}  中位 ${margins[Math.floor(margins.length / 2)].toFixed(3)}  最高 ${margins.at(-1)!.toFixed(3)}`,
       );
+    }
+  }
+
+  if (useEmbedder && na.length > 0) {
+    console.log("\n答不了的题逐条（看漏网的那条是中文还是英文——决定 hybrid 能否帮上忙）：");
+    for (const outcome of na) {
+      console.log(`  ${outcome.question.id} [${outcome.question.lang}]  margin ${outcome.margin.toFixed(3)}`);
     }
   }
 
