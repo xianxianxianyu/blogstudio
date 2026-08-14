@@ -14,7 +14,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts",
-    "eval:retrieval": "tsx pdfstudio/eval/retrieval/run.ts"
+    "eval:retrieval": "tsx pdfstudio/eval/retrieval/run.ts",
+    "dev:pdfstudio": "vite --config pdfstudio/vite.app.config.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.30",
