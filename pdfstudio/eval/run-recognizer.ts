@@ -20,7 +20,8 @@ import { createRecognizer } from "../src/recognizer/recognizer";
 import type { Screenshot, VisionKind } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { createFixedPromptRecognitionClient } from "../src/model/fixed-prompt-recognition";
-import { loadConfig, resolveEndpoint } from "../src/config/config";
+import { resolveEndpoint } from "../src/config/config";
+import { loadConfig } from "../src/config/config-file";
 import { openFixturePdf } from "../test/fixtures";
 
 const HERE = import.meta.dirname;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { loadConfig, parseConfig, resolveEndpoint, saveConfig } from "./config";
+import { parseConfig, resolveEndpoint } from "./config";
+import { loadConfig, saveConfig } from "./config-file";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";

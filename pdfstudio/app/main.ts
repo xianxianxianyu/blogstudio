@@ -51,29 +51,53 @@ document.querySelector("#reload")!.addEventListener("click", async () => {
 
 let start: { x: number; y: number } | null = null;
 
-canvas.addEventListener("pointerdown", (event) => {
+/**
+ * 指针坐标（CSS 像素）→ canvas 内部像素。
+ *
+ * 两者只有在「canvas 没被 CSS 缩放」时才相等。加一条 `max-width`、或者在高 DPI 屏上
+ * 换一种画法，比例就变了——而框选与裁剪一个用 CSS 像素、一个用内部像素的话，
+ * 框住的和裁出来的就不是同一块。这里一次性换算掉，后面全用内部像素。
+ */
+function atCanvas(event: PointerEvent): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
-  start = { x: event.clientX - rect.left, y: event.clientY - rect.top };
-  Object.assign(box.style, { display: "block", left: `${start.x}px`, top: `${start.y}px`, width: "0px", height: "0px" });
+  return {
+    x: ((event.clientX - rect.left) * canvas.width) / rect.width,
+    y: ((event.clientY - rect.top) * canvas.height) / rect.height,
+  };
+}
+
+/** 内部像素 → CSS 像素，只用于把选框画在正确的位置上。 */
+function toCss(value: number, axis: "x" | "y"): number {
+  const rect = canvas.getBoundingClientRect();
+  return axis === "x" ? (value * rect.width) / canvas.width : (value * rect.height) / canvas.height;
+}
+
+canvas.addEventListener("pointerdown", (event) => {
+  start = atCanvas(event);
+  Object.assign(box.style, {
+    display: "block",
+    left: `${toCss(start.x, "x")}px`,
+    top: `${toCss(start.y, "y")}px`,
+    width: "0px",
+    height: "0px",
+  });
 });
 
 canvas.addEventListener("pointermove", (event) => {
   if (!start) return;
-  const rect = canvas.getBoundingClientRect();
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
+  const { x, y } = atCanvas(event);
   Object.assign(box.style, {
-    left: `${Math.min(start.x, x)}px`,
-    top: `${Math.min(start.y, y)}px`,
-    width: `${Math.abs(x - start.x)}px`,
-    height: `${Math.abs(y - start.y)}px`,
+    left: `${toCss(Math.min(start.x, x), "x")}px`,
+    top: `${toCss(Math.min(start.y, y), "y")}px`,
+    width: `${toCss(Math.abs(x - start.x), "x")}px`,
+    height: `${toCss(Math.abs(y - start.y), "y")}px`,
   });
 });
 
 canvas.addEventListener("pointerup", async (event) => {
   if (!start) return;
-  const rect = canvas.getBoundingClientRect();
-  const drag = { x0: start.x, y0: start.y, x1: event.clientX - rect.left, y1: event.clientY - rect.top };
+  const end = atCanvas(event);
+  const drag = { x0: start.x, y0: start.y, x1: end.x, y1: end.y };
   start = null;
 
   const pageRect = toPageRect(viewport, drag);
