@@ -12,7 +12,7 @@
 | ~~`KnowledgeBase`~~ | **不是 PDF Studio 的模块**——知识库是第三个系统，两个产品都不拥有它、都读写它（`docs/adr/0001-shared-knowledge-base.md`）。PDF Studio 这一侧只有一个出站端口 `ContextSink`（`src/knowledge/context.ts`），职责到「交出一条 context」为止 | `publish(context)` / `markSourceDeleted(id)` | true external | 端口（**无实现**） |
 | `ModelClient`（模型客户端） | 用户配的 OpenAI 兼容端点。**一个契约、多个实例**——识别 / 翻译 / chat 各注入各的（ADR-0010） | `complete(request) → response` / `streamComplete(request) → chunks` | true external | 浅（adapter） |
 | `ModelLibrary`（本地模型库） | 本地模型的下载、校验、存放与进程生命周期（ADR-0001 修订的「一键下载」） | 未定 | 文件系统 + 子进程 | 浅（**尚未实现**） |
-| `ClipStore`（摘录库） | 摘录持久化（锚定到 PDF） | `save` / `listByPdf` / `delete` | 持久化 | 浅（adapter） |
+| `ClipStore`（摘录库） | 摘录持久化：**一条摘录一个文件夹**，`index.md` 双语 markdown + `.asset/` 图片（ADR-0011）。文件是唯一真相，数据库只当可重建的索引 | `save` / `listByDoc` / `delete` | 文件系统 | 浅（adapter） |
 | `Bookshelf`（书架） | PDF 列表：上传/浏览/打开 | CRUD | 持久化 | 浅 |
 | `Config`（配置） | 读/写 config JSON。**按功能分组**（识别/翻译/chat/embedding/补 claim 各一组 url+key+model），需要「跟随默认」以免读者填五遍 | `load()` / `save()` | 本地文件 | 浅（adapter） |
 
