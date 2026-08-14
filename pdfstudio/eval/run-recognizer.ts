@@ -8,6 +8,8 @@
  *
  *   npm run eval:recognizer              # 跑全部 19 张样本
  *   npm run eval:recognizer -- f05 g01   # 只跑指定的几张
+ *   npm run eval:recognizer -- --local   # 端点是只认固定 prompt 的专用识别模型
+ *                                        #（PaddleOCR-VL 之类，见 ADR-0001 修订的准入门槛）
  *
  * 配置：把 pdfstudio/config.example.json 抄成 pdfstudio/config.json 填上 key。
  * 该文件已 gitignore（ADR-0005：真实 key 绝不进源码或构建产物）。
@@ -17,6 +19,7 @@ import path from "node:path";
 import { createRecognizer } from "../src/recognizer/recognizer";
 import type { Screenshot, VisionKind } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
+import { createFixedPromptRecognitionClient } from "../src/model/fixed-prompt-recognition";
 import { openFixturePdf } from "../test/fixtures";
 
 const HERE = import.meta.dirname;
@@ -91,7 +94,9 @@ async function loadConfig(): Promise<Config | null> {
 }
 
 async function main(): Promise<void> {
-  const wanted = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const local = argv.includes("--local");
+  const wanted = argv.filter((arg) => !arg.startsWith("--"));
   const samples = (await readManifest()).filter(
     (sample) => wanted.length === 0 || wanted.includes(sample.id),
   );
@@ -123,7 +128,9 @@ async function main(): Promise<void> {
   // （canonical 接口本来就没这个字段）。但 eval 要判的恰恰是它分得准不准，
   // 所以在缝上录下原始回答。
   const raw: string[] = [];
-  const inner = createModelClient(config);
+  const endpoint = createModelClient(config);
+  // --local：端点只认六个固定 prompt，看不懂我们的 JSON 契约，套一层翻译。
+  const inner = local ? createFixedPromptRecognitionClient(endpoint) : endpoint;
   const model: typeof inner = {
     async complete(request) {
       const response = await inner.complete(request);
@@ -133,7 +140,13 @@ async function main(): Promise<void> {
     streamComplete: inner.streamComplete.bind(inner),
   };
 
-  console.log(`模型 ${config.model} @ ${config.baseURL}，共 ${samples.length} 张\n`);
+  console.log(`模型 ${config.model} @ ${config.baseURL}，共 ${samples.length} 张`);
+  if (local) {
+    console.log("固定 prompt 模式：统一用 `OCR:`，kind 由「有没有认出字」合成。");
+    console.log("**公式那 6 张拿不到 LaTeX**——这是本地档相对云端的已知实质损失，正是要量的东西。\n");
+  } else {
+    console.log("");
+  }
 
   // kind 是确定性可判的，自动算合规率；内容正确性（LaTeX 对不对、描述准不准）
   // 仍然人眼看——manifest 明写本 eval 不做自动打分。
