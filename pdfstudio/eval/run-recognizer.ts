@@ -20,6 +20,7 @@ import { createRecognizer } from "../src/recognizer/recognizer";
 import type { Screenshot, VisionKind } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { createFixedPromptRecognitionClient } from "../src/model/fixed-prompt-recognition";
+import { loadConfig, resolveEndpoint } from "../src/config/config";
 import { openFixturePdf } from "../test/fixtures";
 
 const HERE = import.meta.dirname;
@@ -79,20 +80,6 @@ async function loadScreenshot(id: string): Promise<Screenshot> {
   return { mime: "image/png", bytes, width: 0, height: 0 };
 }
 
-interface Config {
-  baseURL: string;
-  apiKey: string;
-  model: string;
-}
-
-async function loadConfig(): Promise<Config | null> {
-  try {
-    return JSON.parse(await readFile(path.join(ROOT, "config.json"), "utf8")) as Config;
-  } catch {
-    return null;
-  }
-}
-
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const local = argv.includes("--local");
@@ -107,18 +94,19 @@ async function main(): Promise<void> {
     return;
   }
 
-  const config = await loadConfig();
+  // 走 Config 模块而不是自己读文件——识别这个功能配了自己的端点就用它，
+  // 没配就落到默认组（ADR-0010）。既有的扁平 config.json 照样认。
+  const config = resolveEndpoint(await loadConfig(path.join(ROOT, "config.json")), "recognition");
 
   // 没配置也先把认出来的样本列出来，好确认 manifest 解析没歪。
-  if (!config?.apiKey) {
+  if (!config.apiKey) {
     console.log(`manifest 认出 ${samples.length} 张样本：`);
     for (const sample of samples) {
       console.log(`  ${sample.id}  ${sample.type.padEnd(9)} ${sample.paper} p.${sample.page}`);
     }
     console.error(
-      config === null
-        ? "\n还没有 pdfstudio/config.json。把 config.example.json 抄一份过去、填上 apiKey 再跑。"
-        : "\npdfstudio/config.json 里的 apiKey 是空的——先填上再跑。",
+      "\npdfstudio/config.json 的 apiKey 是空的（或文件还不存在）。" +
+        "把 config.example.json 抄一份过去、填上 apiKey 再跑。",
     );
     process.exitCode = 1;
     return;

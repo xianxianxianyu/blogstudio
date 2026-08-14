@@ -1,5 +1,15 @@
 {
-  "baseURL": "https://api.openai.com/v1",
-  "apiKey": "",
-  "model": "gpt-5"
+  "default": {
+    "baseURL": "https://api.openai.com/v1",
+    "apiKey": "",
+    "model": "gpt-5.6-sol"
+  },
+  "capabilities": {
+    "translation": { "model": "换一个更快的模型；url 和 key 跟随 default" },
+    "recognition": {
+      "baseURL": "http://127.0.0.1:8080/v1",
+      "apiKey": "",
+      "model": "本地 llama-server 跑的识别模型，整组换掉"
+    }
+  }
 }

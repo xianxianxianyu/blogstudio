@@ -14,7 +14,7 @@
 | `ModelLibrary`（本地模型库） | 本地模型的下载、校验、存放与进程生命周期（ADR-0001 修订的「一键下载」） | 未定 | 文件系统 + 子进程 | 浅（**尚未实现**） |
 | `ClipStore`（摘录库） | 摘录持久化：**一条摘录一个文件夹**，`index.md` 双语 markdown + `.asset/` 图片（ADR-0011）。文件是唯一真相，数据库只当可重建的索引 | `save` / `listByDoc` / `delete` | 文件系统 | 浅（adapter） |
 | `Bookshelf`（书架） | PDF 列表：上传/浏览/打开 | CRUD | 持久化 | 浅 |
-| `Config`（配置） | 读/写 config JSON。**按功能分组**（识别/翻译/chat/embedding/补 claim 各一组 url+key+model），需要「跟随默认」以免读者填五遍 | `load()` / `save()` | 本地文件 | 浅（adapter） |
+| `Config`（配置） | 读/写 config JSON。**按功能分组**（识别/翻译/chat/embedding/补 claim），**回退按字段而非按组**——「同一端点换个模型」不用抄 url 和 key；扁平写法仍然有效 = 全部功能都用它 | `loadConfig` / `saveConfig` / `resolveEndpoint` | 本地文件 | 浅（adapter） |
 
 ## 核心循环（数据流）
 
