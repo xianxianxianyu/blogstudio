@@ -10,11 +10,19 @@ export interface FakeModelClient extends ModelClient {
 
 export interface FakeModelOptions {
   completeText?: string;
-  completeError?: Error;
+  /**
+   * 只收 `ModelError`：生产 adapter 经 `toModelError` 之后不可能抛出别的形状，
+   * fake 若允许任意 Error，就成了一个能产出真端点产不出的东西的替身。
+   */
+  completeError?: ModelError;
   /** streamComplete 的切分方式；省略则整段一次给出。 */
   deltas?: string[];
   /** 每吐出一个增量后回调，给测试一个确定的时机去 abort。 */
   onDelta?: (index: number) => void;
+  /** 吐完 deltas 后不结束流，等 abort 来掐——契约里 abort 那条要用。 */
+  hang?: boolean;
+  /** 远端回的东西根本解析不了。 */
+  malformed?: boolean;
 }
 
 export function createFakeModelClient(options: FakeModelOptions = {}): FakeModelClient {
@@ -38,6 +46,9 @@ export function createFakeModelClient(options: FakeModelOptions = {}): FakeModel
     async *streamComplete(request: ModelRequest): AsyncIterable<ModelChunk> {
       streamCalls.push(request);
       if (options.completeError) throw options.completeError;
+      if (options.malformed) {
+        throw new ModelError("malformed-stream", "模型返回的流无法解析");
+      }
       if (request.signal?.aborted) return;
 
       for (const [index, textDelta] of (options.deltas ?? [text]).entries()) {
@@ -46,6 +57,11 @@ export function createFakeModelClient(options: FakeModelOptions = {}): FakeModel
         options.onDelta?.(index);
         // 取消时优雅结束、不抛（ADR-0009）。
         if (request.signal?.aborted) return;
+      }
+
+      // 远端流不结束的情形：一直等到 abort。
+      while (options.hang && !request.signal?.aborted) {
+        await new Promise((resolve) => setTimeout(resolve, 1));
       }
     },
   };

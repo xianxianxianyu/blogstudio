@@ -212,7 +212,7 @@ describe("Recognizer — 模型输出坏掉时", () => {
 
 describe("Recognizer — 模型调不通时", () => {
   it("抛 RecognizeError{kind:'model-unavailable'}，并保留原始错误", async () => {
-    const networkFailure = new Error("fetch failed");
+    const networkFailure = new ModelError("http", "fetch failed");
     const { recognizer } = await setup("2006.11239.pdf", { completeError: networkFailure });
 
     const error = await catchRecognizeError(recognizer, regionAt(1, FIGURE_RECT));

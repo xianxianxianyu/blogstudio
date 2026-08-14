@@ -45,12 +45,19 @@ interface ModelClient {
   complete(request: ModelRequest): Promise<ModelResponse>;
   streamComplete(request: ModelRequest): AsyncIterable<ModelChunk>;
 }
+
+// 失败也是契约的一部分：adapter 必须把底层错误映射成它。
+class ModelError extends Error {
+  kind: 'http' | 'empty-response' | 'malformed-stream';
+  status?: number;   // 仅 kind === 'http'
+}
 ```
 
 - `Recognizer` / OCR 使用 `complete`，因为视觉模型输出需要完整 JSON/Markdown 后才能校验和组装 `ClipContent`。
 - `Chat` 使用 `streamComplete`，由 Chat 或其 UI adapter 累积 `ModelChunk.textDelta`；结束时再生成最终 `Answer`、`citations` 和 `grounding`。
 - `AbortSignal` 是调用级取消机制。调用方显式取消时，adapter 应停止读取远端流；没有隐式后台调用。取消时流**优雅结束、不抛**——读者按下停止不是异常，已收到的部分答案照样留着；调用方要区分就看 `signal.aborted`。网络中途断掉仍然会抛，两种情况依旧分得开。
 - 两个方法共享同一套 `ModelRequest`，但 response 形态不同：一次性返回完整结果，流式返回增量 chunk。
+- **失败一律映射成 `ModelError`**。漏一个 SDK 的错误类出去就是 ADR-0007 禁止的类型泄漏，调用方也就被绑到了某个 SDK。`Recognizer` 依赖这三个 kind 做错误分档（端点通了但没给出能用的东西 → `bad-output`；调不通 → `model-unavailable`）。
 
 ## 边界
 
@@ -64,7 +71,7 @@ interface ModelClient {
 
 Recognizer 可以保持简单的 promise + 完整结果模型，Chat 可以连接 assistant-ui `LocalRuntime` 并支持 stop。模型配置、HTTP adapter 和 mock adapter 只有一套。
 
-代价是测试需要覆盖两条路径：完整调用的错误映射，以及流式调用的增量、abort、空流和中途失败。未来若要显示 tool call 或 reasoning，需要先扩展 `ModelChunk` 的领域契约和 UI 状态，而不是绕过 `ModelClient`。
+代价是测试需要覆盖两条路径：完整调用的错误映射，以及流式调用的增量、abort、空流和中途失败。**这几条必须放进两个 adapter 共跑的契约测试**（`test/model-client-contract.ts`），只在生产 adapter 单侧断言的话 fake 的对应分支无人守护，而 fake 一旦比真端点宽容，用它写的测试就会说谎。未来若要显示 tool call 或 reasoning，需要先扩展 `ModelChunk` 的领域契约和 UI 状态，而不是绕过 `ModelClient`。
 
 ## 参考
 

@@ -27,6 +27,18 @@ function scriptedFetch(script: ModelScript): typeof fetch {
       );
     }
 
+    if (script.malformed) {
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode("data: {不是 JSON\n\n"));
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { "content-type": "text/event-stream" } },
+      );
+    }
+
     const events = (script.deltas ?? [script.text]).map(
       (content) =>
         `data: ${JSON.stringify({
@@ -42,6 +54,15 @@ function scriptedFetch(script: ModelScript): typeof fetch {
       new ReadableStream<Uint8Array>({
         start(controller) {
           for (const event of events) controller.enqueue(encoder.encode(event));
+          // hang：不发 [DONE] 也不关流，等 abort 掐断底层连接。真 fetch 就是这么做的，
+          // fake fetch 不照做的话，abort 那条断言测的是流自己结束了，白给。
+          if (script.hang) {
+            const request = new Request(input, init);
+            request.signal.addEventListener("abort", () =>
+              controller.error(new DOMException("Aborted", "AbortError")),
+            );
+            return;
+          }
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         },
@@ -56,5 +77,10 @@ describeModelClientContract("生产 adapter（OpenAI 兼容）", (script) =>
 );
 
 describeModelClientContract("测试 fake", (script) =>
-  createFakeModelClient({ completeText: script.text, deltas: script.deltas }),
+  createFakeModelClient({
+    completeText: script.text,
+    deltas: script.deltas,
+    hang: script.hang,
+    malformed: script.malformed,
+  }),
 );
