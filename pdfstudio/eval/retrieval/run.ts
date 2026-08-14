@@ -64,6 +64,8 @@ interface Outcome {
   scores: number[];
   /** top-1 高出背景分布多少。命中判据用它，不用绝对余弦——见 retrieval.ts。 */
   margin: number;
+  /** **未经门槛过滤**的排序结果。扫描曲线必须用它——用 pages 会在已经切过的数据上再切一次。 */
+  rankedPages: number[];
 }
 
 function hitAt(outcome: Outcome, k: number): boolean {
@@ -107,10 +109,17 @@ async function main(): Promise<void> {
         pages: chunks.map((chunk) => chunk.page),
         scores: scored.slice(0, Math.max(...KS)).map((s) => s.score),
         margin: peakMargin(scored),
+        rankedPages: scored.slice(0, Math.max(...KS)).map((s) => s.chunk.page),
       });
     } else {
       const chunks = await searchChunks(index, question.question, Math.max(...KS));
-      outcomes.push({ question, pages: chunks.map((chunk) => chunk.page), scores: [], margin: 0 });
+      outcomes.push({
+        question,
+        pages: chunks.map((chunk) => chunk.page),
+        scores: [],
+        margin: 0,
+        rankedPages: chunks.map((chunk) => chunk.page),
+      });
     }
   }
 
@@ -119,6 +128,11 @@ async function main(): Promise<void> {
   const zh = answerable.filter((outcome) => outcome.question.lang === "zh");
   const en = answerable.filter((outcome) => outcome.question.lang === "en");
   const na = outcomes.filter((outcome) => outcome.question.page === null);
+  // 两类考的不是一回事：「主题不在」的题检索本就不该找到东西；「主题在、事实不在」的
+  // 题（na-03：满页 FID 表格但全文无 ImageNet）检索找到相关段落是**对的**——
+  // 判断「这段里没有你问的事实」是推理不是检索。见 README 与 chat-retrieval-interface.md。
+  const OFF_TOPIC = ["na-01", "na-02"];
+  const offTopic = na.filter((outcome) => OFF_TOPIC.includes(outcome.question.id));
 
   console.log(`语料 ${indexes.size} 篇，问题 ${questions.length} 条（zh ${zh.length} / en ${en.length} / 答不了 ${na.length}）\n`);
 
@@ -134,9 +148,10 @@ async function main(): Promise<void> {
     console.log(`Δ@${k}（跨语言净损失）  ${((enHits - zhHits) * 100).toFixed(1)} 个百分点`);
   }
 
-  const abstained = na.filter((outcome) => outcome.pages.length === 0).length;
-  console.log(`\n答不了的问题正确返回空：${abstained}/${na.length}`);
+  const abstained = offTopic.filter((outcome) => outcome.pages.length === 0).length;
+  console.log(`\n主题不在文档里的问题正确返回空：${abstained}/${offTopic.length}`);
   console.log("⚠ 这一项必须与中文 recall 并排看——永远返回空就是满分。");
+  console.log("（na-03 不计入：它的主题在文档里，检索找到相关段落是对的，见 README）");
 
   const zhEmpty = zh.filter((outcome) => outcome.pages.length === 0).length;
   if (zhEmpty === zh.length && na.length > 0) {
@@ -149,19 +164,23 @@ async function main(): Promise<void> {
     console.log("  margin  zh@1   zh@3   en@3   abstention");
     for (const threshold of [0.02, 0.05, 0.08, 0.1, 0.12, 0.15, 0.2, 0.3]) {
       // 没有尖峰就整条判为未命中——与 searchChunks 里的判据一致。
+      // 用未过滤的 rankedPages——拿 pages 会在 searchChunks 已经切过的数据上再切一次，
+      // 曲线会变成一条平线，看着像「阈值无关紧要」。
       const gate = (outcome: Outcome, k: number) =>
-        outcome.margin >= threshold ? outcome.pages.slice(0, k) : [];
+        outcome.margin >= threshold ? outcome.rankedPages.slice(0, k) : [];
       const hits = (set: Outcome[], k: number) =>
         set.filter((o) => o.question.page !== null && gate(o, k).includes(o.question.page)).length;
-      const abst = na.filter((o) => gate(o, Math.max(...KS)).length === 0).length;
+      const abst = offTopic.filter((o) => gate(o, Math.max(...KS)).length === 0).length;
       console.log(
         `  ${threshold.toFixed(2)}  ${((hits(zh, 1) / zh.length) * 100).toFixed(1).padStart(5)}% ` +
           `${((hits(zh, 3) / zh.length) * 100).toFixed(1).padStart(5)}% ` +
-          `${((hits(en, 3) / en.length) * 100).toFixed(1).padStart(5)}%   ${abst}/${na.length}`,
+          `${((hits(en, 3) / en.length) * 100).toFixed(1).padStart(5)}%   ${abst}/${offTopic.length}`,
       );
     }
-    console.log("  → 选让 zh@3 尽量高、同时 abstention 保持 3/3 的那一档，填进");
+    console.log("  → 选让 zh@3 尽量高、同时 abstention 拿满的那一档，填进");
     console.log("     src/chat/retrieval.ts 的 MIN_PEAK_MARGIN。");
+    console.log("  注：曲线里的排序是**纯向量**（margin 由向量分数算出），所以 en@3 比上方");
+    console.log("      主结果低——主结果走 RRF 融合，关键词那一路把英文补回了 100%。");
     console.log("\n各题的 margin（看答得了/答不了两组分不分得开）：");
     for (const set of [zh, en, na]) {
       const label = set === na ? "答不了" : set === zh ? "中文  " : "英文  ";
