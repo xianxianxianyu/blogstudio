@@ -38,7 +38,9 @@ function endpoint() {
   const resolved = resolveEndpoint(appConfig, "recognition");
   // 走 dev server 转发而不是直连：那个端点的 OPTIONS 预检返回 403，浏览器过不去。
   // 打包应用里没有这一层（ADR-0006），所以这行是开发页面专属的。
-  return { ...resolved, baseURL: "/__model" };
+  //
+  // **必须是绝对 URL**：SDK 会拿 baseURL 去构造 URL 对象，相对路径直接抛。
+  return { ...resolved, baseURL: `${location.origin}/__model` };
 }
 
 const document_ = await pdfjs.getDocument({ url: "/papers/1706.03762.pdf" }).promise;
@@ -139,7 +141,14 @@ canvas.addEventListener("pointerup", async (event) => {
       2,
     );
   } catch (error) {
-    pre.textContent = `${(error as { kind?: string }).kind ?? "error"}：${(error as Error).message}`;
+    // 把 cause 链整条打出来。只报最外层的 kind 会把真正的原因吞掉——
+    // 「model-unavailable：模型调用失败」这种话对排查毫无帮助。
+    const chain: string[] = [];
+    for (let e: unknown = error; e instanceof Error; e = (e as { cause?: unknown }).cause) {
+      chain.push(`${(e as { kind?: string }).kind ?? e.name}: ${e.message}`);
+    }
+    pre.textContent = chain.join("\n  ↳ ");
+    console.error(error);
   }
 });
 
