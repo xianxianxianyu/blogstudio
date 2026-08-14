@@ -78,54 +78,76 @@ const ALLOWED: Verdict = { ok: true, reason: "" };
 
 const denied = (reason: string): Verdict => ({ ok: false, reason });
 
-/** `reduce` 的前置判定，也供 UI 置灰按钮。 */
-export function can(state: ClipsState, action: Action): Verdict {
-  // 逐个写而非用数组 includes：只有这种形式能让 TS 收窄 action 的联合类型。
-  if (
-    action.type !== "promote" &&
-    action.type !== "fix-source" &&
-    action.type !== "recapture" &&
-    action.type !== "edit-translation"
-  ) {
+/** 针对某条已存在摘录的守卫。存在性检查由 `can` 统一做，守卫拿到的 clip 一定在。 */
+type Guard<T extends Action["type"]> = (
+  clip: Clip,
+  action: Extract<Action, { type: T }>,
+) => Verdict;
+
+/**
+ * 每个动作都要**显式**声明守卫。
+ *
+ * 这张表是 `Record<...>` 而非可选映射，所以往 `Action` 里加一个动作却忘了写守卫，
+ * TS 会报错。之前的写法是「先列出受管动作、其余一律放行」——**默认放行**，
+ * 于是 `recognized` 可以把已入库的摘录打回 `ready` 并覆写原文，绕过了
+ * 「入库即冻结」。漏一个就默认开门，这类洞会一直长出来。
+ */
+const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
+  recognize: (clip) =>
+    clip.state === "capturing" ? ALLOWED : denied("只有刚框选的摘录需要识别。"),
+
+  recognized: (clip) =>
+    clip.state === "recognizing" ? ALLOWED : denied("这条摘录不在识别中，识别结果无处可落。"),
+
+  "fix-source": (clip, action) => {
+    if (clip.state === "promoted") return denied("已入库，原文是 context 的 evidence，不能再改。");
+    if (clip.state !== "ready") return denied("还没识别完成，原文还没出来。");
+    if (clip.sourceText === null) return denied("纯图摘录没有原文，谈不上修错字。");
+
+    const distance = editDistance(clip.sourceText, action.text);
+    if (distance === 0) return denied("没有改动。");
+    if (distance > MAX_TYPO_DISTANCE) {
+      return denied("这不是修 OCR 错字，是在改写原文——原文只准修错字，不得改写措辞。");
+    }
     return ALLOWED;
-  }
+  },
 
-  const clip = state.clips.find((candidate) => candidate.id === action.id);
-  if (!clip) return denied("没有这条摘录。");
-
-  if (action.type === "edit-translation") {
-    // 自由编辑，入库后也不冻结——冻结的只有原文。
-    return clip.state === "capturing" || clip.state === "recognizing"
+  // 自由编辑，入库后也不冻结——冻结的只有原文。
+  "edit-translation": (clip) =>
+    clip.state === "capturing" || clip.state === "recognizing"
       ? denied("还没识别完成，译文还没出来。")
-      : ALLOWED;
-  }
+      : ALLOWED,
 
-  if (action.type === "recapture") {
-    return clip.state === "promoted"
-      ? denied("已入库的摘录原文已冻结为 evidence，不能重拍覆盖。")
-      : ALLOWED;
-  }
+  "add-note": (clip) =>
+    clip.state === "capturing" ? denied("还没识别完成，先识别再加笔记。") : ALLOWED,
 
-  if (action.type === "promote") {
+  "toggle-label": () => ALLOWED,
+
+  promote: (clip) => {
     if (clip.state === "promoted") return denied("已入库，无需重复。");
     if (clip.state !== "ready") return denied("还没识别完成，不能入库。");
     // sourceText === null ⟺ 纯图 ⟺ 入库 blocked。不看 route，也不设 kind。
     if (clip.sourceText === null) return denied("纯图摘录没有原文，无法作为 evidence 入库。");
     return ALLOWED;
-  }
+  },
 
-  if (clip.state === "promoted") {
-    return denied("已入库，原文是 context 的 evidence，不能再改。");
-  }
-  if (clip.state !== "ready") return denied("还没识别完成，原文还没出来。");
-  if (clip.sourceText === null) return denied("纯图摘录没有原文，谈不上修错字。");
+  recapture: (clip) =>
+    clip.state === "promoted"
+      ? denied("已入库的摘录原文已冻结为 evidence，不能重拍覆盖。")
+      : ALLOWED,
 
-  const distance = editDistance(clip.sourceText, action.text);
-  if (distance === 0) return denied("没有改动。");
-  if (distance > MAX_TYPO_DISTANCE) {
-    return denied("这不是修 OCR 错字，是在改写原文——原文只准修错字，不得改写措辞。");
-  }
-  return ALLOWED;
+  delete: () => ALLOWED,
+};
+
+/** `reduce` 的前置判定，也供 UI 置灰按钮。 */
+export function can(state: ClipsState, action: Action): Verdict {
+  if (action.type === "capture") return ALLOWED;
+
+  const clip = state.clips.find((candidate) => candidate.id === action.id);
+  if (!clip) return denied("没有这条摘录。");
+
+  const guard = GUARDS[action.type] as Guard<typeof action.type>;
+  return guard(clip, action);
 }
 
 function replaceClip(state: ClipsState, id: string, patch: Partial<Clip>): ClipsState {

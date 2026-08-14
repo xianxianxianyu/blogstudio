@@ -35,7 +35,8 @@ const FORMULA_RECT = { x: 215, y: 792 - 494, width: 180, height: 32 };
 const MIXED_RECT = { x: 107, y: 792 - 470, width: 399, height: 170 };
 
 // arXiv:1706.03762 p.13 的 attention 可视化图：整页是 <pad> 词元的叠绘，同一批词被
-// 反复画在同一处。文本包围盒求和后覆盖度 52.1%（判 text），去重取并集只有 40.5%（判 vision）。
+// 反复画在同一处。求和会重复计数把它抬进 text 路由，取并集才落 vision。
+// 具体数字只留 recognizer-interface.md 一份，别在三处各抄一遍——已经打架过一次。
 // poppler 在这里抽出的是残缺的 "Input-Input L Attention Visualiza"——叠绘让文本层不可用，
 // 该走视觉。这是全部三篇论文 22265 个候选区域里仅有的两处求和/并集分歧之一。
 const OVERDRAWN_FIGURE_RECT = { x: 100, y: 700, width: 100, height: 50 };
@@ -413,5 +414,25 @@ describe("Recognizer — 译文由独立的翻译模块产出", () => {
 
     expect(content.translation).toBeUndefined();
     expect(model.completeCalls).toHaveLength(0);
+  });
+});
+
+describe("Recognizer — 纯图区的 sourceText 也要按路由表裁剪", () => {
+  it("模型报 image 却回了原文，一律归零——否则纯图能被放行入库", async () => {
+    const { recognizer } = await setup("2006.11239.pdf", {
+      completeText: JSON.stringify({
+        kind: "image",
+        // 纯图区里模型有时会把水印、页码之类的碎字当成原文回出来。
+        sourceText: "CelebA-HQ",
+        multimodal: "四张人脸样本与一格 CIFAR10 样本阵列",
+      }),
+    });
+
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT));
+
+    // 路由表的纯图行 sourceText 是 null，而 null ⟺ 入库 blocked（不变量 5）。
+    // 透出去就等于让一条没有 evidence 的纯图摘录混进知识库。
+    expect(content.sourceText).toBeNull();
+    expect(content.multimodal).toBe("四张人脸样本与一格 CIFAR10 样本阵列");
   });
 });

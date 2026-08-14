@@ -191,3 +191,28 @@ describe("Clip reducer — 入库", () => {
     expect(state.contexts).toHaveLength(0);
   });
 });
+
+describe("Clip reducer — 入库后不能被重新识别打回", () => {
+  it("已入库的摘录收到 recognized 时原地不动——原文已是 context 的 evidence", () => {
+    const FIXED = "The dominant sequence transduction models";
+    const promoted = reduce(readyClip(FIXED), {
+      type: "promote",
+      id: "c1",
+      contextId: "ctx1",
+    });
+
+    expect(can(promoted, { type: "recognized", id: "c1", content: textContent("改写过的原文") }).ok)
+      .toBe(false);
+
+    const state = reduce(promoted, {
+      type: "recognized",
+      id: "c1",
+      content: textContent("改写过的原文"),
+    });
+
+    // 不变量④「入库即冻结」：绕过 fix-source 的守卫从别的动作把原文改掉，
+    // context 的 evidence 就与摘录对不上了。
+    expect(state.clips[0].state).toBe("promoted");
+    expect(state.clips[0].sourceText).toBe(FIXED);
+  });
+});

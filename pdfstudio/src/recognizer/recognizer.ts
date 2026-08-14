@@ -227,11 +227,16 @@ function blankToNull(text: string | null | undefined): string | null {
  * 出口按它裁剪，约束才不会只活在 prompt 里——模型多回的字段一律丢弃。
  * kind 缺失或不认识就是坏输出：放行等于给模型留一个绕过裁剪的口子。
  */
-const VISION_TABLE: Record<VisionKind, { translation: boolean; multimodal: boolean }> = {
-  formula: { translation: false, multimodal: false },
-  figure: { translation: false, multimodal: true },
-  image: { translation: false, multimodal: true },
-  mixed: { translation: true, multimodal: true },
+const VISION_TABLE: Record<
+  VisionKind,
+  { sourceText: boolean; translation: boolean; multimodal: boolean }
+> = {
+  formula: { sourceText: true, translation: false, multimodal: false },
+  figure: { sourceText: true, translation: false, multimodal: true },
+  // 纯图行的 sourceText 是 null，而 null ⟺ 入库 blocked（不变量 5）。模型有时会把
+  // 水印、页码之类的碎字当原文回出来，透出去就是让没有 evidence 的摘录混进知识库。
+  image: { sourceText: false, translation: false, multimodal: true },
+  mixed: { sourceText: true, translation: true, multimodal: true },
 };
 
 const DEFAULT_TARGET_LANG = "zh";
@@ -344,7 +349,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         }
 
         // 公式的 LaTeX 也走 sourceText：它是逐字无损编码，公式摘录因此有 evidence、能入库。
-        const sourceText = blankToNull(output.sourceText);
+        const sourceText = allow.sourceText ? blankToNull(output.sourceText) : null;
 
         return {
           route: "vision",
