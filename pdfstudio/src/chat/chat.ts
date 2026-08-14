@@ -79,6 +79,13 @@ function toMessage(turn: Turn): ModelMessage {
   return { role: turn.role, content };
 }
 
+/** 贴入的摘录，按贴入顺序。 */
+function collectSnapshots(turns: Turn[]): ClipSnapshot[] {
+  return turns.flatMap((turn) =>
+    turn.parts.flatMap((part) => (part.kind === "clip" ? [part.snapshot] : [])),
+  );
+}
+
 /** 贴入的图与摘录自带的图，按贴入顺序汇总。 */
 function collectImages(turns: Turn[]): Screenshot[] {
   return turns.flatMap((turn) =>
@@ -122,13 +129,29 @@ async function buildIndex(document: PDFDocumentProxy): Promise<Chunk[]> {
 }
 
 /**
- * 关键词重合打分。这是**已知不够用**的基线：读者用中文问英文论文时它一分也打不出来，
+ * 关键词检索。这是**已知不够用**的基线：读者用中文问英文论文时它一分也打不出来，
  * 而那正是 ADR-0003 选 bge-m3 的理由。等跨语言那条红灯来驱动再换。
  */
-function score(chunk: Chunk, query: string): number {
-  const terms = query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [];
-  const haystack = chunk.text.toLowerCase();
-  return terms.filter((term) => haystack.includes(term)).length;
+function search(chunks: Chunk[], query: string): Chunk | null {
+  const terms = [...new Set(query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])];
+  const haystacks = chunks.map((chunk) => chunk.text.toLowerCase());
+
+  // 在过半块里都出现的词没有区分度（the / what / with…）。拿它们当命中，
+  // 任何问题都会「检索到」一段无关原文，grounding 就成了谎话。
+  const distinctive = terms.filter(
+    (term) => haystacks.filter((text) => text.includes(term)).length * 2 <= chunks.length,
+  );
+  if (distinctive.length === 0) return null;
+
+  const best = chunks
+    .map((chunk, index) => ({
+      chunk,
+      score: distinctive.filter((term) => haystacks[index].includes(term)).length,
+    }))
+    .filter((scored) => scored.score > 0)
+    .sort((a, b) => b.score - a.score)[0];
+
+  return best?.chunk ?? null;
 }
 
 function queryOf(turns: Turn[]): string {
@@ -150,18 +173,13 @@ export function createChat(deps: ChatDeps): Chat {
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
-      const chunks = await ensureIndex();
-      const query = queryOf(turns);
-      const hit = chunks
-        .map((chunk) => ({ chunk, score: score(chunk, query) }))
-        .filter((scored) => scored.score > 0)
-        .sort((a, b) => b.score - a.score)[0];
+      const hit = search(await ensureIndex(), queryOf(turns));
 
       const messages = turns.map(toMessage);
       if (hit) {
         messages.unshift({
           role: "system",
-          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${hit.chunk.text}`,
+          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${hit.text}`,
         });
       }
 
@@ -177,13 +195,29 @@ export function createChat(deps: ChatDeps): Chat {
       }
 
       // grounding 由检索结果判定，不看模型说了什么（不变量 ⑤）。
-      return hit
-        ? {
-            text,
-            citations: [{ kind: "chunk", page: hit.chunk.page, snippet: hit.chunk.text }],
-            grounding: "retrieved",
-          }
-        : { text, citations: [], grounding: "none" };
+      if (hit) {
+        return {
+          text,
+          citations: [{ kind: "chunk", page: hit.page, snippet: hit.text }],
+          grounding: "retrieved",
+        };
+      }
+
+      // 检索没命中，但读者自己贴了摘录进来——那就是这次回答的依据。
+      const snapshots = collectSnapshots(turns);
+      if (snapshots.length > 0) {
+        return {
+          text,
+          citations: snapshots.map((snapshot) => ({
+            kind: "clip" as const,
+            page: snapshot.page,
+            clipId: snapshot.clipId,
+          })),
+          grounding: "pasted",
+        };
+      }
+
+      return { text, citations: [], grounding: "none" };
     },
   };
 }

@@ -5,6 +5,7 @@ import { createFakeModelClient } from "../../test/fake-model-client";
 import type { FakeModelOptions } from "../../test/fake-model-client";
 import type { ClipSnapshot } from "./chat";
 import type { Screenshot } from "../recognizer/recognizer";
+import type { PDFDocumentProxy } from "pdfjs-dist";
 
 const DOC_ID = "arxiv-1706.03762";
 
@@ -148,5 +149,80 @@ describe("Chat — 检索与出处", () => {
 
     const prompt = model.streamCalls[0].messages.map((message) => message.content).join("\n");
     expect(prompt.toLowerCase()).toContain("degradation");
+  });
+});
+
+describe("Chat — 没有依据时", () => {
+  it("问文档里根本没有的事，grounding 是 none，不给出处", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "这篇论文没有讲这个。" });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model });
+
+    const answer = await chat.ask(ask("What is the capital of France?"));
+
+    // 「the」「what」这类词在每一块里都有，不能拿它们当命中——
+    // 否则任何问题都会「检索到」一段无关原文，grounding 就成了谎话。
+    expect(answer.grounding).toBe("none");
+    expect(answer.citations).toEqual([]);
+  });
+});
+
+describe("Chat — 只基于贴入内容作答", () => {
+  it("检索没命中但有贴入的摘录时，grounding 是 pasted，出处指向摘录", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "缩放是为了稳定梯度。" });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model });
+
+    const answer = await chat.ask([
+      {
+        role: "user",
+        parts: [
+          // 问题里没有一个能命中这篇论文的词。
+          { kind: "text", text: "为什么要除以根号 dk？" },
+          {
+            kind: "clip",
+            snapshot: {
+              clipId: "c7",
+              sourceText: "We scale the dot products by 1/sqrt(d_k).",
+              page: 4,
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(answer.grounding).toBe("pasted");
+    expect(answer.citations).toEqual([{ kind: "clip", page: 4, clipId: "c7" }]);
+  });
+});
+
+describe("Chat — 索引只建一次", () => {
+  it("同一个 PDF 的后续提问复用索引，不重读文档", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    let getPageCalls = 0;
+    // 数注入依赖上的调用——document 在构造缝上，与数 model.complete 同性质。
+    const counted = new Proxy(document, {
+      get(target, prop: keyof PDFDocumentProxy) {
+        if (prop === "getPage") {
+          return (page: number) => {
+            getPageCalls++;
+            return target.getPage(page);
+          };
+        }
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const model = createFakeModelClient({ completeText: "答案" });
+    const chat = createChat({ document: counted, docId: "arxiv-1512.03385", model });
+
+    await chat.ask(ask("What is the degradation problem?"));
+    const afterFirst = getPageCalls;
+    await chat.ask(ask("What is a residual block?"));
+
+    // 首问读完整篇；第二问一页都不该再读（不变量 ④ 幂等索引）。
+    expect(afterFirst).toBe(document.numPages);
+    expect(getPageCalls).toBe(afterFirst);
   });
 });
