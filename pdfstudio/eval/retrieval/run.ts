@@ -13,7 +13,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { openFixturePdf } from "../../test/fixtures";
-import { buildIndex, searchChunks, scoreChunks } from "../../src/chat/retrieval";
+import { buildIndex, searchChunks, scoreChunks, peakMargin } from "../../src/chat/retrieval";
 import type { Chunk } from "../../src/chat/retrieval";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
 
@@ -62,6 +62,8 @@ interface Outcome {
   pages: number[];
   /** 与 pages 一一对应的相似度；关键词模式下为空。 */
   scores: number[];
+  /** top-1 高出背景分布多少。命中判据用它，不用绝对余弦——见 retrieval.ts。 */
+  margin: number;
 }
 
 function hitAt(outcome: Outcome, k: number): boolean {
@@ -102,10 +104,11 @@ async function main(): Promise<void> {
         question,
         pages: scored.slice(0, Math.max(...KS)).map((s) => s.chunk.page),
         scores: scored.slice(0, Math.max(...KS)).map((s) => s.score),
+        margin: peakMargin(scored),
       });
     } else {
       const chunks = await searchChunks(index, question.question, Math.max(...KS));
-      outcomes.push({ question, pages: chunks.map((chunk) => chunk.page), scores: [] });
+      outcomes.push({ question, pages: chunks.map((chunk) => chunk.page), scores: [], margin: 0 });
     }
   }
 
@@ -140,21 +143,32 @@ async function main(): Promise<void> {
 
   if (useEmbedder) {
     // 阈值与 abstention / 召回是此消彼长的，只看一个必调歪，所以并排扫。
-    console.log("\n阈值权衡曲线（中文 recall / 答不了正确返回空）：");
-    console.log("  阈值    zh@1   zh@3   abstention");
-    for (const threshold of [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7]) {
+    console.log("\n尖峰判据权衡曲线（中文 recall / 答不了正确返回空）：");
+    console.log("  margin  zh@1   zh@3   en@3   abstention");
+    for (const threshold of [0.02, 0.05, 0.08, 0.1, 0.12, 0.15, 0.2, 0.3]) {
+      // 没有尖峰就整条判为未命中——与 searchChunks 里的判据一致。
       const gate = (outcome: Outcome, k: number) =>
-        outcome.pages.filter((_, i) => outcome.scores[i] >= threshold).slice(0, k);
+        outcome.margin >= threshold ? outcome.pages.slice(0, k) : [];
       const hits = (set: Outcome[], k: number) =>
         set.filter((o) => o.question.page !== null && gate(o, k).includes(o.question.page)).length;
       const abst = na.filter((o) => gate(o, Math.max(...KS)).length === 0).length;
       console.log(
         `  ${threshold.toFixed(2)}  ${((hits(zh, 1) / zh.length) * 100).toFixed(1).padStart(5)}% ` +
-          `${((hits(zh, 3) / zh.length) * 100).toFixed(1).padStart(5)}%   ${abst}/${na.length}`,
+          `${((hits(zh, 3) / zh.length) * 100).toFixed(1).padStart(5)}% ` +
+          `${((hits(en, 3) / en.length) * 100).toFixed(1).padStart(5)}%   ${abst}/${na.length}`,
       );
     }
     console.log("  → 选让 zh@3 尽量高、同时 abstention 保持 3/3 的那一档，填进");
-    console.log("     src/chat/retrieval.ts 的 MIN_SIMILARITY。");
+    console.log("     src/chat/retrieval.ts 的 MIN_PEAK_MARGIN。");
+    console.log("\n各题的 margin（看答得了/答不了两组分不分得开）：");
+    for (const set of [zh, en, na]) {
+      const label = set === na ? "答不了" : set === zh ? "中文  " : "英文  ";
+      const margins = set.map((o) => o.margin).sort((a, b) => a - b);
+      if (margins.length === 0) continue;
+      console.log(
+        `  ${label} 最低 ${margins[0].toFixed(3)}  中位 ${margins[Math.floor(margins.length / 2)].toFixed(3)}  最高 ${margins.at(-1)!.toFixed(3)}`,
+      );
+    }
   }
 
   console.log("\n未命中的中文题：");

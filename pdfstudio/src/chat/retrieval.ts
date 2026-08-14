@@ -15,17 +15,44 @@ export interface Chunk {
   vector?: Float32Array;
 }
 
+export interface ScoredChunk {
+  chunk: Chunk;
+  score: number;
+}
+
 /**
- * 向量检索的相似度下限。低于它就当没检索到，`grounding` 才能诚实地报 `none`。
+ * 命中判据：top-1 要比**背景分布**高出这么多，才算检索到。
  *
- * 关键词检索天然有这个下限（没有区分度的词一个都不匹配就返回空），向量检索没有
- * ——任何两段文本都有一个余弦值。不设下限的话，`eval/retrieval/` 那 3 条
- * 「文档答不了」的题会全部被硬凑出一段原文当出处，而那是不变量⑤ 明令禁止的。
+ * 一开始用的是绝对余弦下限，实测证明那个机制不成立（`eval/retrieval/`）：
  *
- * 0.5 是待标定的初值，用 `npm run eval:retrieval` 的 abstention 与中文 recall
- * 一起定——两者是此消彼长的，只看一个会调歪。
+ *     阈值 0.30–0.60  中文 recall@3 85%   答不了正确返回空 0/3
+ *     阈值 0.70       中文 recall@3 40%   答不了正确返回空 2/3
+ *
+ * **任何一条横线都切不开。** 因为归一化之后，一个 ML 领域的中文问题跟任何一段
+ * ML 论文都有不低的相似度——「法国的首都」与「残差网络」的余弦值，和「退化问题」
+ * 与「残差网络」的余弦值，差距没有大到能用绝对阈值分开。而绝对量纲还是模型相关、
+ * 领域相关的，换个模型就要重标。
+ *
+ * 改成相对判据：答得了的题有明显尖峰（top-1 远高于中位数），答不了的题 top-1 跟
+ * 中位数差不多。这个判据与模型和领域都无关。
+ *
+ * 不这么做的后果是实的：不变量⑤ 要求「没有可靠依据必须 grounding: 'none'」，
+ * 而绝对阈值下三条答不了的题全部被硬凑出一段原文当出处——那是在编造引用。
  */
-const MIN_SIMILARITY = 0.5;
+const MIN_PEAK_MARGIN = 0.1;
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+/** top-1 高出背景分布多少。调用方据此判命中，也供 eval 扫曲线。 */
+export function peakMargin(scored: ScoredChunk[]): number {
+  if (scored.length === 0) return 0;
+  return scored[0].score - median(scored.map((entry) => entry.score));
+}
 
 /** 一块目标大小。只在行边界上切，宁可略微超出也不切断一行。 */
 const CHUNK_CHARS = 600;
@@ -155,11 +182,6 @@ export async function buildIndex(
  * （`eval/retrieval/` 实测中文 recall@3 为 0%、英文 100%），
  * 而那正是 ADR-0003 选多语言 embedding 的理由。等跨语言那条红灯来驱动再换。
  */
-export interface ScoredChunk {
-  chunk: Chunk;
-  score: number;
-}
-
 /**
  * 向量打分，按分数降序。**不施加下限**——下限由调用方给。
  *
@@ -182,13 +204,13 @@ export async function searchChunks(
   query: string,
   limit = 1,
   embedder?: Embedder,
-  minSimilarity = MIN_SIMILARITY,
+  minPeakMargin = MIN_PEAK_MARGIN,
 ): Promise<Chunk[]> {
   if (embedder && chunks.every((chunk) => chunk.vector)) {
-    return (await scoreChunks(chunks, query, embedder))
-      .filter((scored) => scored.score >= minSimilarity)
-      .slice(0, limit)
-      .map((scored) => scored.chunk);
+    const scored = await scoreChunks(chunks, query, embedder);
+    // 没有尖峰就是没检索到——宁可报 grounding: 'none'，也不编造一段出处。
+    if (peakMargin(scored) < minPeakMargin) return [];
+    return scored.slice(0, limit).map((entry) => entry.chunk);
   }
 
   return keywordSearch(chunks, query, limit);
