@@ -35,7 +35,13 @@ const scaleInput = document.querySelector<HTMLInputElement>("#scale")!;
 // 换个实现即可，编排代码一行不用动（打包应用里这条边界是 IPC，ADR-0006）。
 const store = createHttpClipStore("/__clips");
 const docId = "1706.03762";
-let clips: ClipsState = { clips: [], contexts: [] };
+
+// 启动就把已有摘录读回来。不读的话有两个后果，都已经真实发生过：
+// 1. id 计数器从头开始，新摘录覆盖掉磁盘上的旧摘录（第一条 Encoder 摘录就是这么没的）。
+// 2. capture 按区域合并是在内存状态里查的，状态空了就查不到——刷新后重框同一块地方
+//    会长出第二条摘录，而「同区域两个标签会让锚点回跳有歧义」正是当初禁止的。
+// 文件是唯一真相（ADR-0011），那就得真的把它当真相读。
+let clips: ClipsState = { clips: await store.listByDoc(docId), contexts: [] };
 
 const appConfig = parseConfig(
   await fetch("/__config")
@@ -159,7 +165,8 @@ canvas.addEventListener("pointerup", async (event) => {
 
   // 编排交给 captureClip：识别、状态迁移、落盘的**顺序**归它管，这一层只负责显示。
   const outcome = await captureClip(
-    { recognizer, store, newId: () => `clip-${clips.clips.length + 1}` },
+    // 不能拿数量当 id：它只反映内存里有几条，刷新一次就重头数，直接覆盖旧文件。
+    { recognizer, store, newId: () => crypto.randomUUID() },
     clips,
     docId,
     { page: Number(pageNo.value), rect: pageRect, pixels },
