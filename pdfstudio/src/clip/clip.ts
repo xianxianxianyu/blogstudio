@@ -164,7 +164,7 @@ function sameRegion(a: Region, b: Region): boolean {
   );
 }
 
-function replaceClip(state: ClipsState, id: string, patch: Partial<Clip>): ClipsState {
+function patchClip(state: ClipsState, id: string, patch: Partial<Clip>): ClipsState {
   return {
     ...state,
     clips: state.clips.map((clip) => (clip.id === id ? { ...clip, ...patch } : clip)),
@@ -180,7 +180,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
       // 于是「不新建第二个摘录」这条规则被绕过去了。
       const existing = state.clips.find((clip) => sameRegion(clip.region, action.region));
       if (existing) {
-        return replaceClip(state, existing.id, {
+        return patchClip(state, existing.id, {
           state: "capturing",
           content: null,
           sourceText: null,
@@ -207,10 +207,10 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
     }
 
     case "recognize":
-      return replaceClip(state, action.id, { state: "recognizing" });
+      return patchClip(state, action.id, { state: "recognizing" });
 
     case "recognized":
-      return replaceClip(state, action.id, {
+      return patchClip(state, action.id, {
         state: "ready",
         content: action.content,
         sourceText: action.content.sourceText,
@@ -218,23 +218,23 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
       });
 
     case "fix-source":
-      return replaceClip(state, action.id, { sourceText: action.text });
+      return patchClip(state, action.id, { sourceText: action.text });
 
     case "add-note":
-      return replaceClip(state, action.id, { note: action.text });
+      return patchClip(state, action.id, { note: action.text });
 
     case "edit-translation":
-      return replaceClip(state, action.id, { translation: action.text });
+      return patchClip(state, action.id, { translation: action.text });
 
     case "toggle-label": {
       const clip = state.clips.find((candidate) => candidate.id === action.id);
-      return clip ? replaceClip(state, action.id, { label: clip.label === "dot" ? "panel" : "dot" }) : state;
+      return clip ? patchClip(state, action.id, { label: clip.label === "dot" ? "panel" : "dot" }) : state;
     }
 
     // 合并进已有标签，不新建第二个摘录：同一区域两个标签会让锚点回跳有歧义。
     // 笔记是读者的、留下；原文换了一张，之前修的错字随之作废。
     case "recapture":
-      return replaceClip(state, action.id, {
+      return patchClip(state, action.id, {
         state: "recognizing",
         region: action.region,
         content: null,
@@ -256,7 +256,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
       // can() 已经挡掉 sourceText === null，这里只是让类型收窄。
       if (!clip || clip.sourceText === null) return state;
 
-      const promoted = replaceClip(state, action.id, { state: "promoted" });
+      const promoted = patchClip(state, action.id, { state: "promoted" });
       return {
         ...promoted,
         contexts: [

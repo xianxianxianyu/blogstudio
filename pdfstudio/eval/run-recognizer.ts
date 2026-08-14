@@ -15,19 +15,26 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createRecognizer } from "../src/recognizer/recognizer";
-import type { Screenshot } from "../src/recognizer/recognizer";
+import type { Screenshot, VisionKind } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { openFixturePdf } from "../test/fixtures";
 
 const HERE = import.meta.dirname;
 const ROOT = path.join(HERE, "..");
 
-/** manifest 的 type 与 prompt 里 kind 词表的对应。 */
-const EXPECTED_KIND: Record<string, string> = {
+/**
+ * manifest 的 type 与 kind 词表的对应。值的类型绑到 `VisionKind`，prompt 改词表时
+ * 这里编译不过——此前是一份手抄的 `Record<string, string>`，词表变了 eval 会静默失准。
+ *
+ * `paragraph → mixed` 是**凑合映射**：那 4 张是被强制走 vision 的纯文本区，
+ * kind 词表里没有更贴切的选项。所以 19/19 这个数里有 4 张的判定基准偏软，
+ * ADR-0001 拿它当本地模型准入门槛时要知道这一点。
+ */
+const EXPECTED_KIND: Record<string, VisionKind> = {
   formula: "formula",
   figure: "figure",
   table: "figure",
-  paragraph: "mixed", // 强制 vision 的纯文本区，没有更贴切的选项
+  paragraph: "mixed",
   mixed: "mixed",
 };
 
@@ -64,7 +71,8 @@ async function readManifest(): Promise<Sample[]> {
 
 async function loadScreenshot(id: string): Promise<Screenshot> {
   const bytes = new Uint8Array(await readFile(path.join(HERE, "samples", `${id}.png`)));
-  // 300 DPI 渲染后裁剪（见 manifest），换算回 PDF 点只用于填 Screenshot 的尺寸字段。
+  // 尺寸字段填 0：模型读的是 bytes，这两个数在视觉路由上无人消费。
+  // 真要用时应从 PNG 头解析，而不是让假值一直躺在领域类型里。
   return { mime: "image/png", bytes, width: 0, height: 0 };
 }
 
@@ -163,7 +171,9 @@ async function main(): Promise<void> {
   }
 
   console.log(`kind 与 manifest 一致 ${matched}/${samples.length}${failed > 0 ? `，另有 ${failed} 张调用失败` : ""}`);
-  console.log("内容正确性（LaTeX、描述、译文）请对照 PDF 目检。");
+  console.log("内容正确性（LaTeX、描述）请对照 PDF 目检——ADR-0001 的准入门槛是");
+  console.log("「可比的 kind 合规率**与公式 LaTeX 质量**」，后者这个 runner 只负责打印，不打分。");
+  console.log("公式那 6 张（f01–f06）的 sourceText 就是要核的 LaTeX。");
 }
 
 function preview(value: string | null): string {
