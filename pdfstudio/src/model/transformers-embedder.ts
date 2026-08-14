@@ -29,6 +29,9 @@ export interface TransformersEmbedderConfig {
   documentPrefix?: string;
 }
 
+/** 一次前向的最大块数。 */
+const BATCH_SIZE = 32;
+
 const DEFAULTS = {
   model: "onnx-community/embeddinggemma-300m-ONNX",
   dtype: "q8",
@@ -40,16 +43,36 @@ export function createTransformersEmbedder(config: TransformersEmbedderConfig = 
   const settings = { ...DEFAULTS, ...config };
 
   // 首次调用时才加载（权重要下载几百 MB），之后复用同一个 pipeline。
+  // **失败的 promise 不能留**：首次下载中断后若把它缓存住，这个实例此后每次调用都以
+  // 同一个错误 reject，再也没有重试的路径。
   let extractor: Promise<FeatureExtractionPipeline> | null = null;
-  const load = () =>
-    (extractor ??= pipeline("feature-extraction", settings.model, { dtype: settings.dtype }));
+  const load = () => {
+    extractor ??= pipeline("feature-extraction", settings.model, {
+      dtype: settings.dtype,
+    }).catch((error: unknown) => {
+      extractor = null;
+      throw error;
+    });
+    return extractor;
+  };
 
   const encode = async (texts: string[]): Promise<Float32Array[]> => {
     const pipe = await load();
-    // 池化与归一化交给 pipeline：embeddinggemma 的两层 Dense 投影已经融进 ONNX 图，
-    // 自己再做一遍反而会算错。
-    const output = await pipe(texts, { pooling: "mean", normalize: true });
-    return output.tolist().map((row: number[]) => Float32Array.from(row));
+    const vectors: Float32Array[] = [];
+
+    // 分批。整篇语料一次前向在几十页的论文上还撑得住，换成书稿就是几千块一次
+    // ONNX forward，内存直接爆。
+    for (let start = 0; start < texts.length; start += BATCH_SIZE) {
+      // 池化与归一化交给 pipeline：embeddinggemma 的两层 Dense 投影已经融进 ONNX 图，
+      // 自己再做一遍反而会算错。
+      const output = await pipe(texts.slice(start, start + BATCH_SIZE), {
+        pooling: "mean",
+        normalize: true,
+      });
+      vectors.push(...output.tolist().map((row: number[]) => Float32Array.from(row)));
+    }
+
+    return vectors;
   };
 
   return {

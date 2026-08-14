@@ -64,7 +64,11 @@ interface Outcome {
   scores: number[];
   /** top-1 高出背景分布多少。命中判据用它，不用绝对余弦——见 retrieval.ts。 */
   margin: number;
-  /** **未经门槛过滤**的排序结果。扫描曲线必须用它——用 pages 会在已经切过的数据上再切一次。 */
+  /**
+   * **未经门槛过滤、但走生产排序路径（RRF 融合）**的结果。扫描曲线必须用它：
+   * 用 pages 会在已经切过的数据上再切一次；用纯向量排序则标定出的阈值与生产路径
+   * 不是同一个口径。
+   */
   rankedPages: number[];
 }
 
@@ -101,15 +105,23 @@ async function main(): Promise<void> {
 
     if (embedder) {
       // 一次打分、多个阈值：扫描时不重跑 embedding。
-      // 主结果走 searchChunks（含 RRF 融合），曲线那段另用 margin 扫。
       const chunks = await searchChunks(index, question.question, Math.max(...KS), embedder);
       const scored = await scoreChunks(index, question.question, embedder);
+      // 门槛设成 -Infinity 拿到未过滤但**同样经过 RRF 融合**的排序——
+      // 曲线与生产路径口径一致，标定出的数才能直接填回去。
+      const ungated = await searchChunks(
+        index,
+        question.question,
+        Math.max(...KS),
+        embedder,
+        -Infinity,
+      );
       outcomes.push({
         question,
         pages: chunks.map((chunk) => chunk.page),
         scores: scored.slice(0, Math.max(...KS)).map((s) => s.score),
         margin: peakMargin(scored),
-        rankedPages: scored.slice(0, Math.max(...KS)).map((s) => s.chunk.page),
+        rankedPages: ungated.map((chunk) => chunk.page),
       });
     } else {
       const chunks = await searchChunks(index, question.question, Math.max(...KS));
@@ -186,8 +198,7 @@ async function main(): Promise<void> {
     }
     console.log("  → 选让 zh@3 尽量高、同时 abstention 拿满的那一档，填进");
     console.log("     src/chat/retrieval.ts 的 MIN_PEAK_MARGIN。");
-    console.log("  注：曲线里的排序是**纯向量**（margin 由向量分数算出），所以 en@3 比上方");
-    console.log("      主结果低——主结果走 RRF 融合，关键词那一路把英文补回了 100%。");
+    console.log("  曲线与生产路径同口径：排序同样经 RRF 融合，只有门槛在变。");
     console.log("\n各题的 margin（看答得了/答不了两组分不分得开）：");
     for (const set of [zh, en, na]) {
       const label = set === na ? "答不了" : set === zh ? "中文  " : "英文  ";

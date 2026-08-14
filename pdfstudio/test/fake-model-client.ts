@@ -60,8 +60,13 @@ export function createFakeModelClient(options: FakeModelOptions = {}): FakeModel
       }
 
       // 远端流不结束的情形：一直等到 abort。
-      while (options.hang && !request.signal?.aborted) {
-        await new Promise((resolve) => setTimeout(resolve, 1));
+      // 没有 signal 就永远等不到——那会挂到测试超时，报的还是「超时」而不是真正的
+      // 原因「你忘了传 signal」。当场说清楚。
+      if (options.hang) {
+        if (!request.signal) throw new Error("hang: true 必须配合 signal，否则流永不结束");
+        while (!request.signal.aborted) {
+          await new Promise((resolve) => setTimeout(resolve, 1));
+        }
       }
     },
   };
