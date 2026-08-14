@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createChat } from "./chat";
 import { openFixturePdf } from "../../test/fixtures";
 import { createFakeModelClient } from "../../test/fake-model-client";
+import { createFakeEmbedder } from "../../test/fake-embedder";
 import type { FakeModelOptions } from "../../test/fake-model-client";
 import type { ClipSnapshot } from "./chat";
 import type { Screenshot } from "../recognizer/recognizer";
@@ -305,5 +306,36 @@ describe("Chat — 双栏页的读序", () => {
     if (splice >= 0) {
       expect(snippet.slice(Math.max(0, splice - 80), splice)).not.toContain("Table 9");
     }
+  });
+});
+
+describe("Chat — 配了 embedder 时走向量检索", () => {
+  it("中文提问能命中英文原文——关键词检索原理上做不到这件事", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "退化问题是……" });
+    // 让中文问句与含 degradation 的英文块同向：测的是向量检索有没有被用上。
+    const embedder = createFakeEmbedder({
+      退化问题: [1, 0, 0],
+      degradation: [1, 0, 0],
+    });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model, embedder });
+
+    const answer = await chat.ask(ask("退化问题指的是什么？"));
+
+    expect(answer.grounding).toBe("retrieved");
+    expect(answer.citations[0]?.snippet?.toLowerCase()).toContain("degradation");
+  });
+
+  it("相似度低于下限时返回空，grounding 诚实报 none", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "这篇论文没有讲这个。" });
+    // 问句与所有块正交——向量检索没有天然下限，不设阈值就会硬凑一段原文当出处。
+    const embedder = createFakeEmbedder({ 法国的首都: [0, 1, 0] });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model, embedder });
+
+    const answer = await chat.ask(ask("法国的首都是哪里？"));
+
+    expect(answer.grounding).toBe("none");
+    expect(answer.citations).toEqual([]);
   });
 });
