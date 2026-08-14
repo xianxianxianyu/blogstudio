@@ -283,3 +283,27 @@ describe("Chat — reindex", () => {
     expect(getPageCalls).toBeGreaterThan(afterFirst);
   });
 });
+
+describe("Chat — 双栏页的读序", () => {
+  it("citation 的原文片段里不该混进隔壁栏的表格图题", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "因为过拟合。" });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model });
+
+    // 用能唯一命中那一块的词提问。排序质量是这个关键词基线的已知弱项，由
+    // eval/retrieval/ 去量；这条测试只测读序，不该被排序带偏。
+    const answer = await chat.ask(
+      ask("regularization such as maxout or dropout unnecessarily large overfitting"),
+    );
+
+    const snippet = answer.citations.find((citation) => citation.kind === "chunk")?.snippet ?? "";
+    expect(snippet).toContain("1202-layer network may be unnecessarily");
+
+    // pdf.js 的原始顺序会把右栏的表格图题插进左栏正文中间，读者看到的出处就成了
+    // 「…See also Table 9 for better results.have similar training error…」这种拼接。
+    const splice = snippet.indexOf("have similar training error");
+    if (splice >= 0) {
+      expect(snippet.slice(Math.max(0, splice - 80), splice)).not.toContain("Table 9");
+    }
+  });
+});
