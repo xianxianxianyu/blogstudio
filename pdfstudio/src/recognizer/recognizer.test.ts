@@ -268,8 +268,8 @@ describe("Recognizer — 叠绘的图", () => {
   });
 });
 
-describe("Recognizer — engine 逃生口", () => {
-  it("engine: 'vision' 让文本区也走视觉——覆盖度误判时的出口", async () => {
+describe("Recognizer — route 逃生口", () => {
+  it("route: 'vision' 让文本区也走视觉——覆盖度误判时的出口", async () => {
     const { model, recognizer } = await setup("1706.03762.pdf", {
       completeText: JSON.stringify({
         kind: "mixed",
@@ -279,16 +279,16 @@ describe("Recognizer — engine 逃生口", () => {
       }),
     });
 
-    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT), { engine: "vision" });
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT), { route: "vision" });
 
     expect(content.route).toBe("vision");
     expect(model.completeCalls).toHaveLength(1);
   });
 
-  it("engine: 'text' 让纯图区不调模型，且原文是 null 而非空串", async () => {
+  it("route: 'text' 让纯图区不调模型，且原文是 null 而非空串", async () => {
     const { model, recognizer } = await setup("2006.11239.pdf");
 
-    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT), { engine: "text" });
+    const content = await recognizer.recognize(regionAt(1, FIGURE_RECT), { route: "text" });
 
     expect(content.route).toBe("text");
     expect(model.completeCalls).toHaveLength(0);

@@ -65,7 +65,7 @@
 
 【状态机】pending → resolved；失败 reject RecognizeError(kind)
   纯图：sourceText === ''（建议改 null）⟺ 入库 blocked
-  逃生口：options.engine = 'vision' | 'text'（覆盖误判时）
+  逃生口：options.route = 'vision' | 'text'（覆盖误判时）
 ```
 
 ## 按「抽象 + 自动化 + 状态机」打分

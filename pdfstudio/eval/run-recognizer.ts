@@ -144,7 +144,7 @@ async function main(): Promise<void> {
       // 强制 vision：样本是裁好的 PNG，manifest 没记页面坐标，覆盖检测无从下手。
       const content = await recognizer.recognize(
         { page: sample.page, rect: { x: 0, y: 0, width: 100, height: 100 }, pixels },
-        { engine: "vision" },
+        { route: "vision" },
       );
 
       const kind = (JSON.parse(raw[0] ?? "{}") as { kind?: string }).kind ?? "（没报）";

@@ -55,9 +55,9 @@ export interface RecognizerDeps {
   targetLang?: string;
 }
 
-/** rare，可省。`engine` 是覆盖检测误判时的逃生口。 */
+/** rare，可省。`route` 是覆盖检测误判时的逃生口。 */
 export interface RecognizeOptions {
-  engine?: "auto" | "text" | "vision";
+  route?: "auto" | "text" | "vision";
   targetLang?: string;
 }
 
@@ -126,7 +126,7 @@ const MIN_REGION_SIDE = 4;
  * 靠「有没有字」区分不了，只能靠覆盖度。
  *
  * 已知薄弱面：框得越松覆盖度越低，Abstract 段落四周各留 40pt 白时降到 54.9%，
- * 再松就会误判成 vision。逃生口是 `options.engine = 'text'`。
+ * 再松就会误判成 vision。逃生口是 `options.route = 'text'`。
  * canonical 还写了「非空白字符密度」这第二维，实测**加不了分**：唯一逼近正文的
  * vision 样本是 m01（密度 11.64），而松散框选的正文密度 11.44——两者在密度上反而
  * 交叠，在覆盖度上却分得开（40.0% vs 54.9%）。没有反例就不加维。
@@ -302,11 +302,11 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         (item): item is TextItem => "str" in item && baselineIntersectsRect(region.rect, item),
       );
       // 覆盖检测路由：不预分类，量文本覆盖度，低 ⟹ 落视觉。
-      // options.engine 是逃生口，启发式误判时由调用方强制走某条路。
-      const engine = options?.engine ?? "auto";
+      // options.route 是逃生口，启发式误判时由调用方强制走某条路。
+      const route = options?.route ?? "auto";
       const goesVision =
-        engine === "vision" ||
-        (engine === "auto" && textCoverage(region.rect, inRegion) < TEXT_COVERAGE_THRESHOLD);
+        route === "vision" ||
+        (route === "auto" && textCoverage(region.rect, inRegion) < TEXT_COVERAGE_THRESHOLD);
 
       if (goesVision) {
         let response: ModelResponse;
@@ -360,7 +360,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         };
       }
 
-      // 这里也归一：强制 engine: 'text' 打在无字区域上会拼出空串，
+      // 这里也归一：强制 route: 'text' 打在无字区域上会拼出空串，
       // 而 '' 不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
       const sourceText = blankToNull(joinVerbatim(inRegion));
 

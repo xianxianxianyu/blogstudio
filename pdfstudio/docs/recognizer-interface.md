@@ -26,7 +26,7 @@ interface ClipContent {
 
 // —— 选项（rare，可省）——
 interface RecognizeOptions {
-  engine?: 'auto' | 'text' | 'vision';   // 默认 'auto'
+  route?: 'auto' | 'text' | 'vision';    // 默认 'auto'；覆盖度误判时的逃生口
   targetLang?: string;                    // 默认取构造配置 'zh'
 }
 
@@ -72,7 +72,7 @@ function createRecognizer(deps: RecognizerDeps): Recognizer
 
 面积必须取**并集**而非求和：attention 可视化那类图会把同一批词反复叠绘，求和会重复计数、把区域虚高进 text 路由（p.13 那处求和 52.1%、并集 38.7%）。三篇论文 22265 个候选区域里求和与并集在 0.5 处分歧仅 2 处，都是这一类。
 
-text 一侧另用 poppler 版面分析（独立于 pdf.js）采了 326 个真实段落 block 验证：紧贴框选时中位数 72.2%，落在 0.5 以下的 8.3% 全是公式推导、表格、算法伪代码和含行内公式的段落——路由表本来就要它们走 vision，判对了。敏感面是**小区域被框得松**，逃生口是 `options.engine`。
+text 一侧另用 poppler 版面分析（独立于 pdf.js）采了 326 个真实段落 block 验证：紧贴框选时中位数 72.2%，落在 0.5 以下的 8.3% 全是公式推导、表格、算法伪代码和含行内公式的段落——路由表本来就要它们走 vision，判对了。敏感面是**小区域被框得松**，逃生口是 `options.route`。
 
 canonical 原写的第二维「非空白字符密度」实测加不了分：唯一逼近正文的 vision 样本 m01 密度 11.64，而松散框选的正文密度 11.44——密度上交叠，覆盖度上反而分得开。没有反例就不加维。
 - **LaTeX 归原文**：公式的 LaTeX 是逐字无损编码，写入 `sourceText` 而非 `multimodal`——使公式摘录有 evidence、能入库。这修正了早期 brief 里「formula→LaTeX 进描述」的措辞（见 ADR-0001）。
@@ -85,7 +85,7 @@ canonical 原写的第二维「非空白字符密度」实测加不了分：唯�
 - **throw 而非 Result**：默认调用方只 `catch` 一次；返回并集类型会逼每个调用点做模式匹配。
 - **没有 `model-refused`**：早期 kind 联合里有它，实现时删掉了——拒答回的也是白话、一样解析失败，与坏输出在 `ModelResponse`（只有 `text`，见 ADR-0009）这一层根本分不开。要区分就得往共享契约里加 `refusal` 字段，而第三方 OpenAI-compatible 端点常常不返回它，加了也大半降级成 `bad-output`。宁可少一个假装能区分的 kind。候选文档 `design-recognizer-3-common-caller.md` 和 `design-chat-1-common-caller.md` 里仍留着三个 kind 的写法，那是探索记录，不再是接口。
 - **不做**流式 / 批量 / 取消：pending Promise 就是进度；批量 = 调用方 `Promise.all`；取消 = 忽略（纯被动，一次一个区域）。若将来流式成硬需求，升级路径见 `design-recognizer-1-extensible.md`。
-- **逃生口**：`options.engine = 'vision' | 'text'`，覆盖启发式误判时强制走某条路。强制 `text` 打在无字区域上，`sourceText` 是 **`null` 而非 `''`**——候选文档 `design-recognizer-3-common-caller.md` 写的是「返回 `''` 不抛错」，但不变量 5 是 canonical：`''` 不是 `null`，会让 Clip reducer 以为有 evidence 而放行入库。两条路由的空白原文一律归一成 `null`。
+- **逃生口**：`options.route = 'vision' | 'text'`，覆盖启发式误判时强制走某条路。强制 `text` 打在无字区域上，`sourceText` 是 **`null` 而非 `''`**——候选文档 `design-recognizer-3-common-caller.md` 写的是「返回 `''` 不抛错」，但不变量 5 是 canonical：`''` 不是 `null`，会让 Clip reducer 以为有 evidence 而放行入库。两条路由的空白原文一律归一成 `null`。
 
 ## 依赖策略
 
