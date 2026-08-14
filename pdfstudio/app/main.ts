@@ -18,6 +18,9 @@ import { isMisTouch, toPageRect } from "../src/capture/capture";
 import { createRecognizer } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../src/config/config";
+import { captureClip } from "../src/clip/capture-clip";
+import { createHttpClipStore } from "./http-clip-store";
+import type { ClipsState } from "../src/clip/clip";
 import type { Screenshot } from "../src/recognizer/recognizer";
 
 pdfjs.GlobalWorkerOptions.workerSrc = worker as string;
@@ -27,6 +30,12 @@ const box = document.querySelector<HTMLDivElement>("#box")!;
 const out = document.querySelector<HTMLDivElement>("#out")!;
 const pageNo = document.querySelector<HTMLInputElement>("#pageNo")!;
 const scaleInput = document.querySelector<HTMLInputElement>("#scale")!;
+
+// 落盘走 dev server：clip-store 导入 node:fs，浏览器里加载就白屏。ClipStore 是端口，
+// 换个实现即可，编排代码一行不用动（打包应用里这条边界是 IPC，ADR-0006）。
+const store = createHttpClipStore("/__clips");
+const docId = "1706.03762";
+let clips: ClipsState = { clips: [], contexts: [] };
 
 const appConfig = parseConfig(
   await fetch("/__config")
@@ -140,23 +149,42 @@ canvas.addEventListener("pointerup", async (event) => {
   pre.textContent = "识别中…";
   out.append(pre);
 
-  try {
-    const content = await recognizer.recognize({ page: Number(pageNo.value), rect: pageRect, pixels });
-    pre.textContent = JSON.stringify(
-      { route: content.route, sourceText: content.sourceText, multimodal: content.multimodal },
-      null,
-      2,
-    );
-  } catch (error) {
+  // 编排交给 captureClip：识别、状态迁移、落盘的**顺序**归它管，这一层只负责显示。
+  const outcome = await captureClip(
+    { recognizer, store, newId: () => `clip-${clips.clips.length + 1}` },
+    clips,
+    docId,
+    { page: Number(pageNo.value), rect: pageRect, pixels },
+  );
+  clips = outcome.state;
+
+  if (!outcome.ok) {
     // 把 cause 链整条打出来。只报最外层的 kind 会把真正的原因吞掉——
     // 「model-unavailable：模型调用失败」这种话对排查毫无帮助。
     const chain: string[] = [];
-    for (let e: unknown = error; e instanceof Error; e = (e as { cause?: unknown }).cause) {
+    for (let e: unknown = outcome.error; e instanceof Error; e = (e as { cause?: unknown }).cause) {
       chain.push(`${(e as { kind?: string }).kind ?? e.name}: ${e.message}`);
     }
-    pre.textContent = chain.join("\n  ↳ ");
-    console.error(error);
+    pre.textContent = `${chain.join("\n  ↳ ")}\n\n摘录退回 capturing，可以直接再框一次同一块地方重试。`;
+    console.error(outcome.error);
+    return;
   }
+
+  // 按 clipId 取，不取「最后一条」——重试同一块地方是**合并进原摘录**，不追加新的，
+  // 那时最后一条会指到别人身上。
+  const clip = clips.clips.find((candidate) => candidate.id === outcome.clipId)!;
+  pre.textContent = JSON.stringify(
+    {
+      id: clip.id,
+      state: clip.state,
+      route: clip.content?.route,
+      sourceText: clip.sourceText,
+      multimodal: clip.content?.multimodal,
+      落盘: `pdfstudio/.clips/${docId}/${clip.id}/index.md`,
+    },
+    null,
+    2,
+  );
 });
 
 /** 从已渲染的画布上裁一块，编码成 PNG——这是端到端链路里唯一浏览器专属的一段。 */

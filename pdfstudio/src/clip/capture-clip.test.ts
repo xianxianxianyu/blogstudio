@@ -127,6 +127,8 @@ describe("框选 → 识别 → 落盘", () => {
     );
 
     // 同一区域重试合并进原摘录，不新建第二条——同区域两个标签会让锚点回跳有歧义。
+    // clipId 因此必须回报**合并进的那条**，调用方靠它定位；用「最后一条」会指错人。
+    expect(retried.clipId).toBe("c1");
     expect(retried.state.clips).toHaveLength(1);
     expect(retried.state.clips[0].state).toBe("ready");
     expect(await readdir(path.join(root, "doc-1"))).toEqual(["c1"]);

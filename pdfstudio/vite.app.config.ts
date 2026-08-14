@@ -2,9 +2,26 @@ import { defineConfig } from "vite";
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import type { IncomingMessage } from "node:http";
+import { createClipStore } from "./src/clip/clip-store";
+import type { Clip } from "./src/clip/clip";
+import { deserialize, serializeClip } from "./app/clip-wire";
 
 const CONFIG_ROUTE = "/__config";
 const PROXY_PREFIX = "/__model";
+const CLIPS_ROUTE = "/__clips";
+
+/** 摘录落在这里。已 gitignore——它是你的阅读记录，不是仓库内容。 */
+const CLIPS_ROOT = path.join(import.meta.dirname, ".clips");
+
+function readBody(request: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    request.on("error", reject);
+  });
+}
 
 /**
  * 把模型端点转发一道。
@@ -58,6 +75,39 @@ export default defineConfig({
               response.end(text);
             })
             .catch(() => response.end("null"));
+        });
+
+        // 真正的落盘。浏览器那侧的 ClipStore 只是把调用转发到这儿——渲染进程不碰
+        // 文件系统，这条边界在打包应用里是 IPC（ADR-0006）。
+        const store = createClipStore(CLIPS_ROOT);
+        server.middlewares.use(CLIPS_ROUTE, (request, response) => {
+          const segments = (request.url ?? "/").split("?")[0].split("/").filter(Boolean).map(decodeURIComponent);
+          const [docId, clipId] = segments;
+
+          const handle = async (): Promise<string> => {
+            if (!docId) throw new Error("缺少 docId");
+            if (request.method === "POST") {
+              await store.save(docId, deserialize<Clip>(await readBody(request)));
+              return "{}";
+            }
+            if (request.method === "DELETE" && clipId) {
+              await store.delete(docId, clipId);
+              return "{}";
+            }
+            return `[${(await store.listByDoc(docId)).map(serializeClip).join(",")}]`;
+          };
+
+          handle()
+            .then((body) => {
+              response.setHeader("content-type", "application/json");
+              response.end(body);
+            })
+            .catch((error: Error) => {
+              // 500 + 原因。浏览器那侧靠状态码判成败，这里静默成功等于让编排层
+              // 以为已落盘（内存 ready、磁盘空）——ADR-0011 说文件才是唯一真相。
+              response.statusCode = 500;
+              response.end(error.message);
+            });
         });
       },
     },

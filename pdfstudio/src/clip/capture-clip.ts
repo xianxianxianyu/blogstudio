@@ -9,8 +9,8 @@ import type { Recognizer, Region } from "../recognizer/recognizer";
  * 抛错会丢掉前者，只返回 state 会丢掉后者，所以两者都显式带上。
  */
 export type CaptureOutcome =
-  | { ok: true; state: ClipsState }
-  | { ok: false; state: ClipsState; error: unknown };
+  | { ok: true; state: ClipsState; clipId: string }
+  | { ok: false; state: ClipsState; clipId: string; error: unknown };
 
 export interface CaptureClipDeps {
   recognizer: Recognizer;
@@ -42,7 +42,7 @@ export async function captureClip(
   // capture 会合并到同区域的已有摘录上，所以这条摘录的 id 未必是 newId() 给的那个
   // ——重试同一块地方时用的是原来那条的 id。按区域回查才拿得准。
   const clip = next.clips.find((candidate) => sameRegion(candidate.region, region));
-  if (!clip) return { ok: true, state: next };
+  if (!clip) return { ok: true, state: next, clipId: "" };
 
   next = reduce(next, { type: "recognize", id: clip.id });
 
@@ -50,7 +50,12 @@ export async function captureClip(
   try {
     content = await deps.recognizer.recognize(region);
   } catch (error) {
-    return { ok: false, state: reduce(next, { type: "recognize-failed", id: clip.id }), error };
+    return {
+      ok: false,
+      state: reduce(next, { type: "recognize-failed", id: clip.id }),
+      clipId: clip.id,
+      error,
+    };
   }
 
   next = reduce(next, { type: "recognized", id: clip.id, content });
@@ -61,5 +66,5 @@ export async function captureClip(
   const saved = next.clips.find((candidate) => candidate.id === clip.id) as Clip;
   await deps.store.save(docId, saved);
 
-  return { ok: true, state: next };
+  return { ok: true, state: next, clipId: clip.id };
 }
