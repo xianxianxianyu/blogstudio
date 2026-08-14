@@ -238,3 +238,19 @@ describe("Clip reducer — 对同一区域再次 capture", () => {
     expect(second.clips).toHaveLength(2);
   });
 });
+
+describe("Clip reducer — 对已入库区域再次 capture", () => {
+  it("不能把已入库的摘录打回 capturing——原文已冻结为 evidence", () => {
+    const FIXED = "The dominant sequence transduction models";
+    const promoted = reduce(readyClip(FIXED), { type: "promote", id: "c1", contextId: "ctx1" });
+
+    expect(can(promoted, { type: "capture", id: "c2", region: REGION }).ok).toBe(false);
+
+    const state = reduce(promoted, { type: "capture", id: "c2", region: REGION });
+
+    // capture 的合并分支会 patch 到已有 clip 上，绕过了 recapture 那条守卫——
+    // 同一个动作换个入口就能把 evidence 清空，而 context 还指着它。
+    expect(state.clips[0].state).toBe("promoted");
+    expect(state.clips[0].sourceText).toBe(FIXED);
+  });
+});

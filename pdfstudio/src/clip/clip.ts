@@ -69,6 +69,20 @@ function editDistance(a: string, b: string): number {
   return previous[b.length];
 }
 
+/**
+ * 同一区域：页码相同且矩形四个数都相同。
+ * 定案是「合并进已有标签，不新建第二个摘录」——同一区域两个标签会让锚点回跳有歧义。
+ */
+function sameRegion(a: Region, b: Region): boolean {
+  return (
+    a.page === b.page &&
+    a.rect.x === b.rect.x &&
+    a.rect.y === b.rect.y &&
+    a.rect.width === b.rect.width &&
+    a.rect.height === b.rect.height
+  );
+}
+
 export interface Verdict {
   ok: boolean;
   reason: string;
@@ -141,27 +155,21 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
 
 /** `reduce` 的前置判定，也供 UI 置灰按钮。 */
 export function can(state: ClipsState, action: Action): Verdict {
-  if (action.type === "capture") return ALLOWED;
+  if (action.type === "capture") {
+    // capture 会合并到同区域的已有摘录上，所以它**也能改到别人**——已入库的那条
+    // 必须挡住，否则换个入口就能绕过 recapture 那条冻结守卫，把 evidence 清空，
+    // 而 context 还指着它。守卫表按 id 找，capture 的 id 是新的，所以要单独判。
+    const existing = state.clips.find((clip) => sameRegion(clip.region, action.region));
+    return existing?.state === "promoted"
+      ? denied("这块区域的摘录已入库，原文已冻结为 evidence，不能重拍覆盖。")
+      : ALLOWED;
+  }
 
   const clip = state.clips.find((candidate) => candidate.id === action.id);
   if (!clip) return denied("没有这条摘录。");
 
   const guard = GUARDS[action.type] as Guard<typeof action.type>;
   return guard(clip, action);
-}
-
-/**
- * 同一区域：页码相同且矩形四个数都相同。
- * 定案是「合并进已有标签，不新建第二个摘录」——同一区域两个标签会让锚点回跳有歧义。
- */
-function sameRegion(a: Region, b: Region): boolean {
-  return (
-    a.page === b.page &&
-    a.rect.x === b.rect.x &&
-    a.rect.y === b.rect.y &&
-    a.rect.width === b.rect.width &&
-    a.rect.height === b.rect.height
-  );
 }
 
 function patchClip(state: ClipsState, id: string, patch: Partial<Clip>): ClipsState {

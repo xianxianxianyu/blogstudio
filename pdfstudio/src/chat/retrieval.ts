@@ -93,23 +93,50 @@ interface Line {
   text: string;
 }
 
-/** 把 item 按基线聚成行。同一行的 item 基线相同（允许极小抖动）。 */
+/**
+ * 同一行内两段文字之间的最大水平间隔。超过它就不是同一行，是隔壁栏。
+ *
+ * 行内词间距只有几个点；双栏论文的栏沟是二十几个点（ResNet 左栏止于 ~286、
+ * 右栏起于 ~308）。12pt 落在两者之间。
+ */
+const MAX_INTRA_LINE_GAP = 12;
+
+/**
+ * 把 item 聚成行。**两个条件都要满足**：基线相同，且水平方向接得上。
+ *
+ * 只按基线聚会把左右栏并进同一行——双栏论文左右栏共享基线网格，必然撞上。
+ * 实测 ResNet p.8 有 42 处跨栏合并，包括正文级的
+ * `"(7.93%, Table 6)." + "Based on deep residual nets, we won the "`。
+ * 那不只是文本难看：合并出来的行 x 跨度横贯整页，会被 `isTwoColumn` 算成「跨中线」，
+ * 把双栏页推向单栏判定，读序还原**静默关闭**。实测该页占比 0.298，离 0.3 只差 0.002。
+ *
+ * 纯空白 item 也**必须保留**：pdf.js 把词间空格单独发成 item（ResNet p.8 的 308 个
+ * item 里有 90 个是纯空白），丢掉再直接拼接就会把词粘死——`Table7.ObjectdetectionmAP`
+ * 这样的东西进了索引，`detection`、`object` 这些词元就从关键词那一路彻底消失。
+ */
 function toLines(items: TextItem[]): Line[] {
   const lines: Line[] = [];
 
   for (const item of items) {
-    if (item.str.trim() === "") continue;
+    if (item.str === "") continue;
     const [a, b, , , x, y] = item.transform;
     const length = Math.hypot(a, b) || 1;
     const endX = x + (item.width * a) / length;
+    const [left, right] = [Math.min(x, endX), Math.max(x, endX)];
 
-    const existing = lines.find((line) => Math.abs(line.y - y) < 2);
+    const existing = lines.find(
+      (line) =>
+        Math.abs(line.y - y) < 2 &&
+        left - line.x1 < MAX_INTRA_LINE_GAP &&
+        right - line.x0 > -MAX_INTRA_LINE_GAP,
+    );
+
     if (existing) {
       existing.text += item.str;
-      existing.x0 = Math.min(existing.x0, x, endX);
-      existing.x1 = Math.max(existing.x1, x, endX);
+      existing.x0 = Math.min(existing.x0, left);
+      existing.x1 = Math.max(existing.x1, right);
     } else {
-      lines.push({ y, x0: Math.min(x, endX), x1: Math.max(x, endX), text: item.str });
+      lines.push({ y, x0: left, x1: right, text: item.str });
     }
   }
 
@@ -135,8 +162,8 @@ function isTwoColumn(lines: Line[], middle: number): boolean {
  * 不还原的话，pdf.js 的原始顺序会把右栏内容插进左栏正文中间——ResNet p.8 上
  * 一句完整的因果句就被隔壁栏的表格图题劈开了，读者看到的 citation 是拼接的。
  */
-function inReadingOrder(lines: Line[], pageWidth: number): Line[] {
-  const middle = pageWidth / 2;
+function inReadingOrder(lines: Line[], pageLeft: number, pageRight: number): Line[] {
+  const middle = (pageLeft + pageRight) / 2;
   const topDown = (a: Line, b: Line) => b.y - a.y || a.x0 - b.x0;
 
   if (!isTwoColumn(lines, middle)) return [...lines].sort(topDown);
@@ -184,11 +211,13 @@ export async function buildIndex(
   for (let page = 1; page <= document.numPages; page++) {
     const loaded = await document.getPage(page);
     const { items } = await loaded.getTextContent();
-    const [, , pageWidth] = loaded.view;
+    // view 是 [x0, y0, x1, y1]，页宽是 x1 - x0——带 CropBox 偏移的 PDF 上 x0 不为 0。
+    const [x0, , x1] = loaded.view;
 
     const lines = inReadingOrder(
       toLines(items.filter((item): item is TextItem => "str" in item)),
-      pageWidth,
+      x0,
+      x1,
     );
     chunks.push(...packLines(lines, page));
   }
@@ -262,14 +291,21 @@ export async function searchChunks(
 
   const scored = await scoreChunks(chunks, query, embedder);
   // 没有尖峰就是没检索到——宁可报 grounding: 'none'，也不编造一段出处。
+  // 写成 `!(x >= t)` 而非 `x < t`：万一算出 NaN，前者拦住、后者放行。
   // 判据只看向量那一路：中文问句抽不出词元，关键词那一路对它恒为空，
   // 拿它当否决条件会把中文全毙掉。
-  if (peakMargin(scored) < minPeakMargin) return [];
+  if (!(peakMargin(scored) >= minPeakMargin)) return [];
 
   // 排序两路都用：关键词在英文和「中文夹英文术语」上很强（它在英文题上曾是满分），
   // 向量负责跨语言。RRF 让两路都排得靠前的块胜出。
+  // **两侧深度必须一致**。此前向量那一路传的是全量排序、关键词只有 limit*3，
+  // 于是任何关键词命中都能同时从两个列表拿分（≥ 1/60 + ε），而只在向量列表里
+  // 排第一的块只有 1/60——关键词 top-1 永远赢过向量 top-1，与「两路都排得靠前的
+  // 块胜出」正好相反。eval 的中文题刻意不含英文词、关键词那一路恒空，所以这个偏置
+  // 在 eval 上完全测不出来；读者一旦在中文问句里带上英文术语就会踩到。
+  const depth = limit * 3;
   return fuse(
-    [scored.map((entry) => entry.chunk), keywordSearch(chunks, query, limit * 3)],
+    [scored.slice(0, depth).map((entry) => entry.chunk), keywordSearch(chunks, query, depth)],
     limit,
   );
 }

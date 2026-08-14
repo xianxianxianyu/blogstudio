@@ -140,12 +140,19 @@ async function main(): Promise<void> {
   console.log(`中文      ${rate(zh, 1)}     ${rate(zh, 3)}`);
   console.log(`英文      ${rate(en, 1)}     ${rate(en, 3)}`);
 
-  // 那 6 条英文题是 6 条中文题的逐句对译（同页同依据），所以 Δ 就是跨语言净损失，
-  // 没有别的变量能背锅。
+  // Δ 只能在**对译子集**上算：questions.md 里 en-* 六条是 zh-01/05/08/13/15/19 的
+  // 逐句对译（同页同依据），只有这六对之间的差才是干净的跨语言净损失。
+  // 拿 zh 全量 20 条去比，等于把 14 条无对照、难度不同的题混进分母——那是绝对水位差，
+  // 不是净损失。（这个坑我在这个 runner 上踩的第三个统计口径问题。）
+  const PARALLEL_ZH = ["zh-01", "zh-05", "zh-08", "zh-13", "zh-15", "zh-19"];
+  const parallelZh = zh.filter((outcome) => PARALLEL_ZH.includes(outcome.question.id));
+
   for (const k of KS) {
-    const zhHits = zh.filter((outcome) => hitAt(outcome, k)).length / (zh.length || 1);
+    const zhHits = parallelZh.filter((o) => hitAt(o, k)).length / (parallelZh.length || 1);
     const enHits = en.filter((outcome) => hitAt(outcome, k)).length / (en.length || 1);
-    console.log(`Δ@${k}（跨语言净损失）  ${((enHits - zhHits) * 100).toFixed(1)} 个百分点`);
+    console.log(
+      `Δ@${k}（跨语言净损失，${parallelZh.length} 对对译题）  ${((enHits - zhHits) * 100).toFixed(1)} 个百分点`,
+    );
   }
 
   const abstained = offTopic.filter((outcome) => outcome.pages.length === 0).length;

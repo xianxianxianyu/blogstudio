@@ -19,6 +19,13 @@ export interface Embedder {
 
 /** 余弦相似度。两侧都已归一化时等价于点积，但不假设这一点。 */
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
+  // 维度不匹配时逐项相乘会得到 NaN，而 NaN 会**通过**下游的 `< 阈值` 判断
+  // （NaN 的任何比较都是 false）——门槛放行、排序又是无意义的，于是随便一个 chunk
+  // 被当成出处返回。那正是不变量⑤ 要挡的「编造引用」。宁可当场炸。
+  if (a.length !== b.length) {
+    throw new Error(`向量维度不一致：${a.length} vs ${b.length}`);
+  }
+
   let dot = 0;
   let normA = 0;
   let normB = 0;

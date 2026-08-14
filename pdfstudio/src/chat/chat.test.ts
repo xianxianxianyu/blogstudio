@@ -300,12 +300,11 @@ describe("Chat — 双栏页的读序", () => {
     const snippet = answer.citations.find((citation) => citation.kind === "chunk")?.snippet ?? "";
     expect(snippet).toContain("1202-layer network may be unnecessarily");
 
-    // pdf.js 的原始顺序会把右栏的表格图题插进左栏正文中间，读者看到的出处就成了
-    // 「…See also Table 9 for better results.have similar training error…」这种拼接。
-    const splice = snippet.indexOf("have similar training error");
-    if (splice >= 0) {
-      expect(snippet.slice(Math.max(0, splice - 80), splice)).not.toContain("Table 9");
-    }
+    // pdf.js 把词间空格单独发成 item（这一页 308 个 item 里 90 个是纯空白）。
+    // 丢掉它们再直接拼接，会得到 `Table7.ObjectdetectionmAP` 这种粘死的东西——
+    // 关键词那一路按 /[a-z0-9]{3,}/ 切词，`detection`、`object` 就此从索引里消失。
+    expect(snippet).toContain("Object detection");
+    expect(snippet).not.toMatch(/[a-z][A-Z][a-z]{3,}/);
   });
 });
 
