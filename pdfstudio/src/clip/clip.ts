@@ -150,6 +150,20 @@ export function can(state: ClipsState, action: Action): Verdict {
   return guard(clip, action);
 }
 
+/**
+ * 同一区域：页码相同且矩形四个数都相同。
+ * 定案是「合并进已有标签，不新建第二个摘录」——同一区域两个标签会让锚点回跳有歧义。
+ */
+function sameRegion(a: Region, b: Region): boolean {
+  return (
+    a.page === b.page &&
+    a.rect.x === b.rect.x &&
+    a.rect.y === b.rect.y &&
+    a.rect.width === b.rect.width &&
+    a.rect.height === b.rect.height
+  );
+}
+
 function replaceClip(state: ClipsState, id: string, patch: Partial<Clip>): ClipsState {
   return {
     ...state,
@@ -161,7 +175,19 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
   if (!can(state, action).ok) return state;
 
   switch (action.type) {
-    case "capture":
+    case "capture": {
+      // 合并而非新建。此前这条定案只落在 recapture 上，capture 无条件 append——
+      // 于是「不新建第二个摘录」这条规则被绕过去了。
+      const existing = state.clips.find((clip) => sameRegion(clip.region, action.region));
+      if (existing) {
+        return replaceClip(state, existing.id, {
+          state: "capturing",
+          content: null,
+          sourceText: null,
+          translation: null,
+        });
+      }
+
       return {
         ...state,
         clips: [
@@ -178,6 +204,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
           },
         ],
       };
+    }
 
     case "recognize":
       return replaceClip(state, action.id, { state: "recognizing" });

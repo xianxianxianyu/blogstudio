@@ -6,7 +6,12 @@ import type { Screenshot } from "../recognizer/recognizer";
 // canonical 接口见 pdfstudio/docs/chat-retrieval-interface.md
 // Retrieval 是 Chat 的内部缝，不对外开——调用方只看得到 ask。
 
-/** 贴入时刻的深拷贝，此后摘录再怎么编辑都不回写。 */
+/**
+ * 贴入时刻的深拷贝，此后摘录再怎么编辑都不回写。
+ *
+ * **拷贝责任在调用方**：Chat 纯被动、无会话状态（不变量 ③），历史每次由调用方传入，
+ * 它什么都不存，也就无从违反这条。这里描述的是交进来的这个值该具备的性质。
+ */
 export interface ClipSnapshot {
   clipId: string;
   sourceText: string;
@@ -53,6 +58,8 @@ export interface AskOptions {
 
 export interface Chat {
   ask(turns: Turn[], options?: AskOptions): Promise<Answer>;
+  /** rare 逃生口：OCR 修正 / 换切块策略后重建索引。 */
+  reindex(): Promise<void>;
 }
 
 /**
@@ -170,6 +177,10 @@ export function createChat(deps: ChatDeps): Chat {
   const ensureIndex = () => (index ??= buildIndex(deps.document));
 
   return {
+    async reindex(): Promise<void> {
+      index = null;
+    },
+
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
@@ -195,29 +206,21 @@ export function createChat(deps: ChatDeps): Chat {
       }
 
       // grounding 由检索结果判定，不看模型说了什么（不变量 ⑤）。
-      if (hit) {
-        return {
-          text,
-          citations: [{ kind: "chunk", page: hit.page, snippet: hit.text }],
-          grounding: "retrieved",
-        };
-      }
+      // 出处两种都要给：检索命中不代表读者贴进来的摘录就不是依据了。
+      const citations: Citation[] = [
+        ...(hit ? [{ kind: "chunk" as const, page: hit.page, snippet: hit.text }] : []),
+        ...collectSnapshots(turns).map((snapshot) => ({
+          kind: "clip" as const,
+          page: snapshot.page,
+          clipId: snapshot.clipId,
+        })),
+      ];
 
-      // 检索没命中，但读者自己贴了摘录进来——那就是这次回答的依据。
-      const snapshots = collectSnapshots(turns);
-      if (snapshots.length > 0) {
-        return {
-          text,
-          citations: snapshots.map((snapshot) => ({
-            kind: "clip" as const,
-            page: snapshot.page,
-            clipId: snapshot.clipId,
-          })),
-          grounding: "pasted",
-        };
-      }
+      // grounding 是「依据的成色」，不是「有几条出处」：检索到原文最硬；
+      // 只有贴入内容时是 pasted；两者都没有就必须诚实地说 none（不变量 ⑤）。
+      const grounding = hit ? "retrieved" : citations.length > 0 ? "pasted" : "none";
 
-      return { text, citations: [], grounding: "none" };
+      return { text, citations, grounding };
     },
   };
 }

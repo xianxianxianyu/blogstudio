@@ -226,3 +226,60 @@ describe("Chat — 索引只建一次", () => {
     expect(getPageCalls).toBe(afterFirst);
   });
 });
+
+describe("Chat — 检索命中且贴了摘录", () => {
+  it("两种出处都要给，不能因为检索命中就把摘录的 citation 丢掉", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    const model = createFakeModelClient({ completeText: "退化问题是……" });
+    const chat = createChat({ document, docId: "arxiv-1512.03385", model });
+
+    const answer = await chat.ask([
+      {
+        role: "user",
+        parts: [
+          { kind: "text", text: "What is the degradation problem?" },
+          {
+            kind: "clip",
+            snapshot: { clipId: "c9", sourceText: "deeper networks degrade", page: 2 },
+          },
+        ],
+      },
+    ]);
+
+    // 依据里有检索到的原文，所以 grounding 是 retrieved；但读者贴进来的摘录
+    // 同样是这次回答的依据，出处不该被吞掉。
+    expect(answer.grounding).toBe("retrieved");
+    expect(answer.citations.map((citation) => citation.kind).sort()).toEqual(["chunk", "clip"]);
+  });
+});
+
+describe("Chat — reindex", () => {
+  it("重建索引后下一次提问会重读文档", async () => {
+    const document = await openFixturePdf("1512.03385.pdf");
+    let getPageCalls = 0;
+    const counted = new Proxy(document, {
+      get(target, prop: keyof PDFDocumentProxy) {
+        if (prop === "getPage") {
+          return (page: number) => {
+            getPageCalls++;
+            return target.getPage(page);
+          };
+        }
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const model = createFakeModelClient({ completeText: "答案" });
+    const chat = createChat({ document: counted, docId: "arxiv-1512.03385", model });
+
+    await chat.ask(ask("What is the degradation problem?"));
+    const afterFirst = getPageCalls;
+
+    await chat.reindex();
+    await chat.ask(ask("What is the degradation problem?"));
+
+    // canonical 把 reindex 定为「OCR 修正 / 换切块策略后重建」的逃生口——
+    // 没有它，索引一旦建成就不可失效。
+    expect(getPageCalls).toBeGreaterThan(afterFirst);
+  });
+});

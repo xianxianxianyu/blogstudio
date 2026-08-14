@@ -216,3 +216,25 @@ describe("Clip reducer — 入库后不能被重新识别打回", () => {
     expect(state.clips[0].sourceText).toBe(FIXED);
   });
 });
+
+describe("Clip reducer — 对同一区域再次 capture", () => {
+  it("合并进已有摘录，不新建第二个——两个标签会让锚点回跳有歧义", () => {
+    const first = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+    const again = reduce(first, { type: "capture", id: "c2", region: REGION });
+
+    expect(again.clips).toHaveLength(1);
+    expect(again.clips[0].id).toBe("c1");
+  });
+
+  it("框到别处就是另一条摘录", () => {
+    const first = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+    const elsewhere: Region = {
+      ...REGION,
+      rect: { ...REGION.rect, y: REGION.rect.y + 200 },
+    };
+
+    const second = reduce(first, { type: "capture", id: "c2", region: elsewhere });
+
+    expect(second.clips).toHaveLength(2);
+  });
+});
