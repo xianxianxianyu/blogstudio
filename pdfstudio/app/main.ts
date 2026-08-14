@@ -43,8 +43,8 @@ const appConfig = parseConfig(
     .catch(() => null),
 );
 
-function endpoint() {
-  const resolved = resolveEndpoint(appConfig, "recognition");
+function endpoint(capability: "recognition" | "translation") {
+  const resolved = resolveEndpoint(appConfig, capability);
   // 走 dev server 转发而不是直连：那个端点的 OPTIONS 预检返回 403，浏览器过不去。
   // 打包应用里没有这一层（ADR-0006），所以这行是开发页面专属的。
   //
@@ -88,9 +88,12 @@ let start: { x: number; y: number } | null = null;
  */
 function atCanvas(event: PointerEvent): { x: number; y: number } {
   const rect = canvas.getBoundingClientRect();
+  // 取整：像素没有小数。不取整的话裁图时 canvas 会把小数截断，而 Screenshot 里记的
+  // 仍是小数——**截图自报的尺寸与真实字节对不上**，而截图是地面真值（ADR-0011）。
+  // 在这里一次取整，锚点与图用的是同一组坐标，不会各偏各的。
   return {
-    x: ((event.clientX - rect.left) * canvas.width) / rect.width,
-    y: ((event.clientY - rect.top) * canvas.height) / rect.height,
+    x: Math.round(((event.clientX - rect.left) * canvas.width) / rect.width),
+    y: Math.round(((event.clientY - rect.top) * canvas.height) / rect.height),
   };
 }
 
@@ -143,8 +146,13 @@ canvas.addEventListener("pointerup", async (event) => {
   preview.src = URL.createObjectURL(new Blob([pixels.bytes as BlobPart], { type: pixels.mime }));
   out.append(preview);
 
-  const model = createModelClient(endpoint());
-  const recognizer = createRecognizer({ document: document_, recognition: model });
+  // 翻译是独立配置的功能（ADR-0010），要单独接。漏了它 translate() 根本不会被调用,
+  // 而划词翻译恰恰是日常主路径——第一条落盘的摘录就是这么少了 `## 译文` 的。
+  const recognizer = createRecognizer({
+    document: document_,
+    recognition: createModelClient(endpoint("recognition")),
+    translation: createModelClient(endpoint("translation")),
+  });
   const pre = window.document.createElement("pre");
   pre.textContent = "识别中…";
   out.append(pre);
@@ -179,6 +187,7 @@ canvas.addEventListener("pointerup", async (event) => {
       state: clip.state,
       route: clip.content?.route,
       sourceText: clip.sourceText,
+      translation: clip.translation,
       multimodal: clip.content?.multimodal,
       落盘: `pdfstudio/.clips/${docId}/${clip.id}/index.md`,
     },
