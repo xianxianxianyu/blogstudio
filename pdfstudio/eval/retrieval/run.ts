@@ -13,7 +13,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { openFixturePdf } from "../../test/fixtures";
-import { buildIndex, searchChunks } from "../../src/chat/retrieval";
+import { buildIndex, searchChunks, scoreChunks } from "../../src/chat/retrieval";
 import type { Chunk } from "../../src/chat/retrieval";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
 
@@ -60,6 +60,8 @@ interface Outcome {
   question: Question;
   /** 检索到的块所在页，按打分降序。 */
   pages: number[];
+  /** 与 pages 一一对应的相似度；关键词模式下为空。 */
+  scores: number[];
 }
 
 function hitAt(outcome: Outcome, k: number): boolean {
@@ -91,13 +93,20 @@ async function main(): Promise<void> {
         await buildIndex(await openFixturePdf(question.paper), embedder),
       );
     }
-    const chunks = await searchChunks(
-      indexes.get(question.paper)!,
-      question.question,
-      Math.max(...KS),
-      embedder,
-    );
-    outcomes.push({ question, pages: chunks.map((chunk) => chunk.page) });
+    const index = indexes.get(question.paper)!;
+
+    if (embedder) {
+      // 一次打分、多个阈值：扫描时不重跑 embedding。
+      const scored = await scoreChunks(index, question.question, embedder);
+      outcomes.push({
+        question,
+        pages: scored.slice(0, Math.max(...KS)).map((s) => s.chunk.page),
+        scores: scored.slice(0, Math.max(...KS)).map((s) => s.score),
+      });
+    } else {
+      const chunks = await searchChunks(index, question.question, Math.max(...KS));
+      outcomes.push({ question, pages: chunks.map((chunk) => chunk.page), scores: [] });
+    }
   }
 
   // 「答不了」的题也带 lang，但它们没有正确页，混进 recall 的分母会把成绩冲淡。
@@ -127,6 +136,25 @@ async function main(): Promise<void> {
   const zhEmpty = zh.filter((outcome) => outcome.pages.length === 0).length;
   if (zhEmpty === zh.length && na.length > 0) {
     console.log(`  当前正是这种情况：${zh.length} 条中文题全部返回空，abstention 是白送的。`);
+  }
+
+  if (useEmbedder) {
+    // 阈值与 abstention / 召回是此消彼长的，只看一个必调歪，所以并排扫。
+    console.log("\n阈值权衡曲线（中文 recall / 答不了正确返回空）：");
+    console.log("  阈值    zh@1   zh@3   abstention");
+    for (const threshold of [0.3, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7]) {
+      const gate = (outcome: Outcome, k: number) =>
+        outcome.pages.filter((_, i) => outcome.scores[i] >= threshold).slice(0, k);
+      const hits = (set: Outcome[], k: number) =>
+        set.filter((o) => o.question.page !== null && gate(o, k).includes(o.question.page)).length;
+      const abst = na.filter((o) => gate(o, Math.max(...KS)).length === 0).length;
+      console.log(
+        `  ${threshold.toFixed(2)}  ${((hits(zh, 1) / zh.length) * 100).toFixed(1).padStart(5)}% ` +
+          `${((hits(zh, 3) / zh.length) * 100).toFixed(1).padStart(5)}%   ${abst}/${na.length}`,
+      );
+    }
+    console.log("  → 选让 zh@3 尽量高、同时 abstention 保持 3/3 的那一档，填进");
+    console.log("     src/chat/retrieval.ts 的 MIN_SIMILARITY。");
   }
 
   console.log("\n未命中的中文题：");

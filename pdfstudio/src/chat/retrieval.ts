@@ -155,18 +155,38 @@ export async function buildIndex(
  * （`eval/retrieval/` 实测中文 recall@3 为 0%、英文 100%），
  * 而那正是 ADR-0003 选多语言 embedding 的理由。等跨语言那条红灯来驱动再换。
  */
+export interface ScoredChunk {
+  chunk: Chunk;
+  score: number;
+}
+
+/**
+ * 向量打分，按分数降序。**不施加下限**——下限由调用方给。
+ *
+ * 单独导出是给 eval 扫阈值用：一次打分、多个阈值，不必为每个阈值重跑 embedding。
+ * 这样 eval 与生产走的是同一段排序逻辑，不会各自漂。
+ */
+export async function scoreChunks(
+  chunks: Chunk[],
+  query: string,
+  embedder: Embedder,
+): Promise<ScoredChunk[]> {
+  const queryVector = await embedder.embedQuery(query);
+  return chunks
+    .map((chunk) => ({ chunk, score: cosineSimilarity(queryVector, chunk.vector!) }))
+    .sort((a, b) => b.score - a.score);
+}
+
 export async function searchChunks(
   chunks: Chunk[],
   query: string,
   limit = 1,
   embedder?: Embedder,
+  minSimilarity = MIN_SIMILARITY,
 ): Promise<Chunk[]> {
   if (embedder && chunks.every((chunk) => chunk.vector)) {
-    const queryVector = await embedder.embedQuery(query);
-    return chunks
-      .map((chunk) => ({ chunk, score: cosineSimilarity(queryVector, chunk.vector!) }))
-      .filter((scored) => scored.score >= MIN_SIMILARITY)
-      .sort((a, b) => b.score - a.score)
+    return (await scoreChunks(chunks, query, embedder))
+      .filter((scored) => scored.score >= minSimilarity)
       .slice(0, limit)
       .map((scored) => scored.chunk);
   }
