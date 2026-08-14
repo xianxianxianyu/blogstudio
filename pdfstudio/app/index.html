@@ -18,7 +18,12 @@
     <div id="left"><div id="stage"><canvas id="page"></canvas><div id="box"></div></div></div>
     <div id="right">
       <p><b>在左边拖一个框。</b>这一页只验一条链路：拖框 → 换算成页面坐标 → 裁成 PNG → 交给识别模块。</p>
-      <p>页码 <input id="pageNo" type="number" value="1" min="1" style="width:4em"> 缩放 <input id="scale" type="number" value="1.5" step="0.25" style="width:4em"> <button id="reload">重画</button></p>
+      <p>
+        <button id="prev">← 上一页</button>
+        第 <input id="pageNo" type="number" value="1" min="1" style="width:4em"> / <span id="total">?</span> 页
+        <button id="next">下一页 →</button>
+      </p>
+      <p>缩放 <input id="scale" type="number" value="1.5" step="0.25" min="0.5" style="width:4em">（改完自动重画）</p>
       <div id="out"></div>
     </div>
     <script type="module" src="./main.ts"></script>

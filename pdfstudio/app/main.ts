@@ -7,7 +7,9 @@
  *
  *   npm run dev:pdfstudio
  *
- * 配置从 localStorage 读，没有就问一次——避免把 key 写进任何被服务的文件。
+ * 配置由 dev server 从 `pdfstudio/config.json` 递过来（浏览器读不了文件系统）。
+ * 那个路由只挂在 configureServer 上，不存在于构建产物里——ADR-0005：真实 key
+ * 绝不进源码或构建产物。
  */
 import * as pdfjs from "pdfjs-dist";
 // @ts-expect-error ——`?url` 是 Vite 的产物，TS 不认识这种导入
@@ -26,11 +28,17 @@ const out = document.querySelector<HTMLDivElement>("#out")!;
 const pageNo = document.querySelector<HTMLInputElement>("#pageNo")!;
 const scaleInput = document.querySelector<HTMLInputElement>("#scale")!;
 
+const appConfig = parseConfig(
+  await fetch("/__config")
+    .then((response) => response.json() as Promise<unknown>)
+    .catch(() => null),
+);
+
 function endpoint() {
-  const stored = localStorage.getItem("pdfstudio-config");
-  const raw = stored ?? window.prompt('贴入配置 JSON，例如 {"baseURL":"…","apiKey":"…","model":"…"}') ?? "{}";
-  localStorage.setItem("pdfstudio-config", raw);
-  return resolveEndpoint(parseConfig(JSON.parse(raw) as unknown), "recognition");
+  const resolved = resolveEndpoint(appConfig, "recognition");
+  // 走 dev server 转发而不是直连：那个端点的 OPTIONS 预检返回 403，浏览器过不去。
+  // 打包应用里没有这一层（ADR-0006），所以这行是开发页面专属的。
+  return { ...resolved, baseURL: "/__model" };
 }
 
 const document_ = await pdfjs.getDocument({ url: "/papers/1706.03762.pdf" }).promise;
@@ -45,9 +53,18 @@ async function draw() {
   return vp;
 }
 
-document.querySelector("#reload")!.addEventListener("click", async () => {
+document.querySelector("#total")!.textContent = String(document_.numPages);
+
+// 改完就重画，不用再记得点按钮；翻页按钮把页码夹在有效范围内。
+async function go(page: number) {
+  pageNo.value = String(Math.min(Math.max(page, 1), document_.numPages));
   viewport = await draw();
-});
+}
+
+pageNo.addEventListener("change", () => void go(Number(pageNo.value)));
+scaleInput.addEventListener("change", () => void go(Number(pageNo.value)));
+document.querySelector("#prev")!.addEventListener("click", () => void go(Number(pageNo.value) - 1));
+document.querySelector("#next")!.addEventListener("click", () => void go(Number(pageNo.value) + 1));
 
 let start: { x: number; y: number } | null = null;
 
