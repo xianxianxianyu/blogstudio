@@ -40,7 +40,7 @@ export async function buildIndex(document: PDFDocumentProxy): Promise<Chunk[]> {
  * 关键词检索。这是**已知不够用**的基线：读者用中文问英文论文时它一分也打不出来，
  * 而那正是 ADR-0003 选 bge-m3 的理由。等跨语言那条红灯来驱动再换。
  */
-export function findBestChunk(chunks: Chunk[], query: string): Chunk | null {
+export function searchChunks(chunks: Chunk[], query: string, limit = 1): Chunk[] {
   const terms = [...new Set(query.toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])];
   const haystacks = chunks.map((chunk) => chunk.text.toLowerCase());
 
@@ -49,16 +49,16 @@ export function findBestChunk(chunks: Chunk[], query: string): Chunk | null {
   const distinctive = terms.filter(
     (term) => haystacks.filter((text) => text.includes(term)).length * 2 <= chunks.length,
   );
-  if (distinctive.length === 0) return null;
+  if (distinctive.length === 0) return [];
 
-  const best = chunks
+  return chunks
     .map((chunk, index) => ({
       chunk,
       score: distinctive.filter((term) => haystacks[index].includes(term)).length,
     }))
     .filter((scored) => scored.score > 0)
-    .sort((a, b) => b.score - a.score)[0];
-
-  return best?.chunk ?? null;
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((scored) => scored.chunk);
 }
 

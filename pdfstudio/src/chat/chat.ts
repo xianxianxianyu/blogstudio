@@ -1,5 +1,5 @@
 import type { PDFDocumentProxy } from "pdfjs-dist";
-import { buildIndex, findBestChunk } from "./retrieval";
+import { buildIndex, searchChunks } from "./retrieval";
 import type { Chunk } from "./retrieval";
 import type { ModelClient, ModelMessage } from "../model/model-client";
 import type { Screenshot } from "../recognizer/recognizer";
@@ -128,7 +128,7 @@ export function createChat(deps: ChatDeps): Chat {
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
-      const hit = findBestChunk(await ensureIndex(), queryOf(turns));
+      const [hit] = searchChunks(await ensureIndex(), queryOf(turns));
 
       const messages = turns.map(toMessage);
       if (hit) {

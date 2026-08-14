@@ -13,7 +13,8 @@
     "test:pdfstudio": "vitest run --config pdfstudio/vitest.config.ts",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
-    "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts"
+    "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts",
+    "eval:retrieval": "tsx pdfstudio/eval/retrieval/run.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.30",
