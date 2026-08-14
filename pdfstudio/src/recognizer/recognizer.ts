@@ -210,7 +210,6 @@ type VisionKind = "formula" | "figure" | "image" | "mixed";
 interface VisionOutput {
   kind?: VisionKind;
   sourceText?: string | null;
-  translation?: string | null;
   multimodal?: string | null;
 }
 
@@ -235,14 +234,16 @@ const VISION_TABLE: Record<VisionKind, { translation: boolean; multimodal: boole
   mixed: { translation: true, multimodal: true },
 };
 
-/**
- * prompt 按区域类型分支——但只有一次调用：不先分类再选 prompt（那是两次，
- * 违反「恰好一次」），而是让模型在同一次回答里报出 kind，出口再按路由表强制。
- */
 const DEFAULT_TARGET_LANG = "zh";
 
-const visionPrompt = (targetLang: string) =>
-  [
+/**
+ * prompt 按区域类型分支，但识别只调一次：不先分类再调一次（那是两次调用），
+ * 而是让模型在同一次回答里报出 kind，出口再按路由表强制。
+ * **不索要译文**——翻译是另一个独立配置的功能（ADR-0010），
+ * 索要它等于要求识别模型必须会翻译，专用识别模型就此进不来。
+ */
+
+const VISION_PROMPT = [
     "读这个区域，判断它属于哪一类，返回 JSON。kind 取 formula | figure | image | mixed。",
     "按这个顺序判定，取第一个成立的：",
     "1. 整块就是一条或几条公式 → formula",
@@ -251,11 +252,11 @@ const visionPrompt = (targetLang: string) =>
     "   看的是它在不在解释这张图，不是长度。",
     "3. 有图或表，但文字只有图题和图内标签 → figure",
     "4. 连图题和标签都没有 → image",
-    "各类型的字段这样填：",
-    "- formula（公式区）：sourceText 放 LaTeX（逐字无损编码），translation 与 multimodal 一律 null。",
-    "- figure（图/表区）：sourceText 放图内文字（没有就 null），translation 为 null，multimodal 放一句话描述。",
-    "- image（纯图区）：sourceText 与 translation 一律 null，multimodal 放一句话描述。",
-    `- mixed（图文混排区）：sourceText 放原文逐字，translation 放原文译成 ${targetLang} 的结果，multimodal 放一句话描述。`,
+    "各类型的字段这样填（**不要翻译**，翻译由另一个模块负责）：",
+    "- formula（公式区）：sourceText 放 LaTeX（逐字无损编码），multimodal 为 null。",
+    "- figure（图/表区）：sourceText 放图内文字（没有就 null），multimodal 放一句话描述。",
+    "- image（纯图区）：sourceText 为 null，multimodal 放一句话描述。",
+    "- mixed（图文混排区）：sourceText 放原文逐字，multimodal 放一句话描述。",
   ].join("\n");
 
 /**
@@ -314,7 +315,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
             messages: [
               {
                 role: "user",
-                content: visionPrompt(targetLang),
+                content: VISION_PROMPT,
               },
             ],
             // Screenshot 结构上就是 ModelImage 的子集，逐字段手抄只会制造漂移。
@@ -342,12 +343,17 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
           throw new RecognizeError("bad-output", "模型没有报出区域类型");
         }
 
+        // 公式的 LaTeX 也走 sourceText：它是逐字无损编码，公式摘录因此有 evidence、能入库。
+        const sourceText = blankToNull(output.sourceText);
+
         return {
           route: "vision",
           anchor,
-          // 公式的 LaTeX 也走 sourceText：它是逐字无损编码，公式摘录因此有 evidence、能入库。
-          sourceText: blankToNull(output.sourceText),
-          translation: allow.translation ? (output.translation ?? undefined) : undefined,
+          sourceText,
+          // 译文一律由翻译模块产出，识别模型顺手回的那份不采纳（ADR-0010）。
+          // 路由表的 translation 一栏现在管的是「要不要调翻译模块」——公式区不翻，
+          // 翻 LaTeX 没有意义。
+          translation: allow.translation ? await translate(deps, sourceText, targetLang) : undefined,
           multimodal: allow.multimodal ? (output.multimodal ?? undefined) : undefined,
           images: [region.pixels],
           screenshot: region.pixels,

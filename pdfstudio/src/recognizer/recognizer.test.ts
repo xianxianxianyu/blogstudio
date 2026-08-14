@@ -299,62 +299,65 @@ describe("Recognizer — engine 逃生口", () => {
 });
 
 describe("Recognizer — 译文语言", () => {
-  const MIXED_OUTPUT = JSON.stringify({
-    kind: "mixed",
-    sourceText: "Figure 1: The Transformer - model architecture.",
-    translation: "figure 1: the Transformer model architecture.",
-    multimodal: "架构图",
-  });
+  async function withTranslator(targetLang?: string) {
+    const document = await openFixturePdf("1706.03762.pdf");
+    const recognition = createFakeModelClient();
+    const translation = createFakeModelClient({ completeText: "译文" });
+    return {
+      translation,
+      recognizer: createRecognizer({ document, recognition, translation, targetLang }),
+    };
+  }
 
   it("默认译成 zh", async () => {
-    const { model, recognizer } = await setup("1706.03762.pdf", { completeText: MIXED_OUTPUT });
+    const { translation, recognizer } = await withTranslator();
 
-    await recognizer.recognize(regionAt(3, MIXED_RECT));
+    await recognizer.recognize(regionAt(1, ABSTRACT_RECT));
 
-    expect(promptOf(model)).toContain("zh");
+    // 目标语言现在属于翻译模块，不再写进识别 prompt（ADR-0010）。
+    // 只断言指令那半句——prompt 里还有被翻译的英文原文，整体匹配会误伤。
+    expect(promptOf(translation)).toContain("译成 zh");
   });
 
   it("构造配置的 targetLang 决定译文语言", async () => {
-    const { model, recognizer } = await setup(
-      "1706.03762.pdf",
-      { completeText: MIXED_OUTPUT },
-      "en",
-    );
+    const { translation, recognizer } = await withTranslator("en");
 
-    await recognizer.recognize(regionAt(3, MIXED_RECT));
+    await recognizer.recognize(regionAt(1, ABSTRACT_RECT));
 
-    const prompt = promptOf(model);
-    expect(prompt).toContain("en");
-    expect(prompt).not.toContain("zh");
+    const prompt = promptOf(translation);
+    expect(prompt).toContain("译成 en");
+    expect(prompt).not.toContain("译成 zh");
   });
 
   it("单次调用的 options.targetLang 压过构造配置", async () => {
-    const { model, recognizer } = await setup(
-      "1706.03762.pdf",
-      { completeText: MIXED_OUTPUT },
-      "en",
-    );
+    const { translation, recognizer } = await withTranslator("en");
 
-    await recognizer.recognize(regionAt(3, MIXED_RECT), { targetLang: "ja" });
+    await recognizer.recognize(regionAt(1, ABSTRACT_RECT), { targetLang: "ja" });
 
-    const prompt = promptOf(model);
-    expect(prompt).toContain("ja");
-    expect(prompt).not.toContain("en");
+    const prompt = promptOf(translation);
+    expect(prompt).toContain("译成 ja");
+    expect(prompt).not.toContain("译成 en");
   });
 });
 
 describe("Recognizer — 图文混排区", () => {
-  it("原文进 sourceText，译文进 translation", async () => {
-    const { recognizer } = await setup("1706.03762.pdf", {
+  it("原文进 sourceText，译文由翻译模块产出、不采纳识别模型顺手回的那份", async () => {
+    const document = await openFixturePdf("1706.03762.pdf");
+    const recognition = createFakeModelClient({
       completeText: JSON.stringify({
         kind: "mixed",
         sourceText: "Figure 1: The Transformer - model architecture.",
-        translation: "图 1：Transformer —— 模型架构。",
+        // 识别模型即使多回了译文也不采纳——翻译是另一个功能，另配模型（ADR-0010）。
+        translation: "识别模型顺手翻的，不该被采用",
         multimodal: "编码器与解码器堆叠的架构图",
       }),
     });
+    const translation = createFakeModelClient({ completeText: "图 1：Transformer —— 模型架构。" });
+    const recognizer = createRecognizer({ document, recognition, translation });
 
     const content = await recognizer.recognize(regionAt(3, MIXED_RECT));
+
+    expect(translation.completeCalls).toHaveLength(1);
 
     expect(content.route).toBe("vision");
     // 混排区有原文 ⟹ 有 evidence ⟹ 可入库，与纯图的 null 相对。
