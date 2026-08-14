@@ -30,6 +30,7 @@ export interface ClipsState {
 export type Action =
   | { type: "capture"; id: string; region: Region }
   | { type: "recognize"; id: string }
+  | { type: "recognize-failed"; id: string }
   | { type: "recognized"; id: string; content: ClipContent }
   | { type: "promote"; id: string; contextId: string }
   | { type: "fix-source"; id: string; text: string }
@@ -64,7 +65,7 @@ function editDistance(a: string, b: string): number {
  * 同一区域：页码相同且矩形四个数都相同。
  * 定案是「合并进已有标签，不新建第二个摘录」——同一区域两个标签会让锚点回跳有歧义。
  */
-function sameRegion(a: Region, b: Region): boolean {
+export function sameRegion(a: Region, b: Region): boolean {
   return (
     a.page === b.page &&
     a.rect.x === b.rect.x &&
@@ -103,6 +104,12 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
 
   recognized: (clip) =>
     clip.state === "recognizing" ? ALLOWED : denied("这条摘录不在识别中，识别结果无处可落。"),
+
+  // 没有这个动作的话，识别一抛错摘录就永远停在 recognizing：recognize 的守卫要 capturing
+  // 进不去，recognized 没内容可落，fix-source / promote 都要 ready——**没有任何动作能把它
+  // 救回来**，只能删掉或重新框一次。网络抖一下就要读者重划一遍，不合理。
+  "recognize-failed": (clip) =>
+    clip.state === "recognizing" ? ALLOWED : denied("这条摘录不在识别中。"),
 
   "fix-source": (clip, action) => {
     if (clip.state === "promoted") return denied("已入库，原文是 context 的 evidence，不能再改。");
@@ -207,6 +214,13 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 
     case "recognize":
       return patchClip(state, action.id, { state: "recognizing" });
+
+    // 退回 capturing 而不是新设一个 failed 态：capturing 的含义正是「已框选、待识别」，
+    // 与失败后的处境完全吻合，而且退回去 recognize 的守卫就自然放行，重试不必重新框。
+    // 失败本身是调用方手上的一次性错误，不是摘录的持久属性——真要在列表里显示
+    // 「这条失败过」时再加状态，那时才有真实需求可依。
+    case "recognize-failed":
+      return patchClip(state, action.id, { state: "capturing" });
 
     case "recognized":
       return patchClip(state, action.id, {
