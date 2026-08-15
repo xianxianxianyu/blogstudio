@@ -23,6 +23,9 @@ const REGION: Region = {
 
 const EMPTY: ClipsState = { clips: [], contexts: [] };
 
+/** 固定时刻：reducer 是纯的，时间由依赖带进来，测试才钉得住。 */
+const CAPTURED_AT = 1_700_000_000_000;
+
 /** 识别结果由测试指定：这里验的是编排，不是识别本身。 */
 function recognizerReturning(content: ClipContent): Recognizer {
   return { recognize: async () => content };
@@ -54,7 +57,7 @@ describe("框选 → 识别 → 落盘", () => {
     const { root, store } = await freshStore();
 
     const next = await captureClip(
-      { recognizer: recognizerReturning(CONTENT), store, newId: () => "c1" },
+      { recognizer: recognizerReturning(CONTENT), store, newId: () => "c1", now: () => CAPTURED_AT },
       EMPTY,
       "doc-1",
       REGION,
@@ -79,6 +82,7 @@ describe("框选 → 识别 → 落盘", () => {
         recognizer: recognizerThrowing(new RecognizeError("model-unavailable", "模型调用失败")),
         store,
         newId: () => "c1",
+        now: () => CAPTURED_AT,
       },
       EMPTY,
       "doc-1",
@@ -98,6 +102,7 @@ describe("框选 → 识别 → 落盘", () => {
         recognizer: recognizerThrowing(new RecognizeError("bad-output", "模型没有按约定返回 JSON")),
         store,
         newId: () => "c1",
+        now: () => CAPTURED_AT,
       },
       EMPTY,
       "doc-1",
@@ -111,7 +116,7 @@ describe("框选 → 识别 → 落盘", () => {
     // 上一条只保证「没卡住」，这条保证「救回来的状态真的能往下走」——
     // 两者不是一回事：状态名对了但守卫仍然拦着，读者照样动弹不得。
     const { root, store } = await freshStore();
-    const deps = { store, newId: () => "c1" };
+    const deps = { store, newId: () => "c1", now: () => CAPTURED_AT };
 
     const failed = await captureClip(
       { ...deps, recognizer: recognizerThrowing(new RecognizeError("model-unavailable", "失败")) },

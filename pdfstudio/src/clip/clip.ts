@@ -27,6 +27,14 @@ export interface Clip {
    * promoted，合并成一根轴的话一张关键架构图必被回收。
    */
   important: boolean;
+  /**
+   * 最后一次看它是什么时候（epoch 毫秒），保留期从这里起算而不是从创建起算——
+   * 第 30 天点开了它，说明它还活着（ADR-0012）。
+   *
+   * 时间由动作带进来而不是在这里取：reducer 是纯的，`Date.now()` 会让同一组动作
+   * 在不同时刻算出不同结果，测试也就钉不住了。
+   */
+  lastViewedAt: number;
 }
 
 export interface ClipsState {
@@ -35,7 +43,7 @@ export interface ClipsState {
 }
 
 export type Action =
-  | { type: "capture"; id: string; region: Region }
+  | { type: "capture"; id: string; region: Region; at: number }
   | { type: "recognize"; id: string }
   | { type: "recognize-failed"; id: string }
   | { type: "recognized"; id: string; content: ClipContent }
@@ -45,6 +53,8 @@ export type Action =
   | { type: "edit-translation"; id: string; text: string }
   | { type: "toggle-label"; id: string }
   | { type: "toggle-important"; id: string }
+  | { type: "view"; id: string; at: number }
+  | { type: "decay"; id: string }
   | { type: "recapture"; id: string; region: Region }
   | { type: "delete"; id: string };
 
@@ -146,6 +156,24 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
   // 任何状态都能标：读者是先认出「这块要留」才框的，不该等模型回答完才准标。
   "toggle-important": () => ALLOWED,
 
+  view: () => ALLOWED,
+
+  /**
+   * 判定归 `isCollectable`，但守卫这里也要拦——回收器之外还有别的调用方，
+   * 规则只写在编排层就等于没写。
+   */
+  decay: (clip) => {
+    if (clip.important) return denied("标记为重要的摘录不回收。");
+    if (clip.state === "promoted") {
+      return denied("已入库，Context 的 evidence 不能被回收器清掉——那是读者主动删除才有的权力。");
+    }
+    // 原文、译文、截图都能按锚点重新识别一次拿回来，**笔记不能**：它是读者自己写的，
+    // 删了就永远没了。不自动删除无法再生的用户内容。
+    if (clip.note !== null) return denied("写过笔记的摘录不回收，笔记没法重新生成。");
+    if (clip.state !== "ready") return denied("只有识别完成的摘录才谈得上衰减。");
+    return ALLOWED;
+  },
+
   promote: (clip) => {
     if (clip.state === "promoted") return denied("已入库，无需重复。");
     if (clip.state !== "ready") return denied("还没识别完成，不能入库。");
@@ -202,6 +230,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
           content: null,
           sourceText: null,
           translation: null,
+          lastViewedAt: action.at,
         });
       }
 
@@ -219,6 +248,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
             note: null,
             label: "dot",
             important: false,
+            lastViewedAt: action.at,
           },
         ],
       };
@@ -250,6 +280,14 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 
     case "edit-translation":
       return patchClip(state, action.id, { translation: action.text });
+
+    case "view":
+      return patchClip(state, action.id, { lastViewedAt: action.at });
+
+    // 只清内容，锚点原样留着：痕迹是永久的，内容是会过期的。锚点没了标签就画不出来，
+    // 而标签的独特价值恰恰全在这些随手划过的摘录上——「这儿我来过」。
+    case "decay":
+      return patchClip(state, action.id, { content: null, sourceText: null, translation: null });
 
     case "toggle-important": {
       const clip = state.clips.find((candidate) => candidate.id === action.id);

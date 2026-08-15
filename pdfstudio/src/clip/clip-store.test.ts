@@ -36,6 +36,7 @@ const CLIP: Clip = {
   note: "这段是全文的论点起点",
   label: "dot",
   important: false,
+  lastViewedAt: 1_700_000_000_000,
 };
 
 const store = async () => createClipStore(await mkdtemp(path.join(tmpdir(), "clipstore-")));
@@ -125,5 +126,25 @@ describe("保留轴落盘（ADR-0012）", () => {
     await writeFile(file, (await readFile(file, "utf8")).replace(/\s*"important": (true|false),?\n/, "\n"));
 
     expect((await target.listByDoc("d1"))[0].important).toBe(false);
+  });
+});
+
+describe("墓碑落盘（ADR-0012）", () => {
+  it("衰减后 .asset 里的字节真的没了，锚点还在", async () => {
+    // 存储压力几乎全在截图上（几十 KB），锚点约 50 字节。删前者省掉 99%，
+    // 留后者让标签存活——痕迹是永久的，内容是会过期的。
+    const { root, store: target } = await storeAt();
+    await target.save("d1", CLIP);
+    expect(await readdir(path.join(root, "d1", CLIP.id, ".asset"))).not.toEqual([]);
+
+    await target.save("d1", { ...CLIP, content: null, sourceText: null, translation: null });
+
+    // save 是整体替换（写 .tmp → rm 目标 → rename），所以不需要额外的删除路径：
+    // 存一条 content 为 null 的摘录，旧字节自然就没了。加一个 store.decay()
+    // 反而会把「磁盘上留什么」复制到第二个地方。
+    expect(await readdir(path.join(root, "d1", CLIP.id, ".asset"))).toEqual([]);
+    const [back] = await target.listByDoc("d1");
+    expect(back.region.page).toBe(CLIP.region.page);
+    expect(back.region.rect).toEqual(CLIP.region.rect);
   });
 });

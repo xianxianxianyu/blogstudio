@@ -35,6 +35,7 @@ interface Frontmatter {
   label: Clip["label"];
   /** 保留轴（ADR-0012）。真相在文件里——只存数据库的话，一次索引重建就全丢了。 */
   important: boolean;
+  lastViewedAt: number;
   region: Clip["region"];
   /** ClipContent 里除去图片字节的部分——图片另存在 .asset/ 下。 */
   content: {
@@ -58,6 +59,7 @@ function render(clip: Clip): string {
     state: clip.state,
     label: clip.label,
     important: clip.important,
+    lastViewedAt: clip.lastViewedAt,
     region: { ...clip.region, pixels: undefined as never },
     content: clip.content
       ? {
@@ -144,6 +146,10 @@ function parse(
     // 回收器那边 `!clip.important` 与 `clip.important === false` 会得到不同答案，
     // 而这类差别通常要等到东西被删掉才发现。
     important: front.important ?? false,
+    // 旧文件没有这个字段。落到 0 意味着「很久以前看过」，下次回收就会清掉它——
+    // 而它可能是读者昨天刚存的。落到读文件的当下更保守：给它一个完整的保留期，
+    // 代价只是晚一个周期回收。**默认值要偏向不丢数据。**
+    lastViewedAt: front.lastViewedAt ?? Date.now(),
   };
 }
 

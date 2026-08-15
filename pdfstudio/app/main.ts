@@ -119,6 +119,11 @@ function showClip(id: string) {
   if (!clip) return;
 
   panel.replaceChildren();
+
+  // 看过一次就重新计时（ADR-0012）：保留期从最后一次查看起算，第 30 天点开了它
+  // 说明它还活着。代价是**读操作也要写盘**，ADR 里记了这笔账。
+  clips = reduce(clips, { type: "view", id, at: Date.now() });
+  void store.save(docId, clips.clips.find((c) => c.id === id)!);
   const star = window.document.createElement("button");
   star.className = "star";
   star.textContent = clip.important ? "★ 重要（点击取消）" : "☆ 标记为重要";
@@ -140,7 +145,20 @@ function showClip(id: string) {
     clip.content?.multimodal ? `<h3>图像描述</h3><pre>${escape_(clip.content.multimodal)}</pre>` : "",
   ].join("");
 
-  panel.append(star, body);
+  const remove = window.document.createElement("button");
+  remove.className = "star";
+  remove.textContent = "删除";
+  remove.addEventListener("click", () => {
+    // 主动删除删掉整个文件夹，标签跟着消失——和回收器不是一条路。回收器只清内容、
+    // 留锚点，因为标签本身就是价值；而这里是读者说「这条不要了」。
+    clips = reduce(clips, { type: "delete", id });
+    void store.delete(docId, id).then(() => {
+      panel.replaceChildren();
+      drawMarks();
+    });
+  });
+
+  panel.append(star, remove, body);
 }
 
 const escape_ = (text: string) =>
@@ -247,7 +265,7 @@ canvas.addEventListener("pointerup", async (event) => {
   // 编排交给 captureClip：识别、状态迁移、落盘的**顺序**归它管，这一层只负责显示。
   const outcome = await captureClip(
     // 不能拿数量当 id：它只反映内存里有几条，刷新一次就重头数，直接覆盖旧文件。
-    { recognizer, store, newId: () => crypto.randomUUID() },
+    { recognizer, store, newId: () => crypto.randomUUID(), now: () => Date.now() },
     clips,
     docId,
     { page: Number(pageNo.value), rect: pageRect, pixels },

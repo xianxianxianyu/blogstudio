@@ -18,6 +18,9 @@ const REGION: Region = {
 
 const EMPTY: ClipsState = { clips: [], contexts: [] };
 
+/** 固定时刻：reducer 是纯的，时间由动作带进来，测试才钉得住。 */
+const CAPTURED_AT = 1_700_000_000_000;
+
 const textContent = (sourceText: string | null): ClipContent => ({
   route: sourceText === null ? "vision" : "text",
   anchor: { page: REGION.page, rect: REGION.rect },
@@ -29,7 +32,7 @@ const textContent = (sourceText: string | null): ClipContent => ({
 /** 走到 ready 的摘录。sourceText 为 null 就是纯图。 */
 function readyClip(sourceText: string | null): ClipsState {
   return [
-    { type: "capture", id: "c1", region: REGION } as const,
+    { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT } as const,
     { type: "recognize", id: "c1" } as const,
     { type: "recognized", id: "c1", content: textContent(sourceText) } as const,
   ].reduce(reduce, EMPTY);
@@ -37,7 +40,7 @@ function readyClip(sourceText: string | null): ClipsState {
 
 describe("Clip reducer — 截图后开始识别", () => {
   it("capture 建出 capturing 的摘录，recognize 让它进 recognizing", () => {
-    const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+    const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
 
     expect(captured.clips).toHaveLength(1);
     expect(captured.clips[0].state).toBe("capturing");
@@ -102,7 +105,7 @@ describe("Clip reducer — 译文与标签", () => {
   });
 
   it("识别完成前没有译文可改", () => {
-    const capturing = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+    const capturing = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
 
     expect(can(capturing, { type: "edit-translation", id: "c1", text: "x" }).ok).toBe(false);
   });
@@ -219,21 +222,21 @@ describe("Clip reducer — 入库后不能被重新识别打回", () => {
 
 describe("Clip reducer — 对同一区域再次 capture", () => {
   it("合并进已有摘录，不新建第二个——两个标签会让锚点回跳有歧义", () => {
-    const first = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
-    const again = reduce(first, { type: "capture", id: "c2", region: REGION });
+    const first = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
+    const again = reduce(first, { type: "capture", id: "c2", region: REGION, at: CAPTURED_AT });
 
     expect(again.clips).toHaveLength(1);
     expect(again.clips[0].id).toBe("c1");
   });
 
   it("框到别处就是另一条摘录", () => {
-    const first = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+    const first = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
     const elsewhere: Region = {
       ...REGION,
       rect: { ...REGION.rect, y: REGION.rect.y + 200 },
     };
 
-    const second = reduce(first, { type: "capture", id: "c2", region: elsewhere });
+    const second = reduce(first, { type: "capture", id: "c2", region: elsewhere, at: CAPTURED_AT });
 
     expect(second.clips).toHaveLength(2);
   });
@@ -244,9 +247,9 @@ describe("Clip reducer — 对已入库区域再次 capture", () => {
     const FIXED = "The dominant sequence transduction models";
     const promoted = reduce(readyClip(FIXED), { type: "promote", id: "c1", contextId: "ctx1" });
 
-    expect(can(promoted, { type: "capture", id: "c2", region: REGION }).ok).toBe(false);
+    expect(can(promoted, { type: "capture", id: "c2", region: REGION, at: CAPTURED_AT }).ok).toBe(false);
 
-    const state = reduce(promoted, { type: "capture", id: "c2", region: REGION });
+    const state = reduce(promoted, { type: "capture", id: "c2", region: REGION, at: CAPTURED_AT });
 
     // capture 的合并分支会 patch 到已有 clip 上，绕过了 recapture 那条守卫——
     // 同一个动作换个入口就能把 evidence 清空，而 context 还指着它。
@@ -269,12 +272,12 @@ describe("保留轴：重要标记（ADR-0012）", () => {
 
   it("刚框出来的摘录默认不重要", () => {
     // 默认重要的话保留轴就白设了：什么都不回收，等于回到「全部永久保留」。
-    expect(reduce(EMPTY, { type: "capture", id: "c1", region: REGION }).clips[0].important).toBe(false);
+    expect(reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT }).clips[0].important).toBe(false);
   });
 
   it("识别还没完成也能标记——重要与识别结果无关", () => {
     // 读者是先认出「这块要留」才框的，不该等模型回答完才准标。
-    const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+    const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
 
     expect(reduce(captured, { type: "toggle-important", id: "c1" }).clips[0].important).toBe(true);
   });

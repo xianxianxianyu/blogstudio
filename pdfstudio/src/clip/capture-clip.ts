@@ -17,6 +17,8 @@ export interface CaptureClipDeps {
   store: ClipStore;
   /** 注入而不是内部生成：测试要确定的 id，运行时才关心它是不是唯一的。 */
   newId: () => string;
+  /** 同理，时钟也注入——保留期从这个时刻起算（ADR-0012）。 */
+  now: () => number;
 }
 
 /**
@@ -37,7 +39,7 @@ export async function captureClip(
   docId: string,
   region: Region,
 ): Promise<CaptureOutcome> {
-  let next = reduce(state, { type: "capture", id: deps.newId(), region });
+  let next = reduce(state, { type: "capture", id: deps.newId(), region, at: deps.now() });
 
   // capture 会合并到同区域的已有摘录上，所以这条摘录的 id 未必是 newId() 给的那个
   // ——重试同一块地方时用的是原来那条的 id。按区域回查才拿得准。
