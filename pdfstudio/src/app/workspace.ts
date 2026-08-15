@@ -40,7 +40,13 @@ export interface Result {
 const OK: Result = { ok: true };
 
 export interface Workspace {
+  /**
+   * 当前快照。**没变化时是同一个引用**——React 的 `useSyncExternalStore` 拿它做
+   * 相等性判断，每次新建对象会被当成「状态一直在变」，直接无限重渲染。
+   */
   readonly state: WorkspaceState;
+  /** 订阅变化，返回退订函数。 */
+  subscribe(listener: () => void): () => void;
   /** 只刷新书架列表，不打开任何一本——开机时先让读者看见有哪些书。 */
   refresh(): Promise<void>;
   importDoc(file: { filename: string; bytes: Uint8Array }): Promise<Doc>;
@@ -60,6 +66,15 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
   let docId: string | null = null;
   let recognizer: Recognizer | null = null;
   let clips: ClipsState = { clips: [], contexts: [] };
+
+  let snapshot: WorkspaceState = { docs, docId, clips: clips.clips };
+  const listeners = new Set<() => void>();
+
+  /** 每个改状态的地方都要调它——漏掉一处，界面就会停在旧数据上而不报错。 */
+  function publish(): void {
+    snapshot = { docs, docId, clips: clips.clips };
+    for (const listener of listeners) listener();
+  }
 
   const requireDoc = (): string => {
     if (docId === null) throw new Error("还没有打开任何文档。");
@@ -82,16 +97,23 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       return { ok: false, reason: "保存失败", error };
     }
     clips = next;
+    publish();
     return OK;
   }
 
   return {
     get state(): WorkspaceState {
-      return { docs, docId, clips: clips.clips };
+      return snapshot;
+    },
+
+    subscribe(listener: () => void): () => void {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
 
     async refresh(): Promise<void> {
       docs = await deps.shelf.list();
+      publish();
     },
 
     async importDoc({ filename, bytes }): Promise<Doc> {
@@ -114,17 +136,22 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       // ——锚点是「页码 + 矩形」，换本书它照样「有效」，只是指着完全不相干的地方，
       // 而且不报任何错。
       clips = { clips: await deps.store.listByDoc(id), contexts: [] };
+      publish();
     },
 
     async removeDoc(id: string): Promise<void> {
       // 删一本书连它的全部摘录一起删——它们就住在同一个文件夹里（ADR-0011 的形状）。
       await deps.shelf.remove(id);
       docs = await deps.shelf.list();
-      if (docId !== id) return;
+      if (docId !== id) {
+        publish();
+        return;
+      }
       // 当前这本被删了就得清干净，否则视图会拿着一个指向空气的 docId 继续画标签。
       docId = null;
       recognizer = null;
       clips = { clips: [], contexts: [] };
+      publish();
     },
 
     async capture(region: Region): Promise<Result> {
@@ -138,6 +165,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       );
       // 失败时也要收下 state：里面那条摘录已经退回可重试，丢掉它读者就得重新框。
       clips = outcome.state;
+      publish();
       return outcome.ok
         ? { ok: true, clipId: outcome.clipId }
         : { ok: false, reason: "识别失败", error: outcome.error, clipId: outcome.clipId };
@@ -173,6 +201,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
         return { ok: false, reason: "删除失败", error };
       }
       clips = reduce(clips, { type: "delete", id: clipId });
+      publish();
       return OK;
     },
   };

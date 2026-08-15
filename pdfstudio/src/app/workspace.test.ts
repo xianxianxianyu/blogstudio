@@ -200,3 +200,40 @@ describe("Workspace — 摘录", () => {
     expect(back[0].important).toBe(true);
   });
 });
+
+describe("Workspace — 订阅", () => {
+  it("没变化时 state 是同一个引用", async () => {
+    // React 的 useSyncExternalStore 拿 getSnapshot 的返回值做相等性判断。
+    // 每次都新建对象的话，它会认为「状态一直在变」而无限重渲染。
+    const { ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+
+    expect(ws.state).toBe(ws.state);
+  });
+
+  it("变化后换一个新引用，并通知订阅者", async () => {
+    const { ws } = await workspace();
+    const seen: number[] = [];
+    ws.subscribe(() => seen.push(ws.state.clips.length));
+
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    const before = ws.state;
+    await ws.capture(region());
+
+    expect(ws.state).not.toBe(before);
+    expect(seen.at(-1)).toBe(1);
+  });
+
+  it("退订之后不再收到通知", async () => {
+    const { ws } = await workspace();
+    let count = 0;
+    const off = ws.subscribe(() => count++);
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    const afterImport = count;
+
+    off();
+    await ws.capture(region());
+
+    expect(count).toBe(afterImport);
+  });
+});

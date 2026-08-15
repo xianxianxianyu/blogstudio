@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 import { readFile } from "node:fs/promises";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -78,6 +79,16 @@ function modelTarget(): string {
 export default defineConfig({
   root: path.join(import.meta.dirname, "app"),
   publicDir: path.join(import.meta.dirname, "eval"),
+  build: {
+    // 两个入口：新的 React 界面与旧的裸 DOM 页面。迁移期旧的必须一直能跑
+    // ——它是唯一的回归基准（.scratch/pdfstudio-ui/spec.md）。
+    rollupOptions: {
+      input: {
+        react: path.join(import.meta.dirname, "app/react.html"),
+        legacy: path.join(import.meta.dirname, "app/index.html"),
+      },
+    },
+  },
   server: {
     port: 5174,
     proxy: modelTarget()
@@ -91,6 +102,7 @@ export default defineConfig({
       : undefined,
   },
   plugins: [
+    react(),
     {
       name: "pdfstudio-dev-config",
       // 浏览器读不了文件系统，所以由 dev server 把 config.json 递过去。
