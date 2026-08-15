@@ -33,6 +33,8 @@ interface Frontmatter {
   id: string;
   state: Clip["state"];
   label: Clip["label"];
+  /** 保留轴（ADR-0012）。真相在文件里——只存数据库的话，一次索引重建就全丢了。 */
+  important: boolean;
   region: Clip["region"];
   /** ClipContent 里除去图片字节的部分——图片另存在 .asset/ 下。 */
   content: {
@@ -55,6 +57,7 @@ function render(clip: Clip): string {
     id: clip.id,
     state: clip.state,
     label: clip.label,
+    important: clip.important,
     region: { ...clip.region, pixels: undefined as never },
     content: clip.content
       ? {
@@ -137,6 +140,10 @@ function parse(
     translation: section("译文"),
     note: section("笔记"),
     label: front.label,
+    // `?? false` 而不是直接取：已经落过盘的摘录都没有这个字段，读成 undefined 的话
+    // 回收器那边 `!clip.important` 与 `clip.important === false` 会得到不同答案，
+    // 而这类差别通常要等到东西被删掉才发现。
+    important: front.important ?? false,
   };
 }
 

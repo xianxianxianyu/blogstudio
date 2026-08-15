@@ -14,13 +14,14 @@
 import * as pdfjs from "pdfjs-dist";
 // @ts-expect-error ——`?url` 是 Vite 的产物，TS 不认识这种导入
 import worker from "pdfjs-dist/build/pdf.worker.mjs?url";
-import { isMisTouch, toPageRect } from "../src/capture/capture";
+import { isMisTouch, toCanvasBox, toPageRect } from "../src/capture/capture";
 import { createRecognizer } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../src/config/config";
 import { captureClip } from "../src/clip/capture-clip";
+import { reduce } from "../src/clip/clip";
 import { createHttpClipStore } from "./http-clip-store";
-import type { ClipsState } from "../src/clip/clip";
+import type { Clip, ClipsState } from "../src/clip/clip";
 import type { Screenshot } from "../src/recognizer/recognizer";
 
 pdfjs.GlobalWorkerOptions.workerSrc = worker as string;
@@ -30,6 +31,8 @@ const box = document.querySelector<HTMLDivElement>("#box")!;
 const out = document.querySelector<HTMLDivElement>("#out")!;
 const pageNo = document.querySelector<HTMLInputElement>("#pageNo")!;
 const scaleInput = document.querySelector<HTMLInputElement>("#scale")!;
+const marks = document.querySelector<HTMLDivElement>("#marks")!;
+const panel = document.querySelector<HTMLDivElement>("#clip")!;
 
 // 落盘走 dev server：clip-store 导入 node:fs，浏览器里加载就白屏。ClipStore 是端口，
 // 换个实现即可，编排代码一行不用动（打包应用里这条边界是 IPC，ADR-0006）。
@@ -71,11 +74,84 @@ async function draw() {
 }
 
 document.querySelector("#total")!.textContent = String(document_.numPages);
+drawMarks();
+
+/**
+ * 把这一页上的摘录画成标签。
+ *
+ * 标签的独特价值不是取回内容（重划一次也能取回），而是**「这儿我来过」**——三个月后
+ * 重开论文，标签疏密就是当初的注意力地图。所以随手划过的那批也画，只是淡一点
+ * （ADR-0012）。滤掉它们等于把这个功能最独特的部分扔了。
+ */
+function drawMarks() {
+  marks.replaceChildren();
+  const page = Number(pageNo.value);
+
+  for (const clip of clips.clips) {
+    if (clip.region.page !== page) continue;
+    const box = toCanvasBox(viewport, clip.region.rect);
+    const mark = window.document.createElement("div");
+    mark.className = clip.important ? "mark important" : "mark";
+    Object.assign(mark.style, {
+      left: `${toCss(box.x0, "x")}px`,
+      top: `${toCss(box.y0, "y")}px`,
+      width: `${toCss(box.x1 - box.x0, "x")}px`,
+      height: `${toCss(box.y1 - box.y0, "y")}px`,
+    });
+    marks.append(mark);
+  }
+}
+
+/** 点在哪条摘录上。后来的盖在先来的上面，所以从后往前找。 */
+function clipAt(point: { x: number; y: number }): Clip | undefined {
+  const page = Number(pageNo.value);
+  return clips.clips
+    .filter((clip) => clip.region.page === page)
+    .reverse()
+    .find((clip) => {
+      const box = toCanvasBox(viewport, clip.region.rect);
+      return point.x >= box.x0 && point.x <= box.x1 && point.y >= box.y0 && point.y <= box.y1;
+    });
+}
+
+function showClip(id: string) {
+  const clip = clips.clips.find((candidate) => candidate.id === id);
+  if (!clip) return;
+
+  panel.replaceChildren();
+  const star = window.document.createElement("button");
+  star.className = "star";
+  star.textContent = clip.important ? "★ 重要（点击取消）" : "☆ 标记为重要";
+  star.addEventListener("click", () => {
+    clips = reduce(clips, { type: "toggle-important", id });
+    // 立刻落盘：标记的真相是文件，不是内存（ADR-0011/0012）。只改内存的话
+    // 刷新一次标记就没了，而回收器认的是文件。
+    void store.save(docId, clips.clips.find((c) => c.id === id)!).then(() => {
+      drawMarks();
+      showClip(id);
+    });
+  });
+
+  const body = window.document.createElement("div");
+  body.innerHTML = [
+    `<h3>原文（第 ${clip.region.page} 页 · ${clip.content?.route ?? "?"}）</h3>`,
+    `<pre>${escape_(clip.sourceText ?? "（纯图，没有原文）")}</pre>`,
+    clip.translation ? `<h3>译文</h3><pre>${escape_(clip.translation)}</pre>` : "",
+    clip.content?.multimodal ? `<h3>图像描述</h3><pre>${escape_(clip.content.multimodal)}</pre>` : "",
+  ].join("");
+
+  panel.append(star, body);
+}
+
+const escape_ = (text: string) =>
+  text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
 
 // 改完就重画，不用再记得点按钮；翻页按钮把页码夹在有效范围内。
 async function go(page: number) {
   pageNo.value = String(Math.min(Math.max(page, 1), document_.numPages));
   viewport = await draw();
+  // 重画完才画标签：它们的位置来自 viewport，缩放变了就得跟着变。
+  drawMarks();
 }
 
 pageNo.addEventListener("change", () => void go(Number(pageNo.value)));
@@ -137,10 +213,15 @@ canvas.addEventListener("pointerup", async (event) => {
   const drag = { x0: start.x, y0: start.y, x1: end.x, y1: end.y };
   start = null;
 
-  // 误触就当一次点击：收掉选框，什么都不做。不弹错——手滑本来就常见，
-  // 每次都报一句「区域太小」只是噪音；真正要防的是白烧一次付费调用。
+  // 拖动 = 新建摘录，点击 = 打开脚下的标签。
+  //
+  // 标签不能自己接 click：它盖在 canvas 上，一旦吃掉 pointerdown，在已有摘录上
+  // **重新框就框不了了**。所以标签设成 pointer-events: none，由这里按坐标判。
+  // 误触判定本来就在分辨「这是点击还是拖动」，正好是同一个问题。
   if (isMisTouch(drag)) {
     box.style.display = "none";
+    const hit = clipAt(end);
+    if (hit) showClip(hit.id);
     return;
   }
 
@@ -188,6 +269,8 @@ canvas.addEventListener("pointerup", async (event) => {
   // 按 clipId 取，不取「最后一条」——重试同一块地方是**合并进原摘录**，不追加新的，
   // 那时最后一条会指到别人身上。
   const clip = clips.clips.find((candidate) => candidate.id === outcome.clipId)!;
+  drawMarks();
+  showClip(clip.id);
   pre.textContent = JSON.stringify(
     {
       id: clip.id,

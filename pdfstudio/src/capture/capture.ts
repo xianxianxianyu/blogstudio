@@ -57,6 +57,22 @@ export function isMisTouch(drag: DragBox): boolean {
  * 换算交给 `viewport.convertToPdfPoint`，不自己算——它同时处理了旋转（`/Rotate`
  * 不为 0 的页面），而那正是自己动手最容易漏掉的一项。
  */
+/**
+ * 页面矩形 → 画布上的框。`toPageRect` 的逆运算，用来在原 PDF 上把摘录标签画回原位。
+ *
+ * 同样交给 viewport（`convertToViewportPoint`）而不是自己乘缩放：自己算的话旋转页面
+ * 会错，而那正是最不容易在测试里想到、又最难在浏览器里看出来的一类偏移。
+ *
+ * 归一成正的宽高，理由和 `toPageRect` 一样——原点翻转会把上下边互换，直接用
+ * `y` 和 `y + height` 换算出来的两个点，谁上谁下是反的。
+ */
+export function toCanvasBox(viewport: PageViewport, rect: Rect): DragBox {
+  const [ax, ay] = viewport.convertToViewportPoint(rect.x, rect.y);
+  const [bx, by] = viewport.convertToViewportPoint(rect.x + rect.width, rect.y + rect.height);
+
+  return { x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) };
+}
+
 export function toPageRect(viewport: PageViewport, drag: DragBox): Rect {
   const [ax, ay] = viewport.convertToPdfPoint(drag.x0, drag.y0);
   const [bx, by] = viewport.convertToPdfPoint(drag.x1, drag.y1);

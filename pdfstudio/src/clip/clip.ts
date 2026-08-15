@@ -20,6 +20,13 @@ export interface Clip {
   translation: string | null;
   note: string | null;
   label: Label;
+  /**
+   * 保留轴（ADR-0012），与 `state` 那根发布轴**正交**。未标记的摘录到期衰减为墓碑。
+   *
+   * 不能拿 `promoted` 代替：promote 在 `sourceText === null` 时拒绝，纯图永远进不了
+   * promoted，合并成一根轴的话一张关键架构图必被回收。
+   */
+  important: boolean;
 }
 
 export interface ClipsState {
@@ -37,6 +44,7 @@ export type Action =
   | { type: "add-note"; id: string; text: string }
   | { type: "edit-translation"; id: string; text: string }
   | { type: "toggle-label"; id: string }
+  | { type: "toggle-important"; id: string }
   | { type: "recapture"; id: string; region: Region }
   | { type: "delete"; id: string };
 
@@ -135,6 +143,9 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
 
   "toggle-label": () => ALLOWED,
 
+  // 任何状态都能标：读者是先认出「这块要留」才框的，不该等模型回答完才准标。
+  "toggle-important": () => ALLOWED,
+
   promote: (clip) => {
     if (clip.state === "promoted") return denied("已入库，无需重复。");
     if (clip.state !== "ready") return denied("还没识别完成，不能入库。");
@@ -207,6 +218,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
             translation: null,
             note: null,
             label: "dot",
+            important: false,
           },
         ],
       };
@@ -238,6 +250,11 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 
     case "edit-translation":
       return patchClip(state, action.id, { translation: action.text });
+
+    case "toggle-important": {
+      const clip = state.clips.find((candidate) => candidate.id === action.id);
+      return clip ? patchClip(state, action.id, { important: !clip.important }) : state;
+    }
 
     case "toggle-label": {
       const clip = state.clips.find((candidate) => candidate.id === action.id);

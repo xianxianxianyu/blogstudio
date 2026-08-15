@@ -254,3 +254,42 @@ describe("Clip reducer — 对已入库区域再次 capture", () => {
     expect(state.clips[0].sourceText).toBe(FIXED);
   });
 });
+
+describe("保留轴：重要标记（ADR-0012）", () => {
+  it("纯图也能标记为重要", () => {
+    // **这条是整根保留轴存在的理由。** promote 在 sourceText === null 时拒绝
+    // （纯图没有原文，不能当 evidence），所以纯图永远进不了 promoted。
+    // 若拿 promoted 当「重要」用，一张关键的架构图截图就标不了重要，到期必被回收
+    // ——恰恰是最该留的东西。发布轴与保留轴必须是两根。
+    const state = reduce(readyClip(null), { type: "toggle-important", id: "c1" });
+
+    expect(can(readyClip(null), { type: "promote", id: "c1", contextId: "x" }).ok).toBe(false);
+    expect(state.clips[0].important).toBe(true);
+  });
+
+  it("刚框出来的摘录默认不重要", () => {
+    // 默认重要的话保留轴就白设了：什么都不回收，等于回到「全部永久保留」。
+    expect(reduce(EMPTY, { type: "capture", id: "c1", region: REGION }).clips[0].important).toBe(false);
+  });
+
+  it("识别还没完成也能标记——重要与识别结果无关", () => {
+    // 读者是先认出「这块要留」才框的，不该等模型回答完才准标。
+    const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION });
+
+    expect(reduce(captured, { type: "toggle-important", id: "c1" }).clips[0].important).toBe(true);
+  });
+
+  it("重来一次就取消", () => {
+    const once = reduce(readyClip("Attention"), { type: "toggle-important", id: "c1" });
+
+    expect(reduce(once, { type: "toggle-important", id: "c1" }).clips[0].important).toBe(false);
+  });
+
+  it("重拍不会把重要标记冲掉", () => {
+    // recapture 换的是原文这一侧；「这块要留」是读者的判断，与换了哪张图无关。
+    const marked = reduce(readyClip("Attention"), { type: "toggle-important", id: "c1" });
+    const again = reduce(marked, { type: "recapture", id: "c1", region: REGION });
+
+    expect(again.clips[0].important).toBe(true);
+  });
+});

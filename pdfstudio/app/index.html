@@ -10,12 +10,18 @@
       #stage { position: relative; display: inline-block; }
       canvas { display: block; box-shadow: 0 1px 8px rgba(0,0,0,.15); }
       #box { position: absolute; border: 2px solid #2563eb; background: rgba(37,99,235,.12); display: none; pointer-events: none; }
+      /* 标签分两档：标了重要的实心，随手划过的淡——淡的那批才是「这儿我来过」的注意力地图。 */
+      .mark { position: absolute; pointer-events: none; border: 1px solid rgba(180,83,9,.35); background: rgba(245,158,11,.10); }
+      .mark.important { border: 2px solid #b45309; background: rgba(245,158,11,.22); }
+      #clip { border-top: 1px solid #d4d4d8; margin-top: 12px; padding-top: 12px; }
+      #clip h3 { margin: 12px 0 4px; font-size: 13px; color: #52525b; }
+      .star { cursor: pointer; background: none; border: 1px solid #d4d4d8; padding: 2px 8px; }
       pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; padding: 8px; }
       img { max-width: 100%; border: 1px solid #d4d4d8; }
     </style>
   </head>
   <body>
-    <div id="left"><div id="stage"><canvas id="page"></canvas><div id="box"></div></div></div>
+    <div id="left"><div id="stage"><canvas id="page"></canvas><div id="marks"></div><div id="box"></div></div></div>
     <div id="right">
       <p><b>在左边拖一个框。</b>这一页只验一条链路：拖框 → 换算成页面坐标 → 裁成 PNG → 交给识别模块。</p>
       <p>
@@ -25,6 +31,7 @@
       </p>
       <p>缩放 <input id="scale" type="number" value="1.5" step="0.25" min="0.5" style="width:4em">（改完自动重画）</p>
       <div id="out"></div>
+      <div id="clip"></div>
     </div>
     <script type="module" src="./main.ts"></script>
   </body>
