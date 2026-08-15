@@ -144,7 +144,7 @@ async function main(): Promise<void> {
 
   for (const sample of samples) {
     const document = await openFixturePdf(sample.paper);
-    const recognizer = createRecognizer({ document, recognition: model });
+    const recognizer = createRecognizer({ document, recognition: model, translation: null });
     const pixels = await loadScreenshot(sample.id);
 
     console.log(`── ${sample.id}  [manifest: ${sample.type}]  ${sample.note}`);

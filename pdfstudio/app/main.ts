@@ -18,11 +18,11 @@ import { isMisTouch, toCanvasBox, toPageRect } from "../src/capture/capture";
 import { createRecognizer } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../src/config/config";
-import { captureClip } from "../src/clip/capture-clip";
-import { can, reduce } from "../src/clip/clip";
+import { createWorkspace } from "../src/app/workspace";
 import { createHttpClipStore } from "./http-clip-store";
 import { createHttpBookshelf } from "./http-bookshelf";
-import type { Clip, ClipsState } from "../src/clip/clip";
+import type { Clip } from "../src/clip/clip";
+import type { Result } from "../src/app/workspace";
 import type { Doc } from "../src/bookshelf/bookshelf";
 import type { Screenshot } from "../src/recognizer/recognizer";
 
@@ -43,14 +43,6 @@ const panel = document.querySelector<HTMLDivElement>("#clip")!;
 const store = createHttpClipStore("/__clips");
 const shelf = createHttpBookshelf("/__docs");
 
-let docId = "";
-// 启动就把已有摘录读回来。不读的话有两个后果，都已经真实发生过：
-// 1. id 计数器从头开始，新摘录覆盖掉磁盘上的旧摘录（第一条 Encoder 摘录就是这么没的）。
-// 2. capture 按区域合并是在内存状态里查的，状态空了就查不到——刷新后重框同一块地方
-//    会长出第二条摘录，而「同区域两个标签会让锚点回跳有歧义」正是当初禁止的。
-// 文件是唯一真相（ADR-0011），那就得真的把它当真相读。
-let clips: ClipsState = { clips: [], contexts: [] };
-
 const appConfig = parseConfig(
   await fetch("/__config")
     .then((response) => response.json() as Promise<unknown>)
@@ -69,6 +61,28 @@ function endpoint(capability: "recognition" | "translation") {
 let document_: pdfjs.PDFDocumentProxy | null = null;
 let viewport: pdfjs.PageViewport | null = null;
 
+/**
+ * 接线——谁依赖谁、先落盘还是先改内存、换书时摘录跟不跟着换——全在 Workspace 里，
+ * 有测试钉着（ADR-0013）。**这个文件只剩 DOM。**
+ */
+const ws = createWorkspace({
+  shelf,
+  store,
+  // pdf.js 归视图：Workspace 不认识它，只要一个依赖都接好了的 Recognizer。
+  async openDocument(bytes) {
+    document_ = await pdfjs.getDocument({ data: bytes }).promise;
+    return createRecognizer({
+      document: document_,
+      recognition: createModelClient(endpoint("recognition")),
+      // 翻译是独立配置的（ADR-0010）。类型上必填——漏掉它译文永远不出现，
+      // 而这个 bug 真的发生过一次。
+      translation: createModelClient(endpoint("translation")),
+    });
+  },
+  newId: () => crypto.randomUUID(),
+  now: () => Date.now(),
+});
+
 async function draw() {
   if (!document_) return null;
   const page = await document_.getPage(Number(pageNo.value));
@@ -86,11 +100,9 @@ async function draw() {
  * ——锚点是页码 + 矩形，换本书它照样"有效"，只是指着完全不相干的地方。
  */
 async function openDoc(id: string) {
-  docId = id;
-  document_ = await pdfjs.getDocument({ data: await shelf.read(id) }).promise;
-  clips = { clips: await store.listByDoc(id), contexts: [] };
+  await ws.openDoc(id);
   pageNo.value = "1";
-  document.querySelector("#total")!.textContent = String(document_.numPages);
+  document.querySelector("#total")!.textContent = String(document_!.numPages);
   panel.replaceChildren();
   out.replaceChildren();
   viewport = await draw();
@@ -98,12 +110,12 @@ async function openDoc(id: string) {
   renderShelf();
 }
 
-async function renderShelf() {
-  const docs = await shelf.list();
+function renderShelf() {
+  const docs = ws.state.docs;
   shelfList.replaceChildren(
     ...docs.map((doc) => {
       const row = window.document.createElement("li");
-      if (doc.id === docId) row.className = "on";
+      if (doc.id === ws.state.docId) row.className = "on";
       const open = window.document.createElement("button");
       open.textContent = doc.title;
       open.title = doc.filename;
@@ -119,26 +131,24 @@ async function removeDoc(doc: Doc) {
   // 删一本书会连它的全部摘录一起删——它们就住在同一个文件夹里（ADR-0011 的形状）。
   // 这比删一条摘录重得多，所以把后果说清楚。
   if (!window.confirm(`删掉《${doc.title}》？它的全部摘录会一起没有，且不可撤销。`)) return;
-  await shelf.remove(doc.id);
-  if (doc.id === docId) {
-    docId = "";
+  await ws.removeDoc(doc.id);
+  if (ws.state.docId === null) {
     document_ = null;
-    clips = { clips: [], contexts: [] };
+    viewport = null;
     canvas.width = canvas.height = 0;
     marks.replaceChildren();
     panel.replaceChildren();
   }
-  await renderShelf();
+  renderShelf();
 }
 
 fileInput.addEventListener("change", () => {
   const file = fileInput.files?.[0];
   if (!file) return;
   void (async () => {
-    const doc = await shelf.import({
+    const doc = await ws.importDoc({
       filename: file.name,
       bytes: new Uint8Array(await file.arrayBuffer()),
-      at: Date.now(),
     });
     fileInput.value = "";
     // 同一篇论文再导入一次会拿回同一个 id，于是这里直接打开——已有的摘录原样接上，
@@ -148,9 +158,9 @@ fileInput.addEventListener("change", () => {
 });
 
 // 开机就上架：有书就打开第一本。
-const shelved = await shelf.list();
-if (shelved.length > 0) await openDoc(shelved[0].id);
-else await renderShelf();
+await ws.refresh();
+if (ws.state.docs.length > 0) await openDoc(ws.state.docs[0].id);
+else renderShelf();
 
 /**
  * 把这一页上的摘录画成标签。
@@ -164,7 +174,7 @@ function drawMarks() {
   if (!viewport) return;
   const page = Number(pageNo.value);
 
-  for (const clip of clips.clips) {
+  for (const clip of ws.state.clips) {
     if (clip.region.page !== page) continue;
     const box = toCanvasBox(viewport, clip.region.rect);
     const mark = window.document.createElement("div");
@@ -184,7 +194,7 @@ function clipAt(point: { x: number; y: number }): Clip | undefined {
   const vp = viewport;
   if (!vp) return undefined;
   const page = Number(pageNo.value);
-  return clips.clips
+  return ws.state.clips
     .filter((clip) => clip.region.page === page)
     .reverse()
     .find((clip) => {
@@ -194,56 +204,42 @@ function clipAt(point: { x: number; y: number }): Clip | undefined {
 }
 
 function showClip(id: string) {
-  const clip = clips.clips.find((candidate) => candidate.id === id);
+  const clip = ws.state.clips.find((candidate) => candidate.id === id);
   if (!clip) return;
 
   // 看过一次就重新计时（ADR-0012）：保留期从最后一次查看起算，第 30 天点开了它
   // 说明它还活着。代价是**读操作也要写盘**，ADR 里记了这笔账。
-  clips = reduce(clips, { type: "view", id, at: Date.now() });
-  void persist(id);
+  void ws.viewClip(id);
 
   panel.replaceChildren();
   panel.append(
     button(clip.important ? "★ 重要（点击取消）" : "☆ 标记为重要", () =>
-      apply({ type: "toggle-important", id }),
+      apply(() => ws.markImportant(id)),
     ),
     button("删除", () => remove(id)),
     heading(`原文（第 ${clip.region.page} 页 · ${clip.content?.route ?? "?"}）`),
     // 原文只准修错字，不得改写措辞——守卫按编辑距离判（≤ 2）。被拒时把理由原样显示，
     // 因为那句话本身就是规则，含糊过去读者只会以为是保存失败。
-    editor(clip.sourceText ?? "", (text) => apply({ type: "fix-source", id, text })),
+    editor(clip.sourceText ?? "", (text) => apply(() => ws.fixSource(id, text))),
     heading("译文"),
-    editor(clip.translation ?? "", (text) => apply({ type: "edit-translation", id, text })),
+    editor(clip.translation ?? "", (text) => apply(() => ws.editTranslation(id, text))),
     heading("笔记"),
     // 笔记是读者自己写的，删了就永远没了——写过笔记的摘录回收器不会碰（ADR-0012）。
-    editor(clip.note ?? "", (text) => apply({ type: "add-note", id, text })),
+    editor(clip.note ?? "", (text) => apply(() => ws.editNote(id, text))),
   );
 
   if (clip.content?.multimodal) {
     panel.append(heading("图像描述"), pre(clip.content.multimodal));
   }
 
-  /** 走 can() 再 reduce：拒绝的理由要给读者看见，不能默默什么都没发生。 */
-  function apply(action: Parameters<typeof reduce>[1]) {
-    const verdict = can(clips, action);
-    if (!verdict.ok) {
-      window.alert(verdict.reason);
-      return;
-    }
-    clips = reduce(clips, action);
-    void persist(id).then(() => {
+  /** 拒绝的理由要给读者看见，不能默默什么都没发生。规则本身归 Workspace。 */
+  function apply(intent: () => Promise<Result>) {
+    void intent().then((result) => {
+      if (!result.ok) window.alert(result.reason);
       drawMarks();
       showClip(id);
     });
   }
-}
-
-/**
- * 落盘再改内存视图。**顺序不能反**：文件是唯一真相（ADR-0011），先改内存的话
- * 写盘失败就成了「界面说改了、磁盘上没改」，刷新一次改动凭空消失。
- */
-function persist(id: string): Promise<void> {
-  return store.save(docId, clips.clips.find((c) => c.id === id)!);
 }
 
 async function remove(id: string) {
@@ -251,10 +247,11 @@ async function remove(id: string) {
   // 手动删同样要拦一道。
   if (!window.confirm("删掉这条摘录？截图和笔记会一起没有，且不可撤销。")) return;
 
-  // 同样是先落盘再改内存。反过来的话删盘失败，界面上标签没了、文件还在，
-  // 刷新一次它又冒出来——而读者以为已经删掉了。
-  await store.delete(docId, id);
-  clips = reduce(clips, { type: "delete", id });
+  const result = await ws.removeClip(id);
+  if (!result.ok) {
+    window.alert(result.reason);
+    return;
+  }
   panel.replaceChildren();
   drawMarks();
 }
@@ -380,26 +377,11 @@ canvas.addEventListener("pointerup", async (event) => {
   preview.src = URL.createObjectURL(new Blob([pixels.bytes as BlobPart], { type: pixels.mime }));
   out.append(preview);
 
-  // 翻译是独立配置的功能（ADR-0010），要单独接。漏了它 translate() 根本不会被调用,
-  // 而划词翻译恰恰是日常主路径——第一条落盘的摘录就是这么少了 `## 译文` 的。
-  const recognizer = createRecognizer({
-    document: document_,
-    recognition: createModelClient(endpoint("recognition")),
-    translation: createModelClient(endpoint("translation")),
-  });
   const pre = window.document.createElement("pre");
   pre.textContent = "识别中…";
   out.append(pre);
 
-  // 编排交给 captureClip：识别、状态迁移、落盘的**顺序**归它管，这一层只负责显示。
-  const outcome = await captureClip(
-    // 不能拿数量当 id：它只反映内存里有几条，刷新一次就重头数，直接覆盖旧文件。
-    { recognizer, store, newId: () => crypto.randomUUID(), now: () => Date.now() },
-    clips,
-    docId,
-    { page: Number(pageNo.value), rect: pageRect, pixels },
-  );
-  clips = outcome.state;
+  const outcome = await ws.capture({ page: Number(pageNo.value), rect: pageRect, pixels });
 
   if (!outcome.ok) {
     // 把 cause 链整条打出来。只报最外层的 kind 会把真正的原因吞掉——
@@ -415,7 +397,7 @@ canvas.addEventListener("pointerup", async (event) => {
 
   // 按 clipId 取，不取「最后一条」——重试同一块地方是**合并进原摘录**，不追加新的，
   // 那时最后一条会指到别人身上。
-  const clip = clips.clips.find((candidate) => candidate.id === outcome.clipId)!;
+  const clip = ws.state.clips.find((candidate) => candidate.id === outcome.clipId)!;
   drawMarks();
   showClip(clip.id);
   pre.textContent = JSON.stringify(
@@ -426,7 +408,7 @@ canvas.addEventListener("pointerup", async (event) => {
       sourceText: clip.sourceText,
       translation: clip.translation,
       multimodal: clip.content?.multimodal,
-      落盘: `pdfstudio/.clips/${docId}/${clip.id}/index.md`,
+      落盘: `pdfstudio/.library/${ws.state.docId}/clips/${clip.id}/index.md`,
     },
     null,
     2,

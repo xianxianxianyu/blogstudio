@@ -60,7 +60,7 @@ function normalizeWhitespace(text: string): string {
 async function setup(paper: string, modelOptions?: FakeModelOptions, targetLang?: string) {
   const document = await openFixturePdf(paper);
   const model = createFakeModelClient(modelOptions);
-  return { model, recognizer: createRecognizer({ document, recognition: model, targetLang }) };
+  return { model, recognizer: createRecognizer({ document, recognition: model, translation: null, targetLang }) };
 }
 
 /** 发给模型的那段 prompt——ModelClient 是真外部缝，跨过它的东西可观测。 */

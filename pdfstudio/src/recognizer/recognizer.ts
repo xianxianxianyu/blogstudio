@@ -51,8 +51,15 @@ export interface RecognizerDeps {
   document: PDFDocumentProxy;
   /** 识别：OCR / 公式 → LaTeX / 图理解。text 路由从不调它。 */
   recognition: ModelClient;
-  /** 翻译：独立配置，通常是一个高速文本 LLM。不配就不产出译文。 */
-  translation?: ModelClient;
+  /**
+   * 翻译：独立配置，通常是一个高速文本 LLM（ADR-0010）。
+   *
+   * **必填，不想要就显式写 `null`。** 写成可选的代价已经付过一次：`app/main.ts` 漏了
+   * 它，`translate()` 从此没被调用过，译文永远不出现——而划词翻译是日常主路径。
+   * 单元测试抓不到这种漏：每条翻译用例都显式传了 fake，测的是「给了会不会用」，
+   * 不是「有没有给」。漏一个就默认关掉的开关，用类型堵死（同 `GUARDS` 那张表）。
+   */
+  translation: ModelClient | null;
   targetLang?: string;
 }
 

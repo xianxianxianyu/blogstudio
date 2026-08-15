@@ -1,0 +1,202 @@
+import { describe, expect, it } from "vitest";
+import { mkdtemp, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { createWorkspace } from "./workspace";
+import { createBookshelf } from "../bookshelf/bookshelf";
+import { createClipStore } from "../clip/clip-store";
+import { RecognizeError } from "../recognizer/recognizer";
+import type { ClipStore } from "../clip/clip-store";
+import type { ClipContent, Recognizer, Region, Screenshot } from "../recognizer/recognizer";
+
+const PAPER_A = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x01]);
+const PAPER_B = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x02]);
+
+const PIXELS: Screenshot = { mime: "image/png", bytes: new Uint8Array([1, 2, 3]), width: 30, height: 40 };
+
+const region = (page = 1, x = 140): Region => ({
+  page,
+  rect: { x, y: 303, width: 332, height: 78 },
+  pixels: PIXELS,
+});
+
+const CONTENT: ClipContent = {
+  route: "text",
+  anchor: { page: 1, rect: region().rect },
+  sourceText: "The dominant sequence transduction models",
+  translation: "主流的序列转导模型",
+  images: [],
+  screenshot: PIXELS,
+};
+
+const NOW = 1_700_000_000_000;
+
+const recognizerReturning = (content: ClipContent): Recognizer => ({ recognize: async () => content });
+const recognizerThrowing = (error: unknown): Recognizer => ({
+  recognize: async () => {
+    throw error;
+  },
+});
+
+/** 真书架 + 真 ClipStore 跑在临时目录上：这一层要验的正是落盘顺序，fake 掉就没意义了。 */
+async function workspace(recognizer: Recognizer = recognizerReturning(CONTENT), store?: ClipStore) {
+  const root = await mkdtemp(path.join(tmpdir(), "workspace-"));
+  let n = 0;
+  return {
+    root,
+    ws: createWorkspace({
+      shelf: createBookshelf(root),
+      store: store ?? createClipStore(root),
+      // 视图那侧在这里建 pdf.js 文档并接好 Recognizer 的依赖；Workspace 不认识 pdf.js。
+      openDocument: async () => recognizer,
+      newId: () => `c${++n}`,
+      now: () => NOW,
+    }),
+  };
+}
+
+describe("Workspace — 书架", () => {
+  it("导入后自动打开，书架列表跟着更新", async () => {
+    const { ws } = await workspace();
+
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+
+    expect(ws.state.docs.map((doc) => doc.title)).toEqual(["a"]);
+    expect(ws.state.docId).toBe(ws.state.docs[0].id);
+  });
+
+  it("refresh 只上架、不打开", async () => {
+    // 开机时先让读者看见有哪些书，但别替他决定看哪本。
+    const { root, ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+
+    const fresh = createSecond(root);
+    await fresh.refresh();
+
+    expect(fresh.state.docs).toHaveLength(1);
+    expect(fresh.state.docId).toBeNull();
+  });
+
+  it("换书时摘录跟着换", async () => {
+    // **不换的话不会报任何错，只会看到一堆位置诡异的标签。** 锚点是「页码 + 矩形」，
+    // 换本书它照样「有效」，只是指着完全不相干的地方。
+    const { ws } = await workspace();
+    const a = await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    await ws.capture(region());
+    expect(ws.state.clips).toHaveLength(1);
+
+    const b = await ws.importDoc({ filename: "b.pdf", bytes: PAPER_B });
+    expect(ws.state.clips).toEqual([]);
+
+    await ws.openDoc(a.id);
+    expect(ws.state.clips).toHaveLength(1);
+    expect(b.id).not.toBe(a.id);
+  });
+
+  it("打开一本书就把它的摘录从磁盘读回来", async () => {
+    // 不读的话：id 计数器从头开始会覆盖旧文件，按区域合并也查不到已有摘录
+    // ——两个后果都真实发生过。文件是唯一真相（ADR-0011），那就得真的把它当真相读。
+    const { root, ws } = await workspace();
+    const doc = await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    await ws.capture(region());
+
+    const { ws: reopened } = { ws: createSecond(root) };
+    await reopened.openDoc(doc.id);
+
+    expect(reopened.state.clips.map((clip) => clip.sourceText)).toEqual([CONTENT.sourceText]);
+  });
+
+  function createSecond(root: string) {
+    return createWorkspace({
+      shelf: createBookshelf(root),
+      store: createClipStore(root),
+      openDocument: async () => recognizerReturning(CONTENT),
+      newId: () => "fresh",
+      now: () => NOW,
+    });
+  }
+
+  it("同一篇论文再导入一次，已有摘录原样接上", async () => {
+    const { ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    await ws.capture(region());
+
+    await ws.importDoc({ filename: "改了个名.pdf", bytes: PAPER_A });
+
+    expect(ws.state.docs).toHaveLength(1);
+    expect(ws.state.clips).toHaveLength(1);
+  });
+
+  it("删掉当前这本书，界面上不留悬空的当前文档", async () => {
+    const { ws } = await workspace();
+    const doc = await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+
+    await ws.removeDoc(doc.id);
+
+    expect(ws.state.docId).toBeNull();
+    expect(ws.state.clips).toEqual([]);
+    expect(ws.state.docs).toEqual([]);
+  });
+});
+
+describe("Workspace — 摘录", () => {
+  it("识别失败：状态可重试，磁盘上不留半条", async () => {
+    const { root, ws } = await workspace(
+      recognizerThrowing(new RecognizeError("model-unavailable", "模型调用失败")),
+    );
+    const doc = await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+
+    const result = await ws.capture(region());
+
+    expect(result.ok).toBe(false);
+    expect(ws.state.clips[0].state).toBe("capturing");
+    expect(await readdir(path.join(root, doc.id, "clips")).catch(() => [])).toEqual([]);
+  });
+
+  it("被守卫拒绝时把理由带出来", async () => {
+    // 默默什么都没发生是最坏的结果：读者以为保存失败，实际是规则不允许。
+    // 「原文只准修错字，不得改写措辞」这句话本身就是规则。
+    const { ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    await ws.capture(region());
+    const id = ws.state.clips[0].id;
+
+    const result = await ws.fixSource(id, "完全换一段话，这不是修错字");
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain("改写");
+  });
+
+  it("删除先落盘再改内存", async () => {
+    // 反过来的话删盘失败，界面上标签没了、文件还在，刷新一次它又冒出来
+    // ——而读者以为已经删掉了。
+    const { ws } = await workspace(recognizerReturning(CONTENT), {
+      ...createClipStore(await mkdtemp(path.join(tmpdir(), "unused-"))),
+      delete: async () => {
+        throw new Error("磁盘满了");
+      },
+    });
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    await ws.capture(region());
+    const id = ws.state.clips[0].id;
+
+    const result = await ws.removeClip(id);
+
+    expect(result.ok).toBe(false);
+    expect(ws.state.clips.map((clip) => clip.id)).toEqual([id]);
+  });
+
+  it("改动落盘后再读回来还在", async () => {
+    const { root, ws } = await workspace();
+    const doc = await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    await ws.capture(region());
+    const id = ws.state.clips[0].id;
+
+    await ws.editNote(id, "这段是全文的论点起点");
+    await ws.markImportant(id);
+
+    const back = await createClipStore(root).listByDoc(doc.id);
+    expect(back[0].note).toBe("这段是全文的论点起点");
+    expect(back[0].important).toBe(true);
+  });
+});

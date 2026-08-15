@@ -46,6 +46,7 @@ describe("固定 prompt 识别 adapter — 接进 Recognizer", () => {
     const recognizer = createRecognizer({
       document,
       recognition: createFixedPromptRecognitionClient(local),
+      translation: null,
     });
 
     const content = await recognizer.recognize({
