@@ -1,0 +1,614 @@
+{
+  "2006.11239.pdf": [
+    {
+      "id": "f01",
+      "state": "ready",
+      "region": {
+        "page": 2,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "p_\\theta(\\mathbf{x}_{0:T}) := p(\\mathbf{x}_T)\\prod_{t=1}^{T} p_\\theta(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t), \\qquad p_\\theta(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t) := \\mathcal{N}(\\mathbf{x}_{t-1};\\boldsymbol{\\mu}_\\theta(\\mathbf{x}_t,t),\\boldsymbol{\\Sigma}_\\theta(\\mathbf{x}_t,t))",
+        "images": []
+      },
+      "sourceText": "p_\\theta(\\mathbf{x}_{0:T}) := p(\\mathbf{x}_T)\\prod_{t=1}^{T} p_\\theta(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t), \\qquad p_\\theta(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t) := \\mathcal{N}(\\mathbf{x}_{t-1};\\boldsymbol{\\mu}_\\theta(\\mathbf{x}_t,t),\\boldsymbol{\\Sigma}_\\theta(\\mathbf{x}_t,t))",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "f02",
+      "state": "ready",
+      "region": {
+        "page": 2,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "q(\\mathbf{x}_{1:T}|\\mathbf{x}_0) := \\prod_{t=1}^{T} q(\\mathbf{x}_t|\\mathbf{x}_{t-1}), \\qquad q(\\mathbf{x}_t|\\mathbf{x}_{t-1}) := \\mathcal{N}(\\mathbf{x}_t; \\sqrt{1-\\beta_t}\\mathbf{x}_{t-1}, \\beta_t\\mathbf{I}) \\tag{2}",
+        "images": []
+      },
+      "sourceText": "q(\\mathbf{x}_{1:T}|\\mathbf{x}_0) := \\prod_{t=1}^{T} q(\\mathbf{x}_t|\\mathbf{x}_{t-1}), \\qquad q(\\mathbf{x}_t|\\mathbf{x}_{t-1}) := \\mathcal{N}(\\mathbf{x}_t; \\sqrt{1-\\beta_t}\\mathbf{x}_{t-1}, \\beta_t\\mathbf{I}) \\tag{2}",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "f03",
+      "state": "ready",
+      "region": {
+        "page": 3,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 3,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "\\mathbb{E}_q\\left[\\underbrace{D_{\\mathrm{KL}}\\left(q(\\mathbf{x}_T\\mid\\mathbf{x}_0)\\mathbin{\\|}p(\\mathbf{x}_T)\\right)}_{L_T}+\\sum_{t>1}\\underbrace{D_{\\mathrm{KL}}\\left(q(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t,\\mathbf{x}_0)\\mathbin{\\|}p_\\theta(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t)\\right)}_{L_{t-1}}-\\underbrace{\\log p_\\theta(\\mathbf{x}_0\\mid\\mathbf{x}_1)}_{L_0}\\right]",
+        "images": []
+      },
+      "sourceText": "\\mathbb{E}_q\\left[\\underbrace{D_{\\mathrm{KL}}\\left(q(\\mathbf{x}_T\\mid\\mathbf{x}_0)\\mathbin{\\|}p(\\mathbf{x}_T)\\right)}_{L_T}+\\sum_{t>1}\\underbrace{D_{\\mathrm{KL}}\\left(q(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t,\\mathbf{x}_0)\\mathbin{\\|}p_\\theta(\\mathbf{x}_{t-1}\\mid\\mathbf{x}_t)\\right)}_{L_{t-1}}-\\underbrace{\\log p_\\theta(\\mathbf{x}_0\\mid\\mathbf{x}_1)}_{L_0}\\right]",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "f04",
+      "state": "ready",
+      "region": {
+        "page": 3,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 3,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "= \\mathbb{E}_{\\mathbf{x}_0,\\epsilon}\\left[\\frac{1}{2\\sigma_t^2}\\left\\|\\frac{1}{\\sqrt{\\alpha_t}}\\left(\\mathbf{x}_t(\\mathbf{x}_0,\\epsilon)-\\frac{\\beta_t}{\\sqrt{1-\\bar{\\alpha}_t}}\\epsilon\\right)-\\boldsymbol{\\mu}_\\theta(\\mathbf{x}_t(\\mathbf{x}_0,\\epsilon),t)\\right\\|^2\\right]",
+        "images": []
+      },
+      "sourceText": "= \\mathbb{E}_{\\mathbf{x}_0,\\epsilon}\\left[\\frac{1}{2\\sigma_t^2}\\left\\|\\frac{1}{\\sqrt{\\alpha_t}}\\left(\\mathbf{x}_t(\\mathbf{x}_0,\\epsilon)-\\frac{\\beta_t}{\\sqrt{1-\\bar{\\alpha}_t}}\\epsilon\\right)-\\boldsymbol{\\mu}_\\theta(\\mathbf{x}_t(\\mathbf{x}_0,\\epsilon),t)\\right\\|^2\\right]",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "g01",
+      "state": "ready",
+      "region": {
+        "page": 1,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 1,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": null,
+        "multimodal": "左侧展示四张人脸生成样本，右侧展示由许多动物、交通工具和物体缩略图组成的 CIFAR-10 样本网格。",
+        "images": []
+      },
+      "sourceText": null,
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "p01",
+      "state": "ready",
+      "region": {
+        "page": 2,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "This paper presents progress in diffusion probabilistic models [53]. A diffusion probabilistic model (which we will call a “diffusion model” for brevity) is a parameterized Markov chain trained using variational inference to produce samples matching the data after finite time. Transitions of this chain are learned to reverse a diffusion process, which is a Markov chain that gradually adds noise to the data in the opposite direction of sampling until signal is destroyed. When the diffusion consists of small amounts of Gaussian noise, it is sufficient to set the sampling chain transitions to conditional Gaussians too, allowing for a particularly simple neural network parameterization.\n\nDiffusion models are straightforward to define and efficient to train, but to the best of our knowledge, there has been no demonstration that they are capable of generating high quality samples. We show that diffusion models actually are capable of generating high quality samples, sometimes better than the published results on other types of generative models (Section 4). In addition, we show that a certain parameterization of diffusion models reveals an equivalence with denoising score matching over multiple noise levels during training and with annealed Langevin dynamics during sampling (Section 3.2) [55, 61]. We obtained our best sample quality results using this parameterization (Section 4.2), so we consider this equivalence to be one of our primary contributions.",
+        "multimodal": "Two paragraphs of academic prose discussing diffusion probabilistic models, their training and sampling processes, and the paper's main contributions.",
+        "images": []
+      },
+      "sourceText": "This paper presents progress in diffusion probabilistic models [53]. A diffusion probabilistic model (which we will call a “diffusion model” for brevity) is a parameterized Markov chain trained using variational inference to produce samples matching the data after finite time. Transitions of this chain are learned to reverse a diffusion process, which is a Markov chain that gradually adds noise to the data in the opposite direction of sampling until signal is destroyed. When the diffusion consists of small amounts of Gaussian noise, it is sufficient to set the sampling chain transitions to conditional Gaussians too, allowing for a particularly simple neural network parameterization.\n\nDiffusion models are straightforward to define and efficient to train, but to the best of our knowledge, there has been no demonstration that they are capable of generating high quality samples. We show that diffusion models actually are capable of generating high quality samples, sometimes better than the published results on other types of generative models (Section 4). In addition, we show that a certain parameterization of diffusion models reveals an equivalence with denoising score matching over multiple noise levels during training and with annealed Langevin dynamics during sampling (Section 3.2) [55, 61]. We obtained our best sample quality results using this parameterization (Section 4.2), so we consider this equivalence to be one of our primary contributions.",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "m03",
+      "state": "ready",
+      "region": {
+        "page": 6,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 6,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "Figure 3: LSUN Church samples. FID=7.89\nFigure 4: LSUN Bedroom samples. FID=4.90\nAlgorithm 3 Sending x₀\n1: Send x_T ∼ q(x_T|x₀) using p(x_T)\n2: for t = T − 1, …, 2, 1 do\n3: Send x_t ∼ q(x_t|x_{t+1}, x₀) using p_θ(x_t|x_{t+1})\n4: end for\n5: Send x₀ using p_θ(x₀|x₁)\nAlgorithm 4 Receiving\n1: Receive x_T using p(x_T)\n2: for t = T − 1, …, 1, 0 do\n3: Receive x_t using p_θ(x_t|x_{t+1})\n4: end for\n5: return x₀",
+        "multimodal": "上方展示 LSUN Church 和 LSUN Bedroom 的图像样本及 FID 分数，下方并列展示发送与接收过程的两个算法伪代码。",
+        "images": []
+      },
+      "sourceText": "Figure 3: LSUN Church samples. FID=7.89\nFigure 4: LSUN Bedroom samples. FID=4.90\nAlgorithm 3 Sending x₀\n1: Send x_T ∼ q(x_T|x₀) using p(x_T)\n2: for t = T − 1, …, 2, 1 do\n3: Send x_t ∼ q(x_t|x_{t+1}, x₀) using p_θ(x_t|x_{t+1})\n4: end for\n5: Send x₀ using p_θ(x₀|x₁)\nAlgorithm 4 Receiving\n1: Receive x_T using p(x_T)\n2: for t = T − 1, …, 1, 0 do\n3: Receive x_t using p_θ(x_t|x_{t+1})\n4: end for\n5: return x₀",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    }
+  ],
+  "1706.03762.pdf": [
+    {
+      "id": "f05",
+      "state": "ready",
+      "region": {
+        "page": 4,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 4,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "\\mathrm{Attention}(Q,K,V)=\\mathrm{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V",
+        "images": []
+      },
+      "sourceText": "\\mathrm{Attention}(Q,K,V)=\\mathrm{softmax}\\left(\\frac{QK^T}{\\sqrt{d_k}}\\right)V",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "f06",
+      "state": "ready",
+      "region": {
+        "page": 5,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 5,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "\\mathrm{MultiHead}(Q,K,V)=\\mathrm{Concat}(\\mathrm{head}_1,\\ldots,\\mathrm{head}_h)W^O\\\\\n\\mathrm{where}\\ \\mathrm{head}_i=\\mathrm{Attention}(QW_i^Q,KW_i^K,VW_i^V)",
+        "images": []
+      },
+      "sourceText": "\\mathrm{MultiHead}(Q,K,V)=\\mathrm{Concat}(\\mathrm{head}_1,\\ldots,\\mathrm{head}_h)W^O\\\\\n\\mathrm{where}\\ \\mathrm{head}_i=\\mathrm{Attention}(QW_i^Q,KW_i^K,VW_i^V)",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "g02",
+      "state": "ready",
+      "region": {
+        "page": 3,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 3,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "Output Probabilities\nSoftmax\nLinear\nAdd & Norm\nFeed Forward\nMulti-Head Attention\nMasked Multi-Head Attention\nN×\nPositional Encoding\nInput Embedding\nInputs\nOutput Embedding\nOutputs\n(shifted right)",
+        "multimodal": "A schematic diagram of the Transformer model architecture, showing encoder and decoder stacks with attention, feed-forward, add-and-normalize layers, embeddings, positional encoding, and output prediction layers.",
+        "images": []
+      },
+      "sourceText": "Output Probabilities\nSoftmax\nLinear\nAdd & Norm\nFeed Forward\nMulti-Head Attention\nMasked Multi-Head Attention\nN×\nPositional Encoding\nInput Embedding\nInputs\nOutput Embedding\nOutputs\n(shifted right)",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "g03",
+      "state": "ready",
+      "region": {
+        "page": 4,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 4,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "Scaled Dot-Product Attention; Multi-Head Attention; MatMul; SoftMax; Mask (opt.); Scale; Linear; Concat; Q; K; V; h",
+        "multimodal": "展示缩放点积注意力和多头注意力的结构流程图。",
+        "images": []
+      },
+      "sourceText": "Scaled Dot-Product Attention; Multi-Head Attention; MatMul; SoftMax; Mask (opt.); Scale; Linear; Concat; Q; K; V; h",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "g04",
+      "state": "ready",
+      "region": {
+        "page": 6,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 6,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "Layer Type | Complexity per Layer | Sequential Operations | Maximum Path Length\nSelf-Attention | O(n^2 · d) | O(1) | O(1)\nRecurrent | O(n · d^2) | O(n) | O(n)\nConvolutional | O(k · n · d^2) | O(1) | O(log_k(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)",
+        "multimodal": "一张比较不同层类型复杂度、顺序操作数和最大路径长度的表格。",
+        "images": []
+      },
+      "sourceText": "Layer Type | Complexity per Layer | Sequential Operations | Maximum Path Length\nSelf-Attention | O(n^2 · d) | O(1) | O(1)\nRecurrent | O(n · d^2) | O(n) | O(n)\nConvolutional | O(k · n · d^2) | O(1) | O(log_k(n))\nSelf-Attention (restricted) | O(r · n · d) | O(1) | O(n/r)",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "p02",
+      "state": "ready",
+      "region": {
+        "page": 2,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "Recurrent neural networks, long short-term memory [13] and gated recurrent [7] neural networks in particular, have been firmly established as state of the art approaches in sequence modeling and transduction problems such as language modeling and machine translation [35, 2, 5]. Numerous efforts have since continued to push the boundaries of recurrent language models and encoder-decoder architectures [38, 24, 15]. Recurrent models typically factor computation along the symbol positions of the input and output sequences. Aligning the positions to steps in computation time, they generate a sequence of hidden states h_t, as a function of the previous hidden state h_{t-1} and the input for position t. This inherently sequential nature precludes parallelization within training examples, which becomes critical at longer sequence lengths, as memory constraints limit batching across examples. Recent work has achieved significant improvements in computational efficiency through factorization tricks [21] and conditional computation [32], while also improving model performance in case of the latter. The fundamental constraint of sequential computation, however, remains.",
+        "multimodal": "两段关于循环神经网络及其计算限制的正文段落，包含若干参考文献标注和行内数学变量。",
+        "images": []
+      },
+      "sourceText": "Recurrent neural networks, long short-term memory [13] and gated recurrent [7] neural networks in particular, have been firmly established as state of the art approaches in sequence modeling and transduction problems such as language modeling and machine translation [35, 2, 5]. Numerous efforts have since continued to push the boundaries of recurrent language models and encoder-decoder architectures [38, 24, 15]. Recurrent models typically factor computation along the symbol positions of the input and output sequences. Aligning the positions to steps in computation time, they generate a sequence of hidden states h_t, as a function of the previous hidden state h_{t-1} and the input for position t. This inherently sequential nature precludes parallelization within training examples, which becomes critical at longer sequence lengths, as memory constraints limit batching across examples. Recent work has achieved significant improvements in computational efficiency through factorization tricks [21] and conditional computation [32], while also improving model performance in case of the latter. The fundamental constraint of sequential computation, however, remains.",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "m02",
+      "state": "ready",
+      "region": {
+        "page": 3,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 3,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "Output Probabilities\nSoftmax\nLinear\nAdd & Norm\nFeed Forward\nAdd & Norm\nMulti-Head Attention\nAdd & Norm\nMasked Multi-Head Attention\nN×\nN×\nPositional Encoding\nPositional Encoding\nInput Embedding\nOutput Embedding\nInputs\nOutputs (shifted right)\nFigure 1: The Transformer - model architecture.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively.",
+        "multimodal": "A Transformer model architecture diagram showing encoder and decoder stacks with attention, feed-forward, normalization, embeddings, positional encoding, and output probabilities, followed by an explanatory paragraph.",
+        "images": []
+      },
+      "sourceText": "Output Probabilities\nSoftmax\nLinear\nAdd & Norm\nFeed Forward\nAdd & Norm\nMulti-Head Attention\nAdd & Norm\nMasked Multi-Head Attention\nN×\nN×\nPositional Encoding\nPositional Encoding\nInput Embedding\nOutput Embedding\nInputs\nOutputs (shifted right)\nFigure 1: The Transformer - model architecture.\nThe Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively.",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    }
+  ],
+  "1512.03385.pdf": [
+    {
+      "id": "g05",
+      "state": "ready",
+      "region": {
+        "page": 4,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 4,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "VGG-19\n34-layer plain\n34-layer residual\nimage\noutput\nsize: 224\n3x3 conv, 64\npool, /2\noutput\nsize: 112\n3x3 conv, 128\npool, /2\noutput\nsize: 56\n3x3 conv, 256\noutput\nsize: 28\n3x3 conv, 512\noutput\nsize: 14\noutput\nsize: 7\noutput\nsize: 1\nfc 4096\nfc 1000\n7x7 conv, 64, /2\n3x3 conv, 64\n3x3 conv, 128, /2\n3x3 conv, 128\n3x3 conv, 256, /2\n3x3 conv, 256\n3x3 conv, 512, /2\n3x3 conv, 512\navg pool\nfc 1000",
+        "multimodal": "展示 VGG-19、34 层普通网络和 34 层残差网络的 ImageNet 网络架构及其卷积层、池化层和残差连接。",
+        "images": []
+      },
+      "sourceText": "VGG-19\n34-layer plain\n34-layer residual\nimage\noutput\nsize: 224\n3x3 conv, 64\npool, /2\noutput\nsize: 112\n3x3 conv, 128\npool, /2\noutput\nsize: 56\n3x3 conv, 256\noutput\nsize: 28\n3x3 conv, 512\noutput\nsize: 14\noutput\nsize: 7\noutput\nsize: 1\nfc 4096\nfc 1000\n7x7 conv, 64, /2\n3x3 conv, 64\n3x3 conv, 128, /2\n3x3 conv, 128\n3x3 conv, 256, /2\n3x3 conv, 256\n3x3 conv, 512, /2\n3x3 conv, 512\navg pool\nfc 1000",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "g06",
+      "state": "ready",
+      "region": {
+        "page": 5,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 5,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "layer name | output size | 18-layer | 34-layer | 50-layer | 101-layer | 152-layer\nconv1 | 112×112 | 7×7, 64, stride 2\n3×3 max pool, stride 2\nconv2_x | 56×56 | [3×3, 64; 3×3, 64] ×2 | [3×3, 64; 3×3, 64] ×3 | [1×1, 64; 3×3, 64; 1×1, 256] ×3 | [1×1, 64; 3×3, 64; 1×1, 256] ×3 | [1×1, 64; 3×3, 64; 1×1, 256] ×3\nconv3_x | 28×28 | [3×3, 128; 3×3, 128] ×2 | [3×3, 128; 3×3, 128] ×4 | [1×1, 128; 3×3, 128; 1×1, 512] ×4 | [1×1, 128; 3×3, 128; 1×1, 512] ×4 | [1×1, 128; 3×3, 128; 1×1, 512] ×8\nconv4_x | 14×14 | [3×3, 256; 3×3, 256] ×2 | [3×3, 256; 3×3, 256] ×6 | [1×1, 256; 3×3, 256; 1×1, 1024] ×6 | [1×1, 256; 3×3, 256; 1×1, 1024] ×23 | [1×1, 256; 3×3, 256; 1×1, 1024] ×36\nconv5_x | 7×7 | [3×3, 512; 3×3, 512] ×2 | [3×3, 512; 3×3, 512] ×3 | [1×1, 512; 3×3, 512; 1×1, 2048] ×3 | [1×1, 512; 3×3, 512; 1×1, 2048] ×3 | [1×1, 512; 3×3, 512; 1×1, 2048] ×3\n1×1 | average pool, 1000-d fc, softmax\nFLOPs | 1.8×10⁹ | 3.6×10⁹ | 3.8×10⁹ | 7.6×10⁹ | 11.3×10⁹\nTable 1. Architectures for ImageNet. Building blocks are shown in brackets (see also Fig. 5), with the numbers of blocks stacked. Down-sampling is performed by conv3_1, conv4_1, and conv5_1 with a stride of 2.",
+        "multimodal": "A comparison table of ResNet architectures for ImageNet, listing layer structures, output sizes, block repetitions, and FLOPs for 18-, 34-, 50-, 101-, and 152-layer models.",
+        "images": []
+      },
+      "sourceText": "layer name | output size | 18-layer | 34-layer | 50-layer | 101-layer | 152-layer\nconv1 | 112×112 | 7×7, 64, stride 2\n3×3 max pool, stride 2\nconv2_x | 56×56 | [3×3, 64; 3×3, 64] ×2 | [3×3, 64; 3×3, 64] ×3 | [1×1, 64; 3×3, 64; 1×1, 256] ×3 | [1×1, 64; 3×3, 64; 1×1, 256] ×3 | [1×1, 64; 3×3, 64; 1×1, 256] ×3\nconv3_x | 28×28 | [3×3, 128; 3×3, 128] ×2 | [3×3, 128; 3×3, 128] ×4 | [1×1, 128; 3×3, 128; 1×1, 512] ×4 | [1×1, 128; 3×3, 128; 1×1, 512] ×4 | [1×1, 128; 3×3, 128; 1×1, 512] ×8\nconv4_x | 14×14 | [3×3, 256; 3×3, 256] ×2 | [3×3, 256; 3×3, 256] ×6 | [1×1, 256; 3×3, 256; 1×1, 1024] ×6 | [1×1, 256; 3×3, 256; 1×1, 1024] ×23 | [1×1, 256; 3×3, 256; 1×1, 1024] ×36\nconv5_x | 7×7 | [3×3, 512; 3×3, 512] ×2 | [3×3, 512; 3×3, 512] ×3 | [1×1, 512; 3×3, 512; 1×1, 2048] ×3 | [1×1, 512; 3×3, 512; 1×1, 2048] ×3 | [1×1, 512; 3×3, 512; 1×1, 2048] ×3\n1×1 | average pool, 1000-d fc, softmax\nFLOPs | 1.8×10⁹ | 3.6×10⁹ | 3.8×10⁹ | 7.6×10⁹ | 11.3×10⁹\nTable 1. Architectures for ImageNet. Building blocks are shown in brackets (see also Fig. 5), with the numbers of blocks stacked. Down-sampling is performed by conv3_1, conv4_1, and conv5_1 with a stride of 2.",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "p04",
+      "state": "ready",
+      "region": {
+        "page": 2,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 2,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "(or unable to do so in feasible time).\n\nIn this paper, we address the degradation problem by\nintroducing a deep residual learning framework. In-\nstead of hoping each few stacked layers directly fit a\ndesired underlying mapping, we explicitly let these lay-\ners fit a residual mapping. Formally, denoting the desired\nunderlying mapping as $\\mathcal{H}(\\mathbf{x})$, we let the stacked nonlinear",
+        "multimodal": "A cropped academic paper passage describing a deep residual learning framework, with an inline mathematical expression.",
+        "images": []
+      },
+      "sourceText": "(or unable to do so in feasible time).\n\nIn this paper, we address the degradation problem by\nintroducing a deep residual learning framework. In-\nstead of hoping each few stacked layers directly fit a\ndesired underlying mapping, we explicitly let these lay-\ners fit a residual mapping. Formally, denoting the desired\nunderlying mapping as $\\mathcal{H}(\\mathbf{x})$, we let the stacked nonlinear",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    },
+    {
+      "id": "m01",
+      "state": "ready",
+      "region": {
+        "page": 4,
+        "rect": {
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100
+        }
+      },
+      "content": {
+        "route": "vision",
+        "anchor": {
+          "page": 4,
+          "rect": {
+            "x": 0,
+            "y": 0,
+            "width": 100,
+            "height": 100
+          }
+        },
+        "sourceText": "VGG-19\n34-layer plain\n34-layer residual\nimage\noutput size: 224\n3x3 conv, 64\n3x3 conv, 64\npool, /2\noutput size: 112\n3x3 conv, 128\n3x3 conv, 128\npool, /2\noutput size: 56\n3x3 conv, 256\n3x3 conv, 256\n3x3 conv, 256\n3x3 conv, 256\npool, /2\noutput size: 28\n3x3 conv, 512\n3x3 conv, 512\n3x3 conv, 512\n7x7 conv, 64, /2\npool, /2\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 128, /2\n3x3 conv, 128\n3x3 conv, 128\n3x3 conv, 128\n7x7 conv, 64, /2\npool, /2\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 128, /2\n3x3 conv, 128\n3x3 conv, 128\n3x3 conv, 128\nResidual Network. Based on the above plain network, we insert shortcut connections (Fig. 3, right) which turn the network into its counterpart residual version. The identity shortcuts (Eqn.(1)) can be directly used when the input and output are of the same dimensions (solid line shortcuts in Fig. 3). When the dimensions increase (dotted line shortcuts in Fig. 3), we consider two options: (A) The shortcut still performs identity mapping, with extra zero entries padded for increasing dimensions. This option introduces no extra parameter; (B) The projection shortcut in Eqn.(2) is used to match dimensions (done by 1×1 convolutions). For both options, when the shortcuts go across feature maps of two sizes, they are performed with a stride of 2.\n3.4. Implementation\nOur implementation for ImageNet follows the practice in [21, 41]. The image is resized with its shorter side randomly sampled in [256, 480] for scale augmentation [41]. A 224×224 crop is randomly sampled from an image or its horizontal flip, with the per-pixel mean subtracted [21].",
+        "multimodal": "左侧是VGG-19、34层普通网络和34层残差网络的结构示意图，右侧是介绍残差网络及其实现方法的正文。",
+        "images": []
+      },
+      "sourceText": "VGG-19\n34-layer plain\n34-layer residual\nimage\noutput size: 224\n3x3 conv, 64\n3x3 conv, 64\npool, /2\noutput size: 112\n3x3 conv, 128\n3x3 conv, 128\npool, /2\noutput size: 56\n3x3 conv, 256\n3x3 conv, 256\n3x3 conv, 256\n3x3 conv, 256\npool, /2\noutput size: 28\n3x3 conv, 512\n3x3 conv, 512\n3x3 conv, 512\n7x7 conv, 64, /2\npool, /2\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 128, /2\n3x3 conv, 128\n3x3 conv, 128\n3x3 conv, 128\n7x7 conv, 64, /2\npool, /2\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 64\n3x3 conv, 128, /2\n3x3 conv, 128\n3x3 conv, 128\n3x3 conv, 128\nResidual Network. Based on the above plain network, we insert shortcut connections (Fig. 3, right) which turn the network into its counterpart residual version. The identity shortcuts (Eqn.(1)) can be directly used when the input and output are of the same dimensions (solid line shortcuts in Fig. 3). When the dimensions increase (dotted line shortcuts in Fig. 3), we consider two options: (A) The shortcut still performs identity mapping, with extra zero entries padded for increasing dimensions. This option introduces no extra parameter; (B) The projection shortcut in Eqn.(2) is used to match dimensions (done by 1×1 convolutions). For both options, when the shortcuts go across feature maps of two sizes, they are performed with a stride of 2.\n3.4. Implementation\nOur implementation for ImageNet follows the practice in [21, 41]. The image is resized with its shorter side randomly sampled in [256, 480] for scale augmentation [41]. A 224×224 crop is randomly sampled from an image or its horizontal flip, with the per-pixel mean subtracted [21].",
+      "translation": null,
+      "note": null,
+      "label": "dot",
+      "important": true,
+      "lastViewedAt": 0
+    }
+  ]
+}

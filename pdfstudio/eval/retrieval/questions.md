@@ -11,6 +11,10 @@
   zh 与 en 的召回差就是跨语言检索的净损失。
 - 中文问题**刻意不含任何英文词**。含英文词的中文问题会退化成关键词匹配，测不出跨语言能力
   （现有基线 `search()` 只匹配 `[a-z0-9]{3,}`，见 `pdfstudio/src/chat/chat.ts`）。
+- `cl-*` 六条是**摘录题**：问的是公式的写法、图与表的内容。pdf.js 文本层在这几处要么给乱码、
+  要么什么都没有，所以它们只有在摘录进检索池时才可能召回。**它们不计入主 recall 与阈值曲线**
+  ——`MIN_PEAK_MARGIN` 是在原来那 29 条上标定的，混进新题会让历史数字失去可比性。
+  它们单独报一段：同一套题跑 `--clips` 与不跑，差值就是摘录索引的净收益。
 - `na-*` 三条是**文档答不了**的问题，页码记 `—`。它们验的是不变量⑤：没有依据必须返回
   `grounding: 'none'`，不许硬凑一段原文当出处。
 
@@ -42,6 +46,12 @@
 | en-04 | en | Why does the 1202-layer network perform worse on the test set than the 110-layer one? | arXiv:1512.03385 (ResNet) | 8 | The 1202-layer network may be unnecessarily large (19.4M) for this small dataset. Strong regularization such as maxout [10] or dropout [14] is applied to obtain the best results | 对照组，zh-13 的对译 |
 | en-05 | en | What Inception score and FID does the model obtain on unconditional CIFAR10? | arXiv:2006.11239 (DDPM) | 1 | On the unconditional CIFAR10 dataset, we obtain an Inception score of 9.46 and a state-of-the-art FID score of 3.17. On 256x256 LSUN, we obtain sample quality similar to ProgressiveGAN. | 对照组，zh-15 的对译 |
 | en-06 | en | Which training objective gives better codelengths, and which gives better sample quality? | arXiv:2006.11239 (DDPM) | 6 | We find that training our models on the true variational bound yields better codelengths than training on the simplified objective, as expected, but the latter yields the best sample quality. | 对照组，zh-19 的对译 |
+| cl-01 | zh | 缩放点积注意力的计算式里，softmax 的分母上放的是什么？ | arXiv:1706.03762 (Transformer) | 4 | Attention(Q, K, V ) = softmax( QKT √dk )V | **摘录题**：公式本身。pdf.js 文本层在这里给的是散落的字符，LaTeX 只有摘录里有 |
+| cl-02 | zh | 多头注意力的输出是怎么把各个头拼起来再变换的？ | arXiv:1706.03762 (Transformer) | 5 | MultiHead(Q, K, V ) = Concat(head1, ..., headh)W O | **摘录题**：公式本身 |
+| cl-03 | zh | 前向扩散过程是怎么按时间步连乘定义的？ | arXiv:2006.11239 (DDPM) | 2 | q(x1:T |x0) := TY t=1 q(xt|xt−1) | **摘录题**：公式本身，含条件概率竖线 |
+| cl-04 | zh | 那张模型结构图里，左右两侧各画的是什么，中间靠什么连起来？ | arXiv:1706.03762 (Transformer) | 3 | Figure 1: The Transformer - model architecture. | **摘录题**：图的内容只在图里，文本层只有图题 |
+| cl-05 | zh | 那张对比不同层类型的表里，比较了哪几个指标？ | arXiv:1706.03762 (Transformer) | 6 | Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations | **摘录题**：表格内容 |
+| cl-06 | zh | 残差网络那张结构对比图里，从上到下堆的是什么样的卷积块？ | arXiv:1512.03385 (ResNet) | 4 | Figure 3. Example network architectures for ImageNet. | **摘录题**：图的内容 |
 | na-01 | zh | 这个模型在语音识别任务上的词错误率是多少？ | arXiv:1706.03762 (Transformer) | — | — | 文档答不了。全文无 `speech` / `word error`；结论只把 audio 列为未来工作，是设计好的近似诱饵 |
 | na-02 | zh | 这些网络在语义分割数据集上的平均交并比是多少？ | arXiv:1512.03385 (ResNet) | — | — | 文档答不了。全文只把 COCO segmentation 作为比赛名次提了一句，无任何分割指标；`IoU` 仅作检测阈值出现（`mAP @ IoU = 0.5`），是设计好的近似诱饵 |
 | na-03 | en | What FID does the model achieve on class-conditional ImageNet 128×128 generation? | arXiv:2006.11239 (DDPM) | — | — | 文档答不了。全文 0 次提及 ImageNet；但满页都是 FID 表格，最易诱发假出处 |

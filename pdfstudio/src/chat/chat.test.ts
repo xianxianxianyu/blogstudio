@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createChat } from "./chat";
+import type { Clip } from "../clip/clip";
 import { openFixturePdf } from "../../test/fixtures";
 import { createFakeModelClient } from "../../test/fake-model-client";
 import { createFakeEmbedder } from "../../test/fake-embedder";
@@ -338,3 +339,61 @@ describe("Chat — 配了 embedder 时走向量检索", () => {
     expect(answer.citations).toEqual([]);
   });
 });
+
+describe("摘录进检索池", () => {
+  it("命中摘录时 citation 报 clip，不冒充原文", async () => {
+    // 「这是论文原文」和「这是我当时记下的」在读者眼里必须分得开。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: createFakeModelClient({ completeText: "好的" }),
+      clips: () => [clipWith("gradient checkpointing 把显存换成算力", 7)],
+    });
+
+    const answer = await chat.ask([
+      { role: "user", parts: [{ kind: "text", text: "gradient checkpointing" }] },
+    ]);
+
+    expect(answer.citations[0]).toMatchObject({ kind: "clip", page: 7, clipId: "note-1" });
+  });
+
+  it("摘录是取值时才读的，新框的立刻能检索到", async () => {
+    // 传数组的话会把建索引那一刻的快照钉死，之后新框的摘录永远检索不到，
+    // 而且不会有任何报错——这类静默失效最难发现。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const clips: Clip[] = [];
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: createFakeModelClient({ completeText: "好的" }),
+      clips: () => clips,
+    });
+    await chat.ask([{ role: "user", parts: [{ kind: "text", text: "随便问问" }] }]);
+
+    clips.push(clipWith("gradient checkpointing 把显存换成算力", 7));
+    await chat.reindex();
+    const answer = await chat.ask([
+      { role: "user", parts: [{ kind: "text", text: "gradient checkpointing" }] },
+    ]);
+
+    expect(answer.citations[0]).toMatchObject({ kind: "clip", clipId: "note-1" });
+  });
+});
+
+function clipWith(note: string, page: number): Clip {
+  const rect = { x: 1, y: 2, width: 30, height: 40 };
+  const shot = { mime: "image/png" as const, bytes: new Uint8Array([1]), width: 4, height: 4 };
+  return {
+    id: "note-1",
+    state: "ready",
+    region: { page, rect, pixels: shot },
+    content: { route: "vision", anchor: { page, rect }, sourceText: null, images: [], screenshot: shot },
+    sourceText: null,
+    translation: null,
+    note,
+    label: "dot",
+    important: true,
+    lastViewedAt: 0,
+  };
+}

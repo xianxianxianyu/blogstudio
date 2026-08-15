@@ -14,6 +14,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { openFixturePdf } from "../../test/fixtures";
 import { buildIndex, searchChunks, scoreChunks, peakMargin } from "../../src/chat/retrieval";
+import type { Clip } from "../../src/clip/clip";
 import type { Chunk } from "../../src/chat/retrieval";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
 
@@ -39,7 +40,7 @@ async function readQuestions(): Promise<Question[]> {
     const cells = line.split("|").map((cell) => cell.trim());
     if (cells.length < 8) continue;
     const [, id, lang, question, source, page] = cells;
-    if (!/^(zh|en|na)-\d\d$/.test(id)) continue;
+    if (!/^(zh|en|na|cl)-\d\d$/.test(id)) continue;
 
     const arxiv = source.match(/arXiv:([\d.]+)/);
     if (!arxiv) continue;
@@ -85,20 +86,35 @@ function rate(outcomes: Outcome[], k: number): string {
 async function main(): Promise<void> {
   // --embed：接本地 embedding（首次会下载权重）。不加就是关键词基线。
   const useEmbedder = process.argv.slice(2).includes("--embed");
+  // --clips：把摘录也放进检索池。语料由 `npm run eval:clips` 生成一次并钉住——
+  // 每次现跑视觉识别的话，「加了摘录之后指标塌没塌」就分不清是摘录的作用还是模型抖动。
+  const useClips = process.argv.slice(2).includes("--clips");
+  const clipsByPaper: Record<string, Clip[]> = useClips
+    ? (JSON.parse(await readFile(path.join(import.meta.dirname, "clips.json"), "utf8")) as Record<string, Clip[]>)
+    : {};
   const embedder = useEmbedder ? createTransformersEmbedder() : undefined;
 
   const questions = await readQuestions();
   const indexes = new Map<string, Chunk[]>();
 
-  if (useEmbedder) console.log("检索：本地 embedding（首次运行要下载权重，请稍候）\n");
-  else console.log("检索：关键词基线\n");
+  if (useEmbedder) console.log("检索：本地 embedding（首次运行要下载权重，请稍候）");
+  else console.log("检索：关键词基线");
+  console.log(
+    useClips
+      ? `摘录：进池，共 ${Object.values(clipsByPaper).flat().length} 条\n`
+      : "摘录：不进池（正文块基线）\n",
+  );
 
   const outcomes: Outcome[] = [];
   for (const question of questions) {
     if (!indexes.has(question.paper)) {
       indexes.set(
         question.paper,
-        await buildIndex(await openFixturePdf(question.paper), embedder),
+        await buildIndex(
+          await openFixturePdf(question.paper),
+          embedder,
+          clipsByPaper[question.paper] ?? [],
+        ),
       );
     }
     const index = indexes.get(question.paper)!;
@@ -135,17 +151,23 @@ async function main(): Promise<void> {
     }
   }
 
+  // 摘录题单独算。混进主 recall 会让 MIN_PEAK_MARGIN 的标定曲线跟历史数字失去可比性
+  // ——那条门槛是在原来 29 条上标出来的。
+  const clipQuestions = outcomes.filter((outcome) => outcome.question.id.startsWith("cl-"));
+  const main = outcomes.filter((outcome) => !outcome.question.id.startsWith("cl-"));
+
   // 「答不了」的题也带 lang，但它们没有正确页，混进 recall 的分母会把成绩冲淡。
-  const answerable = outcomes.filter((outcome) => outcome.question.page !== null);
+  const answerable = main.filter((outcome) => outcome.question.page !== null);
   const zh = answerable.filter((outcome) => outcome.question.lang === "zh");
   const en = answerable.filter((outcome) => outcome.question.lang === "en");
-  const na = outcomes.filter((outcome) => outcome.question.page === null);
+  const na = main.filter((outcome) => outcome.question.page === null);
   // 两类考的不是一回事：「主题不在」的题检索本就不该找到东西；「主题在、事实不在」的
   // 题（na-03：满页 FID 表格但全文无 ImageNet）检索找到相关段落是**对的**——
   // 判断「这段里没有你问的事实」是推理不是检索。见 README 与 chat-retrieval-interface.md。
   const OFF_TOPIC = ["na-01", "na-02"];
   const offTopic = na.filter((outcome) => OFF_TOPIC.includes(outcome.question.id));
 
+  reportClipQuestions(clipQuestions, useClips);
   console.log(`语料 ${indexes.size} 篇，问题 ${questions.length} 条（zh ${zh.length} / en ${en.length} / 答不了 ${na.length}）\n`);
 
   console.log("           recall@1  recall@3");
@@ -225,3 +247,26 @@ async function main(): Promise<void> {
 }
 
 await main();
+
+/**
+ * 摘录题单独报。
+ *
+ * 它们问的是公式怎么写、图和表里画了什么——pdf.js 文本层在这几处要么给乱码、要么什么
+ * 都没有，所以**只有摘录进池时才可能召回**。同一套题跑 `--clips` 与不跑，差值就是
+ * 摘录索引的净收益；不跑时的命中全是文本层碰巧蹭到的（图题、表题那一行）。
+ */
+function reportClipQuestions(outcomes: Outcome[], useClips: boolean): void {
+  if (outcomes.length === 0) return;
+  const hit = outcomes.filter((outcome) => outcome.pages.slice(0, 3).includes(outcome.question.page!));
+
+  console.log(
+    `摘录题 recall@3：${((hit.length / outcomes.length) * 100).toFixed(1)}% ` +
+      `(${hit.length}/${outcomes.length})  ${useClips ? "摘录在池" : "摘录不在池"}`,
+  );
+  for (const outcome of outcomes) {
+    const ok = hit.includes(outcome);
+    const from = outcome.pages.length === 0 ? "什么都没检索到" : `检索到 p.${outcome.pages.slice(0, 3).join("/")}`;
+    console.log(`  ${outcome.question.id}  ${ok ? "✓" : "✗"} 期待 p.${outcome.question.page}，${from}`);
+  }
+  console.log("");
+}

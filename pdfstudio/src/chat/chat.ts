@@ -2,6 +2,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import { buildIndex, searchChunks } from "./retrieval";
 import type { Embedder } from "../model/embedder";
 import type { Chunk } from "./retrieval";
+import type { Clip } from "../clip/clip";
 import type { ModelClient, ModelMessage } from "../model/model-client";
 import type { Screenshot } from "../recognizer/recognizer";
 
@@ -53,6 +54,13 @@ export interface ChatDeps {
   model: ModelClient;
   /** 检索用的向量端口（ADR-0010）。不配就退回关键词打分——中文问英文论文时那是 0 召回。 */
   embedder?: Embedder;
+  /**
+   * 这篇文档下的摘录，进同一个检索池。
+   *
+   * 是个函数而不是数组：摘录随时在变（框一条、改一句笔记、到期衰减），传数组等于
+   * 把建索引那一刻的快照钉死，之后新框的摘录永远检索不到，而且不会有任何报错。
+   */
+  clips?: () => Clip[];
 }
 
 /** rare，可省。`signal` 是停止按钮的入口（ADR-0008 的 LocalRuntime 要它）。 */
@@ -121,7 +129,9 @@ function queryOf(turns: Turn[]): string {
 export function createChat(deps: ChatDeps): Chat {
   // 懒加载 + 只建一次（不变量 ④）。索引绑在这个实例上，天然不可能串到别的文档。
   let index: Promise<Chunk[]> | null = null;
-  const ensureIndex = () => (index ??= buildIndex(deps.document, deps.embedder));
+  // 摘录也进索引：文本层在公式和图上是空的，那两处只有摘录里有
+  //（`.scratch/pdfstudio-clip/issues/01`）。取值时才读，reindex 之后能拿到新摘录。
+  const ensureIndex = () => (index ??= buildIndex(deps.document, deps.embedder, deps.clips?.() ?? []));
 
   return {
     async reindex(): Promise<void> {
@@ -155,7 +165,15 @@ export function createChat(deps: ChatDeps): Chat {
       // grounding 由检索结果判定，不看模型说了什么（不变量 ⑤）。
       // 出处两种都要给：检索命中不代表读者贴进来的摘录就不是依据了。
       const citations: Citation[] = [
-        ...(hit ? [{ kind: "chunk" as const, page: hit.page, snippet: hit.text }] : []),
+        // 命中的可能是正文块，也可能是读者自己的摘录——出处要如实说是哪一种，
+        // 否则「这是原文」和「这是我当时记下的」在读者眼里没法区分。
+        ...(hit
+          ? [
+              hit.clipId === undefined
+                ? { kind: "chunk" as const, page: hit.page, snippet: hit.text }
+                : { kind: "clip" as const, page: hit.page, snippet: hit.text, clipId: hit.clipId },
+            ]
+          : []),
         ...collectSnapshots(turns).map((snapshot) => ({
           kind: "clip" as const,
           page: snapshot.page,
