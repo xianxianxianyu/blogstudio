@@ -67,7 +67,7 @@ describe("ClipStore — 存取", () => {
     await clips.save("paper-1706", CLIP);
 
     // 文件是唯一真相，所以它得是人能读、能 grep、能手改的东西（ADR-0011）。
-    const folder = path.join(root, "paper-1706", "c1");
+    const folder = path.join(root, "paper-1706", "clips", "c1");
     const markdown = await readFile(path.join(folder, "index.md"), "utf8");
     expect(markdown).toContain("The dominant sequence transduction models");
     expect(markdown).toContain("主流的序列转导模型");
@@ -122,7 +122,7 @@ describe("保留轴落盘（ADR-0012）", () => {
     // 而这类差别通常要等到东西被删掉才发现。
     const { root, store: target } = await storeAt();
     await target.save("d1", CLIP);
-    const file = path.join(root, "d1", CLIP.id, "index.md");
+    const file = path.join(root, "d1", "clips", CLIP.id, "index.md");
     await writeFile(file, (await readFile(file, "utf8")).replace(/\s*"important": (true|false),?\n/, "\n"));
 
     expect((await target.listByDoc("d1"))[0].important).toBe(false);
@@ -135,14 +135,14 @@ describe("墓碑落盘（ADR-0012）", () => {
     // 留后者让标签存活——痕迹是永久的，内容是会过期的。
     const { root, store: target } = await storeAt();
     await target.save("d1", CLIP);
-    expect(await readdir(path.join(root, "d1", CLIP.id, ".asset"))).not.toEqual([]);
+    expect(await readdir(path.join(root, "d1", "clips", CLIP.id, ".asset"))).not.toEqual([]);
 
     await target.save("d1", { ...CLIP, content: null, sourceText: null, translation: null });
 
     // save 是整体替换（写 .tmp → rm 目标 → rename），所以不需要额外的删除路径：
     // 存一条 content 为 null 的摘录，旧字节自然就没了。加一个 store.decay()
     // 反而会把「磁盘上留什么」复制到第二个地方。
-    expect(await readdir(path.join(root, "d1", CLIP.id, ".asset"))).toEqual([]);
+    expect(await readdir(path.join(root, "d1", "clips", CLIP.id, ".asset"))).toEqual([]);
     const [back] = await target.listByDoc("d1");
     expect(back.region.page).toBe(CLIP.region.page);
     expect(back.region.rect).toEqual(CLIP.region.rect);

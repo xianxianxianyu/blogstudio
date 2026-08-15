@@ -156,7 +156,7 @@ describe("回收器：跑一遍磁盘", () => {
     expect(back.find((clip) => clip.id === "expired")!.content).toBeNull();
     expect(back.find((clip) => clip.id === "kept")!.content).not.toBeNull();
     // 墓碑的字节真的没了，锚点还在——省下的 99% 就在这儿。
-    expect(await readdir(path.join(root, "d1", "expired", ".asset"))).toEqual([]);
+    expect(await readdir(path.join(root, "d1", "clips", "expired", ".asset"))).toEqual([]);
     expect(back.find((clip) => clip.id === "expired")!.region.rect).toEqual(REGION.rect);
   });
 
@@ -168,6 +168,6 @@ describe("回收器：跑一遍磁盘", () => {
 
     await collect({ store: target }, "d1", later(8));
 
-    expect(await readdir(path.join(root, "d1"))).toEqual(["c1"]);
+    expect(await readdir(path.join(root, "d1", "clips"))).toEqual(["c1"]);
   });
 });

@@ -21,7 +21,9 @@ import { parseConfig, resolveEndpoint } from "../src/config/config";
 import { captureClip } from "../src/clip/capture-clip";
 import { can, reduce } from "../src/clip/clip";
 import { createHttpClipStore } from "./http-clip-store";
+import { createHttpBookshelf } from "./http-bookshelf";
 import type { Clip, ClipsState } from "../src/clip/clip";
+import type { Doc } from "../src/bookshelf/bookshelf";
 import type { Screenshot } from "../src/recognizer/recognizer";
 
 pdfjs.GlobalWorkerOptions.workerSrc = worker as string;
@@ -32,19 +34,22 @@ const out = document.querySelector<HTMLDivElement>("#out")!;
 const pageNo = document.querySelector<HTMLInputElement>("#pageNo")!;
 const scaleInput = document.querySelector<HTMLInputElement>("#scale")!;
 const marks = document.querySelector<HTMLDivElement>("#marks")!;
+const shelfList = document.querySelector<HTMLUListElement>("#shelf")!;
+const fileInput = document.querySelector<HTMLInputElement>("#file")!;
 const panel = document.querySelector<HTMLDivElement>("#clip")!;
 
-// 落盘走 dev server：clip-store 导入 node:fs，浏览器里加载就白屏。ClipStore 是端口，
-// 换个实现即可，编排代码一行不用动（打包应用里这条边界是 IPC，ADR-0006）。
+// 落盘走 dev server：clip-store 与 bookshelf 都导入 node:fs，浏览器里加载就白屏。
+// 两者都是端口，换个实现即可，领域代码一行不用动（打包应用里这条边界是 IPC，ADR-0006）。
 const store = createHttpClipStore("/__clips");
-const docId = "1706.03762";
+const shelf = createHttpBookshelf("/__docs");
 
+let docId = "";
 // 启动就把已有摘录读回来。不读的话有两个后果，都已经真实发生过：
 // 1. id 计数器从头开始，新摘录覆盖掉磁盘上的旧摘录（第一条 Encoder 摘录就是这么没的）。
 // 2. capture 按区域合并是在内存状态里查的，状态空了就查不到——刷新后重框同一块地方
 //    会长出第二条摘录，而「同区域两个标签会让锚点回跳有歧义」正是当初禁止的。
 // 文件是唯一真相（ADR-0011），那就得真的把它当真相读。
-let clips: ClipsState = { clips: await store.listByDoc(docId), contexts: [] };
+let clips: ClipsState = { clips: [], contexts: [] };
 
 const appConfig = parseConfig(
   await fetch("/__config")
@@ -61,10 +66,11 @@ function endpoint(capability: "recognition" | "translation") {
   return { ...resolved, baseURL: `${location.origin}/__model` };
 }
 
-const document_ = await pdfjs.getDocument({ url: "/papers/1706.03762.pdf" }).promise;
-let viewport = await draw();
+let document_: pdfjs.PDFDocumentProxy | null = null;
+let viewport: pdfjs.PageViewport | null = null;
 
 async function draw() {
+  if (!document_) return null;
   const page = await document_.getPage(Number(pageNo.value));
   const vp = page.getViewport({ scale: Number(scaleInput.value) });
   canvas.width = vp.width;
@@ -73,8 +79,78 @@ async function draw() {
   return vp;
 }
 
-document.querySelector("#total")!.textContent = String(document_.numPages);
-drawMarks();
+/**
+ * 换一本书：读字节、开文档、把这本书的摘录读回来。
+ *
+ * 摘录必须跟着换。共用一份内存状态而不重载的话，上一本的标签会画到这一本的页面上
+ * ——锚点是页码 + 矩形，换本书它照样"有效"，只是指着完全不相干的地方。
+ */
+async function openDoc(id: string) {
+  docId = id;
+  document_ = await pdfjs.getDocument({ data: await shelf.read(id) }).promise;
+  clips = { clips: await store.listByDoc(id), contexts: [] };
+  pageNo.value = "1";
+  document.querySelector("#total")!.textContent = String(document_.numPages);
+  panel.replaceChildren();
+  out.replaceChildren();
+  viewport = await draw();
+  drawMarks();
+  renderShelf();
+}
+
+async function renderShelf() {
+  const docs = await shelf.list();
+  shelfList.replaceChildren(
+    ...docs.map((doc) => {
+      const row = window.document.createElement("li");
+      if (doc.id === docId) row.className = "on";
+      const open = window.document.createElement("button");
+      open.textContent = doc.title;
+      open.title = doc.filename;
+      open.addEventListener("click", () => void openDoc(doc.id));
+      row.append(open, button("×", () => void removeDoc(doc)));
+      return row;
+    }),
+  );
+  if (docs.length === 0) shelfList.textContent = "书架是空的，选一个 PDF 导入。";
+}
+
+async function removeDoc(doc: Doc) {
+  // 删一本书会连它的全部摘录一起删——它们就住在同一个文件夹里（ADR-0011 的形状）。
+  // 这比删一条摘录重得多，所以把后果说清楚。
+  if (!window.confirm(`删掉《${doc.title}》？它的全部摘录会一起没有，且不可撤销。`)) return;
+  await shelf.remove(doc.id);
+  if (doc.id === docId) {
+    docId = "";
+    document_ = null;
+    clips = { clips: [], contexts: [] };
+    canvas.width = canvas.height = 0;
+    marks.replaceChildren();
+    panel.replaceChildren();
+  }
+  await renderShelf();
+}
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files?.[0];
+  if (!file) return;
+  void (async () => {
+    const doc = await shelf.import({
+      filename: file.name,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+      at: Date.now(),
+    });
+    fileInput.value = "";
+    // 同一篇论文再导入一次会拿回同一个 id，于是这里直接打开——已有的摘录原样接上，
+    // 而不是变成一本空白的新书。
+    await openDoc(doc.id);
+  })();
+});
+
+// 开机就上架：有书就打开第一本。
+const shelved = await shelf.list();
+if (shelved.length > 0) await openDoc(shelved[0].id);
+else await renderShelf();
 
 /**
  * 把这一页上的摘录画成标签。
@@ -85,6 +161,7 @@ drawMarks();
  */
 function drawMarks() {
   marks.replaceChildren();
+  if (!viewport) return;
   const page = Number(pageNo.value);
 
   for (const clip of clips.clips) {
@@ -104,12 +181,14 @@ function drawMarks() {
 
 /** 点在哪条摘录上。后来的盖在先来的上面，所以从后往前找。 */
 function clipAt(point: { x: number; y: number }): Clip | undefined {
+  const vp = viewport;
+  if (!vp) return undefined;
   const page = Number(pageNo.value);
   return clips.clips
     .filter((clip) => clip.region.page === page)
     .reverse()
     .find((clip) => {
-      const box = toCanvasBox(viewport, clip.region.rect);
+      const box = toCanvasBox(vp, clip.region.rect);
       return point.x >= box.x0 && point.x <= box.x1 && point.y >= box.y0 && point.y <= box.y1;
     });
 }
@@ -214,6 +293,7 @@ function editor(value: string, onCommit: (text: string) => void): HTMLTextAreaEl
 
 // 改完就重画，不用再记得点按钮；翻页按钮把页码夹在有效范围内。
 async function go(page: number) {
+  if (!document_) return;
   pageNo.value = String(Math.min(Math.max(page, 1), document_.numPages));
   viewport = await draw();
   // 重画完才画标签：它们的位置来自 viewport，缩放变了就得跟着变。
@@ -252,6 +332,7 @@ function toCss(value: number, axis: "x" | "y"): number {
 }
 
 canvas.addEventListener("pointerdown", (event) => {
+  if (!document_) return;
   start = atCanvas(event);
   Object.assign(box.style, {
     display: "block",
@@ -274,7 +355,7 @@ canvas.addEventListener("pointermove", (event) => {
 });
 
 canvas.addEventListener("pointerup", async (event) => {
-  if (!start) return;
+  if (!start || !viewport || !document_) return;
   const end = atCanvas(event);
   const drag = { x0: start.x, y0: start.y, x1: end.x, y1: end.y };
   start = null;

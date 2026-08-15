@@ -6,8 +6,10 @@ import type { Screenshot } from "../recognizer/recognizer";
 /**
  * 摘录持久化。**一条摘录 = 一个文件夹**（ADR-0011）：
  *
- *     <root>/<docId>/<clipId>/index.md      双语 markdown + frontmatter
- *     <root>/<docId>/<clipId>/.asset/       截图与抠出的图
+ *     <root>/<docId>/clips/<clipId>/index.md   双语 markdown + frontmatter
+ *     <root>/<docId>/clips/<clipId>/.asset/    截图与抠出的图
+ *
+ * `<root>/<docId>/` 归书架所有（PDF 与文档元数据也在那儿），摘录是它的一部分。
  *
  * markdown 不是为存储发明的格式——`CONTEXT.md` 说摘录本来就「持有双语 markdown」，
  * 而且它「直接映射到 Blog Studio 的 markdown block（无需格式转换）」。存 SQLite BLOB
@@ -27,6 +29,7 @@ const SCHEMA_VERSION = 1;
 const ASSET_DIR = ".asset";
 const SCREENSHOT_FILE = "screenshot";
 const MARKDOWN_FILE = "index.md";
+const CLIPS_DIR = "clips";
 
 interface Frontmatter {
   version: number;
@@ -154,7 +157,11 @@ function parse(
 }
 
 export function createClipStore(root: string): ClipStore {
-  const folder = (docId: string, clipId: string) => path.join(root, docId, clipId);
+  // 摘录住在文档文件夹里的 clips/ 下（书架拥有 <root>/<docId>/）。合成一棵树，
+  // 删一个文档就是删一个文件夹——分开放的话删文档会留下孤儿摘录，而孤儿摘录的锚点
+  // 指着一份已经不存在的 PDF，永远打不开。
+  const clipsDir = (docId: string) => path.join(root, docId, CLIPS_DIR);
+  const folder = (docId: string, clipId: string) => path.join(clipsDir(docId), clipId);
 
   return {
     async save(docId: string, clip: Clip): Promise<void> {
@@ -185,7 +192,7 @@ export function createClipStore(root: string): ClipStore {
     },
 
     async listByDoc(docId: string): Promise<Clip[]> {
-      const dir = path.join(root, docId);
+      const dir = clipsDir(docId);
       const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
       const clips: Clip[] = [];
 

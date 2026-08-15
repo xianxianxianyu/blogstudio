@@ -67,7 +67,7 @@ describe("框选 → 识别 → 落盘", () => {
     expect(next.state.clips).toHaveLength(1);
     expect(next.state.clips[0]).toMatchObject({ id: "c1", state: "ready", sourceText: CONTENT.sourceText });
     // 文件是唯一真相（ADR-0011）——内存里对了但没落盘，等于没存。
-    expect(await readdir(path.join(root, "doc-1"))).toEqual(["c1"]);
+    expect(await readdir(path.join(root, "doc-1", "clips"))).toEqual(["c1"]);
   });
 
   it("识别失败：摘录不能卡在 recognizing", async () => {
@@ -136,6 +136,6 @@ describe("框选 → 识别 → 落盘", () => {
     expect(retried.clipId).toBe("c1");
     expect(retried.state.clips).toHaveLength(1);
     expect(retried.state.clips[0].state).toBe("ready");
-    expect(await readdir(path.join(root, "doc-1"))).toEqual(["c1"]);
+    expect(await readdir(path.join(root, "doc-1", "clips"))).toEqual(["c1"]);
   });
 });

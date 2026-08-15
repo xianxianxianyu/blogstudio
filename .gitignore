@@ -48,5 +48,5 @@ yarn-error.log*
 # real model credentials (ADR-0005: key never enters source or build output)
 /pdfstudio/config.json
 
-# PDF Studio 的摘录落盘目录：是你的阅读记录，不是仓库内容
-pdfstudio/.clips/
+# PDF Studio 的书架：是你的书和阅读记录，不是仓库内容
+pdfstudio/.library/
