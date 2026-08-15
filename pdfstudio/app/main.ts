@@ -19,7 +19,7 @@ import { createRecognizer } from "../src/recognizer/recognizer";
 import { createModelClient } from "../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../src/config/config";
 import { captureClip } from "../src/clip/capture-clip";
-import { reduce } from "../src/clip/clip";
+import { can, reduce } from "../src/clip/clip";
 import { createHttpClipStore } from "./http-clip-store";
 import type { Clip, ClipsState } from "../src/clip/clip";
 import type { Screenshot } from "../src/recognizer/recognizer";
@@ -118,51 +118,99 @@ function showClip(id: string) {
   const clip = clips.clips.find((candidate) => candidate.id === id);
   if (!clip) return;
 
-  panel.replaceChildren();
-
   // 看过一次就重新计时（ADR-0012）：保留期从最后一次查看起算，第 30 天点开了它
   // 说明它还活着。代价是**读操作也要写盘**，ADR 里记了这笔账。
   clips = reduce(clips, { type: "view", id, at: Date.now() });
-  void store.save(docId, clips.clips.find((c) => c.id === id)!);
-  const star = window.document.createElement("button");
-  star.className = "star";
-  star.textContent = clip.important ? "★ 重要（点击取消）" : "☆ 标记为重要";
-  star.addEventListener("click", () => {
-    clips = reduce(clips, { type: "toggle-important", id });
-    // 立刻落盘：标记的真相是文件，不是内存（ADR-0011/0012）。只改内存的话
-    // 刷新一次标记就没了，而回收器认的是文件。
-    void store.save(docId, clips.clips.find((c) => c.id === id)!).then(() => {
+  void persist(id);
+
+  panel.replaceChildren();
+  panel.append(
+    button(clip.important ? "★ 重要（点击取消）" : "☆ 标记为重要", () =>
+      apply({ type: "toggle-important", id }),
+    ),
+    button("删除", () => remove(id)),
+    heading(`原文（第 ${clip.region.page} 页 · ${clip.content?.route ?? "?"}）`),
+    // 原文只准修错字，不得改写措辞——守卫按编辑距离判（≤ 2）。被拒时把理由原样显示，
+    // 因为那句话本身就是规则，含糊过去读者只会以为是保存失败。
+    editor(clip.sourceText ?? "", (text) => apply({ type: "fix-source", id, text })),
+    heading("译文"),
+    editor(clip.translation ?? "", (text) => apply({ type: "edit-translation", id, text })),
+    heading("笔记"),
+    // 笔记是读者自己写的，删了就永远没了——写过笔记的摘录回收器不会碰（ADR-0012）。
+    editor(clip.note ?? "", (text) => apply({ type: "add-note", id, text })),
+  );
+
+  if (clip.content?.multimodal) {
+    panel.append(heading("图像描述"), pre(clip.content.multimodal));
+  }
+
+  /** 走 can() 再 reduce：拒绝的理由要给读者看见，不能默默什么都没发生。 */
+  function apply(action: Parameters<typeof reduce>[1]) {
+    const verdict = can(clips, action);
+    if (!verdict.ok) {
+      window.alert(verdict.reason);
+      return;
+    }
+    clips = reduce(clips, action);
+    void persist(id).then(() => {
       drawMarks();
       showClip(id);
     });
-  });
-
-  const body = window.document.createElement("div");
-  body.innerHTML = [
-    `<h3>原文（第 ${clip.region.page} 页 · ${clip.content?.route ?? "?"}）</h3>`,
-    `<pre>${escape_(clip.sourceText ?? "（纯图，没有原文）")}</pre>`,
-    clip.translation ? `<h3>译文</h3><pre>${escape_(clip.translation)}</pre>` : "",
-    clip.content?.multimodal ? `<h3>图像描述</h3><pre>${escape_(clip.content.multimodal)}</pre>` : "",
-  ].join("");
-
-  const remove = window.document.createElement("button");
-  remove.className = "star";
-  remove.textContent = "删除";
-  remove.addEventListener("click", () => {
-    // 主动删除删掉整个文件夹，标签跟着消失——和回收器不是一条路。回收器只清内容、
-    // 留锚点，因为标签本身就是价值；而这里是读者说「这条不要了」。
-    clips = reduce(clips, { type: "delete", id });
-    void store.delete(docId, id).then(() => {
-      panel.replaceChildren();
-      drawMarks();
-    });
-  });
-
-  panel.append(star, remove, body);
+  }
 }
 
-const escape_ = (text: string) =>
-  text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+/**
+ * 落盘再改内存视图。**顺序不能反**：文件是唯一真相（ADR-0011），先改内存的话
+ * 写盘失败就成了「界面说改了、磁盘上没改」，刷新一次改动凭空消失。
+ */
+function persist(id: string): Promise<void> {
+  return store.save(docId, clips.clips.find((c) => c.id === id)!);
+}
+
+async function remove(id: string) {
+  // 删除不可逆，且删的是整个文件夹——ADR-0012 把自动回收的破坏性记成了代价，
+  // 手动删同样要拦一道。
+  if (!window.confirm("删掉这条摘录？截图和笔记会一起没有，且不可撤销。")) return;
+
+  // 同样是先落盘再改内存。反过来的话删盘失败，界面上标签没了、文件还在，
+  // 刷新一次它又冒出来——而读者以为已经删掉了。
+  await store.delete(docId, id);
+  clips = reduce(clips, { type: "delete", id });
+  panel.replaceChildren();
+  drawMarks();
+}
+
+function button(text: string, onClick: () => void): HTMLButtonElement {
+  const element = window.document.createElement("button");
+  element.className = "star";
+  element.textContent = text;
+  element.addEventListener("click", onClick);
+  return element;
+}
+
+function heading(text: string): HTMLHeadingElement {
+  const element = window.document.createElement("h3");
+  element.textContent = text;
+  return element;
+}
+
+function pre(text: string): HTMLPreElement {
+  const element = window.document.createElement("pre");
+  element.textContent = text;
+  return element;
+}
+
+/** 失焦才提交：每敲一个字就写一次盘，既吵又会把编辑距离守卫逐字符地卡住。 */
+function editor(value: string, onCommit: (text: string) => void): HTMLTextAreaElement {
+  const element = window.document.createElement("textarea");
+  element.value = value;
+  element.rows = 4;
+  element.style.width = "100%";
+  element.addEventListener("blur", () => {
+    if (element.value !== value) onCommit(element.value);
+  });
+  return element;
+}
 
 // 改完就重画，不用再记得点按钮；翻页按钮把页码夹在有效范围内。
 async function go(page: number) {
