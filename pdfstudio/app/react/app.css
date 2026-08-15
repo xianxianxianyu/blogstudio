@@ -31,3 +31,13 @@ textarea { width: 100%; font: inherit; padding: 6px; border: 1px solid var(--lin
 pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; padding: 8px; margin: 0; }
 img.shot { max-width: 100%; border: 1px solid var(--line); }
 .err { color: #b91c1c; }
+
+.field { display: flex; gap: 8px; align-items: center; margin: 4px 0; }
+.field > span:first-child { width: 3.5em; color: var(--muted); flex: none; }
+.field input { flex: 1; min-width: 0; font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 3px; }
+/* 自己配的实一点，跟随默认的淡一点——读者得一眼看出改默认组会影响到谁。 */
+.field input.own { border-color: var(--accent); }
+.field input.inherited { color: var(--muted); background: #fafafa; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
+.tabs button { background: none; border: none; padding: 6px 10px; border-bottom: 2px solid transparent; }
+.tabs button.on { border-bottom-color: var(--accent); font-weight: 700; }

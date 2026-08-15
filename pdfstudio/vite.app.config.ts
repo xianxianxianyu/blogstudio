@@ -1,9 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { readFile } from "node:fs/promises";
-import { readFileSync } from "node:fs";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import type { ReadableStream } from "node:stream/web";
 import { createClipStore } from "./src/clip/clip-store";
 import { createBookshelf } from "./src/bookshelf/bookshelf";
 import type { Clip } from "./src/clip/clip";
@@ -54,24 +56,47 @@ function respond(response: ServerResponse, body: () => Promise<{ type: string; d
 const json = (data: unknown) => ({ type: "application/json", data: JSON.stringify(data) });
 
 /**
- * 把模型端点转发一道。
+ * 把模型端点转发一道，**目标由调用方在路径里给**：`/__model/<编码过的 baseURL>/...`。
  *
- * 实测那个端点的 OPTIONS 预检返回 403、响应里也没有任何 `access-control-*` 头
- * ——浏览器直连必被拦在预检那一步，POST 根本发不出去。
+ * 起初这里是 vite 的 server.proxy，写死到 config.json 默认组的地址。那样一来
+ * 「每个功能各配各的端点」（ADR-0010）在浏览器里根本不生效——给识别单独配一个本地
+ * 端点，请求照样发去云端，而设置页的自检还会说「通了」。**自检说通的不是你配的那个**，
+ * 这比没有自检更坏。
  *
- * **这不是产品设计问题。** ADR-0006 说最终是 local-first 打包应用，Electron/Tauri
- * 的主进程或原生运行时直接发请求，没有 CORS 这一层。转发只是这个开发页面跑在浏览器
- * 里才需要的东西，不进产品形态。
+ * 为什么需要转发：实测那个端点的 OPTIONS 预检返回 403、响应里也没有任何
+ * access-control-* 头，浏览器直连必被拦在预检那一步。ADR-0006 说最终是 local-first
+ * 打包应用，主进程直接发请求，没有 CORS 这一层——转发只是开发页面才需要的东西。
  */
-function modelTarget(): string {
-  try {
-    const raw = JSON.parse(
-      readFileSync(path.join(import.meta.dirname, "config.json"), "utf8"),
-    ) as { baseURL?: string; default?: { baseURL?: string } };
-    return raw.default?.baseURL ?? raw.baseURL ?? "";
-  } catch {
-    return "";
-  }
+async function forwardModel(request: IncomingMessage, response: ServerResponse): Promise<void> {
+  const [encoded, ...rest] = (request.url ?? "/").split("?")[0].split("/").filter(Boolean);
+  const query = (request.url ?? "").includes("?") ? `?${(request.url ?? "").split("?")[1]}` : "";
+  const target = `${decodeURIComponent(encoded ?? "")}/${rest.join("/")}${query}`;
+
+  const upstream = await fetch(target, {
+    method: request.method,
+    headers: {
+      // 只带该带的。host 必须去掉，否则上游按它路由会 404；其余业务头原样透传。
+      ...Object.fromEntries(
+        Object.entries(request.headers)
+          .filter(([name]) => name !== "host" && name !== "content-length")
+          .map(([name, value]) => [name, String(value)]),
+      ),
+    },
+    body:
+      request.method === "GET" || request.method === "HEAD"
+        ? undefined
+        : new Uint8Array(await readBytes(request)),
+  });
+
+  response.statusCode = upstream.status;
+  upstream.headers.forEach((value, name) => {
+    // 别把上游的 content-encoding 透出去：fetch 已经解过压，再声明一次浏览器会解第二遍。
+    if (name !== "content-encoding" && name !== "content-length") response.setHeader(name, value);
+  });
+  // 流式转发，不整块 buffer：chat 走 streamComplete（SSE），缓冲会把「边生成边显示」
+  // 变成「转圈半天然后一次性出现」，而那正是 ADR-0008 选 assistant-ui 要的东西。
+  if (upstream.body) await pipeline(Readable.fromWeb(upstream.body as ReadableStream), response);
+  else response.end();
 }
 
 // 开发用的框选竖切页面（`pdfstudio/app/`），与仓库根那个 Blog Studio 应用无关。
@@ -89,18 +114,7 @@ export default defineConfig({
       },
     },
   },
-  server: {
-    port: 5174,
-    proxy: modelTarget()
-      ? {
-          [PROXY_PREFIX]: {
-            target: modelTarget(),
-            changeOrigin: true,
-            rewrite: (url: string) => url.replace(PROXY_PREFIX, ""),
-          },
-        }
-      : undefined,
-  },
+  server: { port: 5174 },
   plugins: [
     react(),
     {
@@ -109,13 +123,27 @@ export default defineConfig({
       // **只挂在 configureServer 上**——它不存在于构建产物里，key 不会被打包
       // （ADR-0005：真实 key 绝不进源码或构建产物）。这个页面本来也只是开发竖切。
       configureServer(server) {
-        server.middlewares.use(CONFIG_ROUTE, (_request, response) => {
-          readFile(path.join(import.meta.dirname, "config.json"), "utf8")
-            .then((text) => {
-              response.setHeader("content-type", "application/json");
-              response.end(text);
-            })
-            .catch(() => response.end("null"));
+        server.middlewares.use(PROXY_PREFIX, (request, response) => {
+          forwardModel(request, response).catch((error: Error) => {
+            response.statusCode = 502;
+            response.end(error.message);
+          });
+        });
+
+        const configFile = path.join(import.meta.dirname, "config.json");
+        server.middlewares.use(CONFIG_ROUTE, (request, response) => {
+          respond(response, async () => {
+            if (request.method === "POST") {
+              // 写回配置。**这条路由只挂在 configureServer 上**，不存在于构建产物里
+              // ——ADR-0005：真实 key 绝不进源码或构建产物。
+              await writeFile(configFile, await readBody(request), "utf8");
+              return json({});
+            }
+            return {
+              type: "application/json",
+              data: await readFile(configFile, "utf8").catch(() => "null"),
+            };
+          });
         });
 
         // 真正的落盘。浏览器那侧的 ClipStore 只是把调用转发到这儿——渲染进程不碰

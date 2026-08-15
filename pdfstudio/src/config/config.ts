@@ -48,3 +48,21 @@ export function parseConfig(raw: unknown): AppConfig {
 export function resolveEndpoint(config: AppConfig, capability: Capability): EndpointConfig {
   return { ...config.default, ...(config.capabilities[capability] ?? {}) };
 }
+
+/**
+ * 这一栏的值是这个功能自己配的，还是跟随默认组。
+ *
+ * 界面上必须能看出这个区别，否则读者改了默认组会**意外影响到**他以为已经独立配置的
+ * 功能——而那多半要等到某次调用行为变了才发现。
+ *
+ * 判定看**键在不在**，不看值真不真。「我就是要它为空」和「我没配、跟着默认走」是
+ * 两回事：本地模型不需要 apiKey，显式清空是一种真实配法。按真假值判会把它误认成
+ * 未配置，然后偷偷灌进默认组的 key——**那是把云端的 key 发给了本地端点**。
+ */
+export function fieldSource(
+  config: AppConfig,
+  capability: Capability,
+  field: keyof EndpointConfig,
+): "own" | "inherited" {
+  return field in (config.capabilities[capability] ?? {}) ? "own" : "inherited";
+}

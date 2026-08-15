@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { parseConfig, resolveEndpoint } from "./config";
+import { fieldSource, parseConfig, resolveEndpoint } from "./config";
+import type { AppConfig } from "./config";
 import { loadConfig, saveConfig } from "./config-file";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -74,5 +75,30 @@ describe("Config — 读写文件", () => {
     const written = JSON.parse(await readFile(file, "utf8")) as { default: unknown };
     expect(written.default).toEqual(FLAT);
     expect(resolveEndpoint(await loadConfig(file), "recognition")).toEqual(FLAT);
+  });
+});
+
+describe("某一栏是自己配的还是跟随默认组", () => {
+  const config: AppConfig = {
+    default: { baseURL: "https://a", apiKey: "k", model: "m" },
+    capabilities: { translation: { model: "fast" }, recognition: { baseURL: "" } },
+  };
+
+  it("自己写了就是自己的", () => {
+    expect(fieldSource(config, "translation", "model")).toBe("own");
+  });
+
+  it("没写就是跟随默认组", () => {
+    // 界面上必须能看出这个区别，否则读者改了默认组会**意外影响到**
+    // 他以为已经独立配置的功能。
+    expect(fieldSource(config, "translation", "baseURL")).toBe("inherited");
+    expect(fieldSource(config, "chat", "model")).toBe("inherited");
+  });
+
+  it("显式写成空串也是自己的", () => {
+    // 「我就是要它为空」和「我没配、跟着默认走」是两回事：本地模型不需要 apiKey，
+    // 显式清空是一种真实配法。按真假值判会把它误认成未配置，然后偷偷灌进默认组的 key
+    // ——那把云端的 key 发给了本地端点。
+    expect(fieldSource(config, "recognition", "baseURL")).toBe("own");
   });
 });

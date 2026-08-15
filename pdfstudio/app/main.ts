@@ -49,13 +49,22 @@ const appConfig = parseConfig(
     .catch(() => null),
 );
 
+/**
+ * 走 dev server 转发而不是直连：实测那个端点的 OPTIONS 预检返回 403，浏览器过不去。
+ * 打包应用里没有这一层（ADR-0006），所以这段是开发页面专属的。
+ *
+ * **目标编在路径里**，不是写死一个。写死的话「每个功能各配各的端点」（ADR-0010）
+ * 在浏览器里就是假的：给识别配了本地端点，请求照样发去云端。
+ *
+ * **必须是绝对 URL**：SDK 会拿 baseURL 去构造 URL 对象，相对路径直接抛。
+ */
+function viaProxy(baseURL: string): string {
+  return `${location.origin}/__model/${encodeURIComponent(baseURL)}`;
+}
+
 function endpoint(capability: "recognition" | "translation") {
   const resolved = resolveEndpoint(appConfig, capability);
-  // 走 dev server 转发而不是直连：那个端点的 OPTIONS 预检返回 403，浏览器过不去。
-  // 打包应用里没有这一层（ADR-0006），所以这行是开发页面专属的。
-  //
-  // **必须是绝对 URL**：SDK 会拿 baseURL 去构造 URL 对象，相对路径直接抛。
-  return { ...resolved, baseURL: `${location.origin}/__model` };
+  return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
 
 let document_: pdfjs.PDFDocumentProxy | null = null;
