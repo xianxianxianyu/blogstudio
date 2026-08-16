@@ -10,6 +10,8 @@ import { createClipStore } from "./src/clip/clip-store";
 import { createBookshelf } from "./src/bookshelf/bookshelf";
 import { createModelDownloader } from "./src/model/model-download";
 import { DEFAULT_EMBEDDING_MODEL } from "./src/model/model-files";
+import { createTransformersEmbedder } from "./src/model/transformers-embedder";
+import { env } from "@huggingface/transformers";
 import sirv from "sirv";
 import type { Clip } from "./src/clip/clip";
 import { deserialize, serializeClip } from "./app/clip-wire";
@@ -20,6 +22,7 @@ const CLIPS_ROUTE = "/__clips";
 const DOCS_ROUTE = "/__docs";
 const INDEX_ROUTE = "/__index";
 const MODELS_ROUTE = "/__models";
+const EMBED_ROUTE = "/__embed";
 
 /** 本地模型权重。已 gitignore——几百 MB 的东西不进仓库。 */
 const MODELS_ROOT = path.join(import.meta.dirname, ".models");
@@ -216,6 +219,33 @@ export default defineConfig({
           MODELS_ROUTE,
           sirv(MODELS_ROOT, { etag: true, maxAge: 31536000, immutable: true }),
         );
+
+        // 向量在这边算：onnxruntime-node 是原生多线程，浏览器那条 WASM 路是单线程，
+        // 一篇论文的索引差出一个量级。权重直接读 .models/ 里下好的那份，不再另下一遍。
+        env.allowLocalModels = true;
+        env.allowRemoteModels = false;
+        env.localModelPath = `${MODELS_ROOT}/`;
+        // 懒建：没人问文档时不该把 300 MB 加载进来。
+        let embedder: ReturnType<typeof createTransformersEmbedder> | null = null;
+        server.middlewares.use(EMBED_ROUTE, (request, response) => {
+          respond(response, async () => {
+            embedder ??= createTransformersEmbedder();
+            const { kind, texts } = JSON.parse(await readBody(request)) as {
+              kind: "query" | "documents";
+              texts: string[];
+            };
+            const vectors =
+              kind === "query"
+                ? [await embedder.embedQuery(texts[0])]
+                : await embedder.embedDocuments(texts);
+
+            // 一整块二进制回去，不逐条写 JSON 数组：97 段 × 768 维写成十进制是几 MB 文本。
+            const dims = vectors[0]?.length ?? 0;
+            const flat = new Float32Array(dims * vectors.length);
+            vectors.forEach((vector, index) => flat.set(vector, index * dims));
+            return json({ dims, data: Buffer.from(flat.buffer).toString("base64") });
+          });
+        });
 
         const store = createClipStore(LIBRARY_ROOT);
         server.middlewares.use(CLIPS_ROUTE, (request, response) => {

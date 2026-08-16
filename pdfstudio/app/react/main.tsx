@@ -13,7 +13,7 @@ import { createRecognizer } from "../../src/recognizer/recognizer";
 import { createChat } from "../../src/chat/chat";
 import { bindConversation, createConversation } from "../../src/app/conversation";
 import { createProgress } from "../../src/app/progress";
-import { createWorkerEmbedder } from "./worker-embedder";
+import { createHttpEmbedder } from "../http-embedder";
 import { createHttpIndexCache } from "../http-index-cache";
 import { createModelClient } from "../../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../../src/config/config";
@@ -70,9 +70,10 @@ function endpoint(capability: "recognition" | "translation" | "chat") {
 const EMBEDDING_MODEL = "onnx-community/embeddinggemma-300m-ONNX@q8";
 
 const progress = createProgress();
-// 本地向量模型跑在 Worker 里。ONNX 推理默认在调用线程上跑，而建索引要给整篇论文几十个
-// 块逐个前向——放主线程上整个页面会锁死几分钟，连切到设置页都做不到（实测就是这样）。
-const embedder = createWorkerEmbedder(progress);
+// 向量交给 dev server 算（onnxruntime-node 原生多线程），浏览器这侧只发请求。
+// 此前走的是 Worker + WASM：不卡界面，但建一篇论文的索引要几分钟，而且每次页面加载
+// 都要往 WASM 里塞 300 MB 权重。打包后主进程正是这么跑（ADR-0006）。
+const embedder = createHttpEmbedder("/__embed", progress);
 const conversation = createConversation();
 
 // pdf.js 的文档句柄归视图，Workspace 不认识它——它只要一个依赖都接好了的 Recognizer。

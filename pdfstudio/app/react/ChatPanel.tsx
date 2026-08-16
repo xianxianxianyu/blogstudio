@@ -44,8 +44,8 @@ export function ChatPanel({
     <div>
       {state.turns.length === 0 && (
         <p className="empty">
-          问这一篇文档。答案只依据检索到的原文——首次提问要下载一次本地向量模型，
-          之后就快了。
+          问这一篇文档。答案只依据检索到的原文。第一次问某本书要先建一遍索引，
+          之后打开就直接用缓存。
         </p>
       )}
 
@@ -58,7 +58,7 @@ export function ChatPanel({
       {state.streaming !== null && (
         <div className="msg bot">
           {state.streaming === "" ? (
-            <span className="empty">{working ?? "正在检索…首次提问要先准备本地向量模型，可能要几分钟"}</span>
+            <span className="empty">{working ?? "正在检索…"}</span>
           ) : (
             <Streamdown>{state.streaming}</Streamdown>
           )}
