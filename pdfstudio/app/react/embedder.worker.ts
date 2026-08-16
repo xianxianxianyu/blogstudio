@@ -29,7 +29,9 @@ env.localModelPath = "/__models/";
 const embedder = createTransformersEmbedder({
   onProgress: (event) => {
     if (event.status === "progress" && event.progress !== undefined) {
-      post({ kind: "progress", text: `正在下载本地向量模型 ${Math.round(event.progress)}%（只需一次）` });
+      // 说「载入」不说「下载」：allowRemoteModels = false 之后它只可能从本地取。
+      // 写成「下载」会让读者以为又联网下了一遍——那正是他反馈的困惑。
+      post({ kind: "progress", text: `正在载入本地向量模型 ${Math.round(event.progress)}%` });
     } else if (event.status === "ready") {
       post({ kind: "progress", text: "模型就绪，正在给这篇文档建索引…" });
     }

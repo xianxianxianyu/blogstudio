@@ -209,7 +209,13 @@ export default defineConfig({
           );
         });
         // 权重本身按静态文件服务，transformers.js 直接从这里取。
-        server.middlewares.use(MODELS_ROUTE, sirv(MODELS_ROOT, { dev: true, etag: true }));
+        // **不能用 dev: true**——那个选项专门关掉缓存头，于是每次刷新浏览器都要重新
+        // 传 300 MB 权重。权重是不可变的（模型 id + 文件名就唯一确定内容），让浏览器
+        // 永久缓存才对：读者的感受本来就是「怎么又在下」。
+        server.middlewares.use(
+          MODELS_ROUTE,
+          sirv(MODELS_ROOT, { etag: true, maxAge: 31536000, immutable: true }),
+        );
 
         const store = createClipStore(LIBRARY_ROOT);
         server.middlewares.use(CLIPS_ROUTE, (request, response) => {
