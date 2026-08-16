@@ -5,6 +5,15 @@ import { app, BrowserWindow, shell } from "electron";
 import { createLocalApi } from "../src/server/local-api";
 
 /**
+ * **必须在模块顶层、任何 getPath 之前。**
+ *
+ * `getPath("userData")` 用 package.json 的 `name`，而这个仓库的 name 还是脚手架留下的
+ * `site-creator-vinext-starter`——读者的书和摘录会落进一个叫这个的目录里。放在
+ * `whenReady` 之后调用是没用的：那时 Electron 已经把 userData 定好了（试过一次）。
+ */
+app.setName("PDF Studio");
+
+/**
  * 打包应用的主进程。
  *
  * 本机 API 与 dev server **共用同一份实现**（ADR-0014）：这里只是把同一批中间件挂到一个
@@ -16,10 +25,6 @@ import { createLocalApi } from "../src/server/local-api";
  * 摘录不能跟着版本走。
  */
 function dataPaths() {
-  // **先定名字再取路径。** `getPath("userData")` 用的是 package.json 的 `name`，
-  // 而这个仓库的 name 还是脚手架留下的 `site-creator-vinext-starter`——读者的书和摘录
-  // 会落进一个叫这个名字的目录里。这行必须在第一次 getPath 之前执行。
-  app.setName("PDF Studio");
   const root = app.getPath("userData");
   return {
     libraryRoot: path.join(root, "library"),
