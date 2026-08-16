@@ -97,9 +97,9 @@ async function createWindow(): Promise<void> {
   const devServer = process.env.PDFSTUDIO_DEV_SERVER;
   if (devServer) {
     // 开发时指向 vite，享受热更新；本机 API 仍由这个进程提供，与打包形态同一份实现。
-    await window.loadURL(`${devServer}/react.html?api=${encodeURIComponent(api)}`);
+    await window.loadURL(`${devServer}/?api=${encodeURIComponent(api)}`);
   } else {
-    await window.loadFile(path.join(import.meta.dirname, "renderer/react.html"), {
+    await window.loadFile(path.join(import.meta.dirname, "renderer/index.html"), {
       search: `api=${encodeURIComponent(api)}`,
     });
   }

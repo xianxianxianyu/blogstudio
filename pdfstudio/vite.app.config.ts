@@ -15,16 +15,6 @@ export default defineConfig({
   // 做好之后 PDF 从 .library/ 走，那条路早就没人用了。留着它会把三篇论文、19 张样本
   // 和 eval 脚本一起打进应用——25 MB 的评测语料跟着产品分发出去。
   publicDir: false,
-  build: {
-    // 两个入口：React 界面与旧的裸 DOM 页面。迁移期旧的必须一直能跑
-    // ——它是唯一的回归基准（.scratch/pdfstudio-ui/spec.md）。
-    rollupOptions: {
-      input: {
-        react: path.join(import.meta.dirname, "app/react.html"),
-        legacy: path.join(import.meta.dirname, "app/index.html"),
-      },
-    },
-  },
   server: { port: 5174 },
   plugins: [
     react(),
