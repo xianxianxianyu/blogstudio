@@ -1,0 +1,73 @@
+import { useEffect, useState } from "react";
+import type { ModelStatus } from "../../src/model/model-download";
+
+const MB = 1024 * 1024;
+/** q8 档的大致体积，用来把「已下载多少」变成一个有参照的数。 */
+const EXPECTED_MB = 300;
+
+/**
+ * 本地向量模型的下载与状态。
+ *
+ * 做成**显式的按钮**而不是首次提问时顺带下载：读者原本的体验是「问第一个问题，然后
+ * 等几分钟，界面上什么都没有」。几百 MB 的下载应该是一个读者主动做的决定，不是他
+ * 撞上的意外。
+ */
+export function LocalModel() {
+  const [status, setStatus] = useState<ModelStatus | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      const next = (await fetch("/__models/__status").then((r) => r.json())) as ModelStatus;
+      if (!alive) return;
+      setStatus(next);
+      // 只在下载中才继续轮询：下完还接着问就是白耗电。
+      if (next.downloading) setTimeout(() => void poll(), 1000);
+    };
+    void poll();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (status === null) return null;
+
+  return (
+    <>
+      <h3>本地向量模型</h3>
+      <p className="empty">
+        中文问英文论文靠它。<b>不装它的话中文检索是零召回</b>——关键词那一路抽不出中文
+        词元。约 {EXPECTED_MB} MB，下一次，之后离线也能用。
+      </p>
+
+      {status.error !== null && <pre className="err">{status.error}</pre>}
+
+      {status.present ? (
+        <p>✓ 已就绪（{Math.round(status.bytes / MB)} MB）</p>
+      ) : status.downloading ? (
+        <p>
+          正在下载… {Math.round(status.bytes / MB)} / 约 {EXPECTED_MB} MB
+        </p>
+      ) : (
+        <button
+          className="btn"
+          onClick={() => {
+            void fetch("/__models/__status", { method: "POST" })
+              .then((r) => r.json())
+              .then((next: ModelStatus) => {
+                setStatus(next);
+                const poll = async () => {
+                  const now = (await fetch("/__models/__status").then((r) => r.json())) as ModelStatus;
+                  setStatus(now);
+                  if (now.downloading) setTimeout(() => void poll(), 1000);
+                };
+                setTimeout(() => void poll(), 1000);
+              });
+          }}
+        >
+          下载
+        </button>
+      )}
+    </>
+  );
+}

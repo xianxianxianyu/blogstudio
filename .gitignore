@@ -50,3 +50,6 @@ yarn-error.log*
 
 # PDF Studio 的书架：是你的书和阅读记录，不是仓库内容
 pdfstudio/.library/
+
+# 本地模型权重：几百 MB，不进仓库
+pdfstudio/.models/

@@ -1,5 +1,21 @@
 /// <reference lib="webworker" />
+import { env } from "@huggingface/transformers";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
+
+/**
+ * 权重从我们自己的服务取，不去 HuggingFace。
+ *
+ * 浏览器的 Cache API 会被回收，几百 MB 的条目尤其容易，而且与 Node 侧 eval 的缓存
+ * 是两套——读者的感受就是「下载了很多次」。改成本地路径之后，下一次、之后永远从磁盘
+ * 读，离线也能用（ADR-0006 local-first）。
+ *
+ * `allowRemoteModels = false` 是要害：留着它的话，本地缺文件时会**静默回退到联网下载**
+ * ——那正是我们要根除的行为，而且它不会报任何错，只会又慢一次。宁可当场失败，
+ * 让设置页告诉读者「还没下载」。
+ */
+env.allowLocalModels = true;
+env.allowRemoteModels = false;
+env.localModelPath = "/__models/";
 
 /**
  * 本地向量模型跑在 Worker 里。

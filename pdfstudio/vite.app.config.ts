@@ -8,6 +8,9 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { createClipStore } from "./src/clip/clip-store";
 import { createBookshelf } from "./src/bookshelf/bookshelf";
+import { createModelDownloader } from "./src/model/model-download";
+import { DEFAULT_EMBEDDING_MODEL } from "./src/model/model-files";
+import sirv from "sirv";
 import type { Clip } from "./src/clip/clip";
 import { deserialize, serializeClip } from "./app/clip-wire";
 
@@ -16,6 +19,10 @@ const PROXY_PREFIX = "/__model";
 const CLIPS_ROUTE = "/__clips";
 const DOCS_ROUTE = "/__docs";
 const INDEX_ROUTE = "/__index";
+const MODELS_ROUTE = "/__models";
+
+/** 本地模型权重。已 gitignore——几百 MB 的东西不进仓库。 */
+const MODELS_ROOT = path.join(import.meta.dirname, ".models");
 
 /**
  * 书架落在这里，摘录住在各文档文件夹的 `clips/` 下——**同一个 root**。
@@ -187,6 +194,22 @@ export default defineConfig({
             return { type: "application/json", data: await readFile(file, "utf8").catch(() => "null") };
           });
         });
+
+        // 本地向量模型：自己存一份并自己服务。浏览器的 Cache API 会被回收，几百 MB
+        // 的条目尤其容易，而且与 Node 侧 eval 的缓存是两套——读者的感受就是
+        // 「下载了很多次」。下到应用目录里，之后永远从本地读，离线也能用（ADR-0006）。
+        const downloader = createModelDownloader(MODELS_ROOT);
+        server.middlewares.use(`${MODELS_ROUTE}/__status`, (request, response) => {
+          respond(response, async () =>
+            json(
+              request.method === "POST"
+                ? downloader.start(DEFAULT_EMBEDDING_MODEL)
+                : await downloader.check(DEFAULT_EMBEDDING_MODEL),
+            ),
+          );
+        });
+        // 权重本身按静态文件服务，transformers.js 直接从这里取。
+        server.middlewares.use(MODELS_ROUTE, sirv(MODELS_ROOT, { dev: true, etag: true }));
 
         const store = createClipStore(LIBRARY_ROOT);
         server.middlewares.use(CLIPS_ROUTE, (request, response) => {
