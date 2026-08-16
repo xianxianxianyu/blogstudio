@@ -114,10 +114,14 @@ function Message({ turn }: { turn: Turn }) {
   );
 }
 
+/**
+ * 说的是**上面**那段回答：这块横幅渲染在答案之后。
+ * 原本写的是「下面这段」，而它就贴在答案下方——文案和位置对不上。
+ */
 const GROUNDING: Record<string, string> = {
-  retrieved: "依据：检索到的原文",
-  pasted: "依据：你贴进来的摘录",
-  none: "没有找到依据——下面这段回答没有出处",
+  retrieved: "以上回答的依据：文档原文",
+  pasted: "以上回答的依据：你贴进来的摘录",
+  none: "文档里没有找到依据——以上回答没有出处",
 };
 
 function Citations({

@@ -14,6 +14,7 @@ import { createChat } from "../../src/chat/chat";
 import { bindConversation, createConversation } from "../../src/app/conversation";
 import { createProgress } from "../../src/app/progress";
 import { createWorkerEmbedder } from "./worker-embedder";
+import { createHttpIndexCache } from "../http-index-cache";
 import { createModelClient } from "../../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../../src/config/config";
 import { createHttpClipStore } from "../http-clip-store";
@@ -64,6 +65,10 @@ function endpoint(capability: "recognition" | "translation" | "chat") {
   return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
 
+// 缓存里记着它：换了模型向量就作废，不同模型的向量不在同一个空间里，混用不报错，
+// 只会让检索悄悄返回不相干的段落。
+const EMBEDDING_MODEL = "onnx-community/embeddinggemma-300m-ONNX@q8";
+
 const progress = createProgress();
 // 本地向量模型跑在 Worker 里。ONNX 推理默认在调用线程上跑，而建索引要给整篇论文几十个
 // 块逐个前向——放主线程上整个页面会锁死几分钟，连切到设置页都做不到（实测就是这样）。
@@ -87,6 +92,9 @@ const ws = createWorkspace({
       embedder,
       // 摘录进检索池：文本层在公式和图上是空的，那两处只有摘录里有。
       clips,
+      // 正文向量缓存到这本书的文件夹里。不缓存的话每次打开都要重算一遍整篇论文，
+      // 浏览器 WASM 里要一两分钟——读者每次开书都得先等着才能问第一句。
+      indexCache: createHttpIndexCache("/__index", doc.id, EMBEDDING_MODEL),
     });
     const recognizer = createRecognizer({
       document,

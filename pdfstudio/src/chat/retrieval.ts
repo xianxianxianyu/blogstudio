@@ -26,20 +26,45 @@ export interface Chunk {
 export { searchChunks, scoreChunks, peakMargin } from "./ranking";
 export type { ScoredChunk } from "./ranking";
 
+/**
+ * 正文向量的缓存。
+ *
+ * **只缓存正文，不缓存摘录块。** 正文由 docId 唯一决定（内容哈希）且永不变化，
+ * 值得缓存；摘录随时在变（框一条、改一句笔记、到期衰减），缓存下来新框的就再也进不去。
+ * 而摘录少而短，重算很便宜——于是最容易出错的那部分（缓存失效）直接不存在。
+ */
+export interface IndexCache {
+  load(): Promise<Chunk[] | null>;
+  save(chunks: Chunk[]): Promise<void>;
+}
+
 export async function buildIndex(
   document: PDFDocumentProxy,
   embedder?: Embedder,
   clips: Clip[] = [],
+  cache?: IndexCache,
 ): Promise<Chunk[]> {
-  // 正文块与摘录块进同一个池子：读者问的是「这篇论文怎么说的」，不是「去正文里找」
-  // 还是「去我的摘录里找」。合库的代价是摘录短而密，可能在融合里系统性压过正文块
-  // ——那要用 eval 量，不能靠直觉判（`.scratch/pdfstudio-clip/issues/01`）。
-  const chunks = [...(await chunkDocument(document)), ...clipChunks(clips)];
-
-  if (embedder) {
-    const vectors = await embedder.embedDocuments(chunks.map((chunk) => chunk.text));
-    chunks.forEach((chunk, index) => (chunk.vector = vectors[index]));
+  // 正文这一半可以从缓存来：不缓存的话每次打开这本书都要给整篇论文重算一遍向量，
+  // 浏览器 WASM 里要一两分钟——读者每次打开书都得先等着才能问第一句。
+  let body = await cache?.load().catch(() => null) ?? null;
+  if (body === null) {
+    body = await chunkDocument(document);
+    if (embedder) await attachVectors(body, embedder);
+    // 存不进去不该让检索失败：缓存是加速，不是真相。
+    await cache?.save(body).catch(() => undefined);
   }
 
-  return chunks;
+  // 摘录块每次现算。正文块与它们进同一个池子：读者问的是「这篇论文怎么说的」，
+  // 不是「去正文里找」还是「去我的摘录里找」。合库的代价是摘录短而密，可能在融合里
+  // 系统性压过正文块——那要用 eval 量，不能靠直觉判（`.scratch/pdfstudio-clip/issues/01`）。
+  const fromClips = clipChunks(clips);
+  if (embedder) await attachVectors(fromClips, embedder);
+
+  return [...body, ...fromClips];
+}
+
+async function attachVectors(chunks: Chunk[], embedder: Embedder): Promise<void> {
+  if (chunks.length === 0) return;
+  const vectors = await embedder.embedDocuments(chunks.map((chunk) => chunk.text));
+  chunks.forEach((chunk, index) => (chunk.vector = vectors[index]));
 }

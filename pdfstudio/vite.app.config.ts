@@ -15,6 +15,7 @@ const CONFIG_ROUTE = "/__config";
 const PROXY_PREFIX = "/__model";
 const CLIPS_ROUTE = "/__clips";
 const DOCS_ROUTE = "/__docs";
+const INDEX_ROUTE = "/__index";
 
 /**
  * 书架落在这里，摘录住在各文档文件夹的 `clips/` 下——**同一个 root**。
@@ -169,6 +170,21 @@ export default defineConfig({
               return json({});
             }
             return { type: "application/pdf", data: Buffer.from(await shelf.read(docId)) };
+          });
+        });
+
+        // 正文向量缓存，落在这篇文档自己的文件夹里（ADR-0011 的形状：一个文档一个
+        // 文件夹）。删文档时它跟着一起没，不需要另外清。
+        server.middlewares.use(INDEX_ROUTE, (request, response) => {
+          const [docId] = segments(request);
+          const file = path.join(LIBRARY_ROOT, docId ?? "", "index-vectors.json");
+          respond(response, async () => {
+            if (!docId) throw new Error("缺少 docId");
+            if (request.method === "POST") {
+              await writeFile(file, await readBody(request), "utf8");
+              return json({});
+            }
+            return { type: "application/json", data: await readFile(file, "utf8").catch(() => "null") };
           });
         });
 
