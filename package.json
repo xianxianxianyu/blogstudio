@@ -15,16 +15,20 @@
     "db:generate": "drizzle-kit generate",
     "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts",
     "eval:retrieval": "tsx pdfstudio/eval/retrieval/run.ts",
-    "dev:pdfstudio": "vite --config pdfstudio/vite.app.config.ts"
+    "dev:pdfstudio": "vite --config pdfstudio/vite.app.config.ts",
+    "eval:clips": "tsx pdfstudio/eval/retrieval/build-clips.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.30",
+    "@assistant-ui/react": "^0.15.14",
     "@huggingface/transformers": "^4.2.0",
     "ai": "^7.0.64",
     "drizzle-orm": "0.45.2",
+    "katex": "^0.18.4",
     "pdfjs-dist": "^6.2.108",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "streamdown": "^2.5.0"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",

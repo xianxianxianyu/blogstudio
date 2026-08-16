@@ -7,6 +7,7 @@ import { createBookshelf } from "../bookshelf/bookshelf";
 import { createClipStore } from "../clip/clip-store";
 import { RecognizeError } from "../recognizer/recognizer";
 import type { ClipStore } from "../clip/clip-store";
+import type { Chat } from "../chat/chat";
 import type { ClipContent, Recognizer, Region, Screenshot } from "../recognizer/recognizer";
 
 const PAPER_A = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x01]);
@@ -31,6 +32,11 @@ const CONTENT: ClipContent = {
 
 const NOW = 1_700_000_000_000;
 
+const fakeChat = (): Chat => ({
+  ask: async () => ({ text: "", citations: [], grounding: "none" as const }),
+  reindex: async () => undefined,
+});
+
 const recognizerReturning = (content: ClipContent): Recognizer => ({ recognize: async () => content });
 const recognizerThrowing = (error: unknown): Recognizer => ({
   recognize: async () => {
@@ -48,7 +54,7 @@ async function workspace(recognizer: Recognizer = recognizerReturning(CONTENT), 
       shelf: createBookshelf(root),
       store: store ?? createClipStore(root),
       // 视图那侧在这里建 pdf.js 文档并接好 Recognizer 的依赖；Workspace 不认识 pdf.js。
-      openDocument: async () => recognizer,
+      openDocument: async () => ({ recognizer, chat: fakeChat() }),
       newId: () => `c${++n}`,
       now: () => NOW,
     }),
@@ -110,7 +116,7 @@ describe("Workspace — 书架", () => {
     return createWorkspace({
       shelf: createBookshelf(root),
       store: createClipStore(root),
-      openDocument: async () => recognizerReturning(CONTENT),
+      openDocument: async () => ({ recognizer: recognizerReturning(CONTENT), chat: fakeChat() }),
       newId: () => "fresh",
       now: () => NOW,
     });

@@ -15,6 +15,8 @@ export function Reader({
   host,
   state,
   selected,
+  page,
+  onPage,
   onSelect,
   onCapturing,
   onError,
@@ -23,25 +25,18 @@ export function Reader({
   host: PdfHost;
   state: WorkspaceState;
   selected: string | null;
+  page: number;
+  onPage: (page: number) => void;
   onSelect: (clipId: string | null) => void;
   onCapturing: (busy: boolean) => void;
   onError: (message: string | null) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [page, setPage] = useState(1);
   const [scale, setScale] = useState(1.5);
   const [viewport, setViewport] = useState<pdfjs.PageViewport | null>(null);
   const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
   const [display, setDisplay] = useState<{ width: number; height: number } | null>(null);
   const start = useRef<Point | null>(null);
-
-  // 换书回到第一页：页码是上一本的位置，留着它会打开一个可能不存在的页。
-  // 用 docId 当 key 的话整个 Reader 会重挂，canvas 也跟着重建——那比重设一个数贵得多。
-  const [openedDoc, setOpenedDoc] = useState(state.docId);
-  if (openedDoc !== state.docId) {
-    setOpenedDoc(state.docId);
-    setPage(1);
-  }
 
   /**
    * canvas 的**显示**尺寸。它与内部像素只有在「canvas 没被 CSS 缩放」时才相等，
@@ -147,7 +142,7 @@ export function Reader({
   return (
     <>
       <div className="row">
-        <button className="btn" onClick={() => setPage((n) => Math.max(1, n - 1))}>
+        <button className="btn" onClick={() => onPage(Math.max(1, page - 1))}>
           ← 上一页
         </button>
         <span>
@@ -157,13 +152,13 @@ export function Reader({
             value={page}
             min={1}
             style={{ width: "4em" }}
-            onChange={(event) => setPage(Math.max(1, Number(event.target.value)))}
+            onChange={(event) => onPage(Math.max(1, Number(event.target.value)))}
           />{" "}
           / {document?.numPages ?? "?"} 页
         </span>
         <button
           className="btn"
-          onClick={() => setPage((n) => Math.min(document?.numPages ?? n, n + 1))}
+          onClick={() => onPage(Math.min(document?.numPages ?? page, page + 1))}
         >
           下一页 →
         </button>

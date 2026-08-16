@@ -4,6 +4,7 @@ import type { Action, Clip, ClipsState } from "../clip/clip";
 import type { Bookshelf, Doc } from "../bookshelf/bookshelf";
 import type { ClipStore } from "../clip/clip-store";
 import type { Recognizer, Region } from "../recognizer/recognizer";
+import type { Chat } from "../chat/chat";
 
 /**
  * 应用层：拥有「当前是哪本书、它有哪些摘录、什么时候落盘」，视图只调它（ADR-0013）。
@@ -16,8 +17,18 @@ import type { Recognizer, Region } from "../recognizer/recognizer";
 export interface WorkspaceDeps {
   shelf: Bookshelf;
   store: ClipStore;
-  /** 视图在这里建 pdf.js 文档，并交回一个依赖都接好了的 Recognizer。 */
-  openDocument(bytes: Uint8Array, doc: Doc): Promise<Recognizer>;
+  /**
+   * 视图在这里建 pdf.js 文档，交回依赖都接好了的 `Recognizer` 与 `Chat`。
+   *
+   * `clips` 是这本书的摘录访问器，由 Workspace 传进来：Chat 要把摘录放进检索池，
+   * 而摘录是 Workspace 的状态。传函数不是数组——传数组会把建索引那一刻的快照钉死，
+   * 新框的摘录永远检索不到，且不报错。
+   */
+  openDocument(
+    bytes: Uint8Array,
+    doc: Doc,
+    clips: () => Clip[],
+  ): Promise<{ recognizer: Recognizer; chat: Chat }>;
   newId(): string;
   now(): number;
 }
@@ -40,6 +51,11 @@ export interface Result {
 const OK: Result = { ok: true };
 
 export interface Workspace {
+  /**
+   * 当前文档的问答。换书就换一个，没开文档时是 null——`CONTEXT.md` 说 chat
+   * 「绝不跨 PDF」，而共用一个实例正是跨过去的方式。
+   */
+  readonly chat: Chat | null;
   /**
    * 当前快照。**没变化时是同一个引用**——React 的 `useSyncExternalStore` 拿它做
    * 相等性判断，每次新建对象会被当成「状态一直在变」，直接无限重渲染。
@@ -65,6 +81,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
   let docs: Doc[] = [];
   let docId: string | null = null;
   let recognizer: Recognizer | null = null;
+  let chat: Chat | null = null;
   let clips: ClipsState = { clips: [], contexts: [] };
 
   let snapshot: WorkspaceState = { docs, docId, clips: clips.clips };
@@ -106,6 +123,10 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       return snapshot;
     },
 
+    get chat(): Chat | null {
+      return chat;
+    },
+
     subscribe(listener: () => void): () => void {
       listeners.add(listener);
       return () => listeners.delete(listener);
@@ -130,7 +151,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       const doc = docs.find((candidate) => candidate.id === id);
       if (!doc) throw new Error("书架上没有这本书。");
 
-      recognizer = await deps.openDocument(bytes, doc);
+      ({ recognizer, chat } = await deps.openDocument(bytes, doc, () => clips.clips));
       docId = id;
       // **摘录必须跟着换。** 共用一份状态的话，上一本的标签会画到这一本的页面上
       // ——锚点是「页码 + 矩形」，换本书它照样「有效」，只是指着完全不相干的地方，
@@ -150,6 +171,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       // 当前这本被删了就得清干净，否则视图会拿着一个指向空气的 docId 继续画标签。
       docId = null;
       recognizer = null;
+      chat = null;
       clips = { clips: [], contexts: [] };
       publish();
     },

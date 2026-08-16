@@ -397,3 +397,52 @@ function clipWith(note: string, page: number): Clip {
     lastViewedAt: 0,
   };
 }
+
+describe("流式出口", () => {
+  it("边生成边报，报的是累计文本", async () => {
+    // 报累计而不是增量：ADR-0008 的 LocalRuntime 要的就是累计文本事件。让每个 adapter
+    // 自己攒一遍的话，攒错了或攒两遍都不会有任何报错，只会看到重复的字。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: createFakeModelClient({ completeText: "注意力机制", deltas: ["注意", "力", "机制"] }),
+    });
+    const seen: string[] = [];
+
+    const answer = await chat.ask(
+      [{ role: "user", parts: [{ kind: "text", text: "什么是注意力" }] }],
+      { onText: (text) => seen.push(text) },
+    );
+
+    expect(seen).toEqual(["注意", "注意力", "注意力机制"]);
+    expect(seen.at(-1)).toBe(answer.text);
+  });
+
+  it("停止之后，最后报出去的和返回的半段一致", async () => {
+    // 界面显示的是最后一次 onText，接口返回的是 Answer.text。两者不一致的话，读者
+    // 看到的文字和存下来的文字就不是同一段——而停止是常用操作，不是边角情况。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const controller = new AbortController();
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: createFakeModelClient({
+        completeText: "一二三四",
+        deltas: ["一", "二", "三", "四"],
+        onDelta: (index) => {
+          if (index === 1) controller.abort();
+        },
+      }),
+    });
+    const seen: string[] = [];
+
+    const answer = await chat.ask([{ role: "user", parts: [{ kind: "text", text: "数数" }] }], {
+      signal: controller.signal,
+      onText: (text) => seen.push(text),
+    });
+
+    expect(answer.text).toBe(seen.at(-1));
+    expect(answer.text.length).toBeLessThan("一二三四".length);
+  });
+});

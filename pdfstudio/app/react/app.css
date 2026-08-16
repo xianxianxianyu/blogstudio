@@ -41,3 +41,13 @@ img.shot { max-width: 100%; border: 1px solid var(--line); }
 .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 12px; }
 .tabs button { background: none; border: none; padding: 6px 10px; border-bottom: 2px solid transparent; }
 .tabs button.on { border-bottom-color: var(--accent); font-weight: 700; }
+
+.msg { margin: 8px 0; padding: 8px 10px; border-radius: 6px; }
+.msg.me { background: #eef2ff; }
+.msg.bot { background: #fafafa; border: 1px solid var(--line); }
+.msg :is(p, ul, ol) { margin: 0 0 6px; }
+.msg :last-child { margin-bottom: 0; }
+.msg pre { overflow-x: auto; }
+.cite { margin: 8px 0; padding: 8px 10px; border-left: 3px solid var(--accent); background: #f8fafc; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.cite.err { border-left-color: #b91c1c; background: #fef2f2; }
+.cite > div:first-child { width: 100%; color: var(--muted); font-size: 13px; }

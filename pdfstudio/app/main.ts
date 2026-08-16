@@ -16,6 +16,7 @@ import * as pdfjs from "pdfjs-dist";
 import worker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { isMisTouch, toCanvasBox, toPageRect } from "../src/capture/capture";
 import { createRecognizer } from "../src/recognizer/recognizer";
+import { createChat } from "../src/chat/chat";
 import { createModelClient } from "../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../src/config/config";
 import { createWorkspace } from "../src/app/workspace";
@@ -62,7 +63,7 @@ function viaProxy(baseURL: string): string {
   return `${location.origin}/__model/${encodeURIComponent(baseURL)}`;
 }
 
-function endpoint(capability: "recognition" | "translation") {
+function endpoint(capability: "recognition" | "translation" | "chat") {
   const resolved = resolveEndpoint(appConfig, capability);
   return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
@@ -78,15 +79,23 @@ const ws = createWorkspace({
   shelf,
   store,
   // pdf.js 归视图：Workspace 不认识它，只要一个依赖都接好了的 Recognizer。
-  async openDocument(bytes) {
+  async openDocument(bytes, doc, clips) {
     document_ = await pdfjs.getDocument({ data: bytes }).promise;
-    return createRecognizer({
+    // 这个旧页面没有问答界面，但 Workspace 要一个 Chat——建出来不用，好过让签名分叉。
+    const chat = createChat({
+      document: document_,
+      docId: doc.id,
+      model: createModelClient(endpoint("chat")),
+      clips,
+    });
+    const recognizer = createRecognizer({
       document: document_,
       recognition: createModelClient(endpoint("recognition")),
       // 翻译是独立配置的（ADR-0010）。类型上必填——漏掉它译文永远不出现，
       // 而这个 bug 真的发生过一次。
       translation: createModelClient(endpoint("translation")),
     });
+    return { recognizer, chat };
   },
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),

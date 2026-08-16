@@ -66,6 +66,17 @@ export interface ChatDeps {
 /** rare，可省。`signal` 是停止按钮的入口（ADR-0008 的 LocalRuntime 要它）。 */
 export interface AskOptions {
   signal?: AbortSignal;
+  /**
+   * 边生成边报，**给的是累计文本**而不是增量。
+   *
+   * 内部本来就在累计（`Answer.text` 就是它），顺手交出去比让每个 adapter 自己攒一遍
+   * 安全：攒错了或攒两遍都不会有任何报错，只会看到重复的字。ADR-0008 的 LocalRuntime
+   * 要的也正是累计文本事件。
+   *
+   * 没有它的话「流式」只存在于内部——`ask` 只在最后一刻兑现，界面上就是转圈半天
+   * 然后一次性出现。这和当初漏掉 `signal` 是同一个形状的缺口。
+   */
+  onText?: (text: string) => void;
 }
 
 export interface Chat {
@@ -158,6 +169,9 @@ export function createChat(deps: ChatDeps): Chat {
         signal: options?.signal,
       })) {
         text += chunk.textDelta;
+        // 报在 break 之前：停止时界面显示的最后一段必须与返回的 Answer.text 一致，
+        // 否则读者看到的文字和存下来的文字不是同一段。
+        options?.onText?.(text);
         // 读者按下停止就收工，已读到的那半段答案照样是合法 Answer（不变量 ⑥）。
         if (options?.signal?.aborted) break;
       }

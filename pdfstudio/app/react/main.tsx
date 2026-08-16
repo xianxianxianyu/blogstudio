@@ -10,6 +10,9 @@ import * as pdfjs from "pdfjs-dist";
 import worker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { createWorkspace } from "../../src/app/workspace";
 import { createRecognizer } from "../../src/recognizer/recognizer";
+import { createChat } from "../../src/chat/chat";
+import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
+import { bindConversation, createConversation } from "../../src/app/conversation";
 import { createModelClient } from "../../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../../src/config/config";
 import { createHttpClipStore } from "../http-clip-store";
@@ -55,10 +58,13 @@ function viaProxy(baseURL: string): string {
   return `${location.origin}/__model/${encodeURIComponent(baseURL)}`;
 }
 
-function endpoint(capability: "recognition" | "translation") {
+function endpoint(capability: "recognition" | "translation" | "chat") {
   const resolved = resolveEndpoint(appConfig, capability);
   return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
+
+const embedder = createTransformersEmbedder();
+const conversation = createConversation();
 
 // pdf.js 的文档句柄归视图，Workspace 不认识它——它只要一个依赖都接好了的 Recognizer。
 const host = createPdfHost();
@@ -66,20 +72,32 @@ const host = createPdfHost();
 const ws = createWorkspace({
   shelf: createHttpBookshelf("/__docs"),
   store: createHttpClipStore("/__clips"),
-  async openDocument(bytes) {
+  async openDocument(bytes, doc, clips) {
     const document = await host.open(bytes);
-    return createRecognizer({
+    const chat = createChat({
+      document,
+      docId: doc.id,
+      model: createModelClient(endpoint("chat")),
+      // 本地 embedding：不接的话中文问英文论文是**零召回**（关键词那一路抽不出中文词元）。
+      // 权重是首次真正检索时才下载的，开一本书不会触发。
+      embedder,
+      // 摘录进检索池：文本层在公式和图上是空的，那两处只有摘录里有。
+      clips,
+    });
+    const recognizer = createRecognizer({
       document,
       recognition: createModelClient(endpoint("recognition")),
       // 翻译是独立配置的（ADR-0010）。类型上必填——漏掉它译文永远不出现。
       translation: createModelClient(endpoint("translation")),
     });
+    return { recognizer, chat };
   },
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),
 });
 
+bindConversation(ws, conversation);
 await ws.refresh();
 if (ws.state.docs.length > 0) await ws.openDoc(ws.state.docs[0].id);
 
-createRoot(document.querySelector("#root")!).render(<App ws={ws} host={host} settings={settings} />);
+createRoot(document.querySelector("#root")!).render(<App ws={ws} host={host} settings={settings} conversation={conversation} />);
