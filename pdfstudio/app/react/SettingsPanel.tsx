@@ -33,6 +33,32 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
 
   return (
     <div>
+      <h3>自动清理</h3>
+      <p className="empty">
+        没标记为重要的摘录，多少天没打开就只保留位置标记。
+        {config.retention.acknowledged ? "" : "（你还没确认这条策略，目前不会清理任何东西。）"}
+      </p>
+      <label className="field">
+        <span>天数</span>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          defaultValue={config.retention.ttlDays}
+          onBlur={(event) => {
+            const days = Number(event.target.value);
+            if (days !== config.retention.ttlDays) {
+              void settings.setRetentionDays(days).then((result) => {
+                if (!result.ok) {
+                  window.alert(result.reason);
+                  event.target.value = String(config.retention.ttlDays);
+                }
+              });
+            }
+          }}
+        />
+      </label>
+
       <h3>默认组</h3>
       <p className="empty">没有单独配置的功能都用它。</p>
       {FIELDS.map((field) => (

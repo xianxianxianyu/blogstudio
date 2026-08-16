@@ -1,10 +1,12 @@
 import { captureClip } from "../clip/capture-clip";
+import { collect } from "../clip/retention";
 import { can, reduce } from "../clip/clip";
 import type { Action, Clip, ClipsState } from "../clip/clip";
 import type { Bookshelf, Doc } from "../bookshelf/bookshelf";
 import type { ClipStore } from "../clip/clip-store";
 import type { Recognizer, Region } from "../recognizer/recognizer";
 import type { Chat } from "../chat/chat";
+import type { RetentionConfig } from "../config/config";
 
 /**
  * 应用层：拥有「当前是哪本书、它有哪些摘录、什么时候落盘」，视图只调它（ADR-0013）。
@@ -31,6 +33,13 @@ export interface WorkspaceDeps {
   ): Promise<{ recognizer: Recognizer; chat: Chat }>;
   newId(): string;
   now(): number;
+  /**
+   * 回收策略（ADR-0012）。省略表示不回收——**默认不删东西**，要删得显式说。
+   *
+   * 是函数不是对象：读者随时可能在设置里改天数或确认告知，传对象会把启动那一刻的
+   * 快照钉死，改完不生效且不报错。
+   */
+  retention?: () => RetentionConfig;
 }
 
 export interface WorkspaceState {
@@ -153,9 +162,25 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
 
       ({ recognizer, chat } = await deps.openDocument(bytes, doc, () => clips.clips));
       docId = id;
+
+      // 打开这本书时顺手回收它到期的摘录（ADR-0012）。
+      //
+      // **只扫这一本，不在启动时全库扫**：`listByDoc` 会把每条摘录的截图字节全读出来，
+      // 为了决定要不要删而先把要删的东西全读一遍，在启动时做就是让应用一开就卡住。
+      // 代价写明：**再也没打开过的书永远不会被回收**。
+      //
+      // 没确认过告知就一条都不动——ADR-0012 代价 1 说首次运行必须显式告知，
+      // 而删完再说不叫告知，那时读者的东西已经没了。
+      const retention = deps.retention?.();
+      if (retention?.acknowledged) {
+        await collect({ store: deps.store }, id, deps.now(), retention.ttlDays);
+      }
+
       // **摘录必须跟着换。** 共用一份状态的话，上一本的标签会画到这一本的页面上
       // ——锚点是「页码 + 矩形」，换本书它照样「有效」，只是指着完全不相干的地方，
       // 而且不报任何错。
+      // 回收之后才读：先读的话拿到的是内存里还带着内容的旧样子，标签会画成「实的」，
+      // 而磁盘上已经是墓碑了。
       clips = { clips: await deps.store.listByDoc(id), contexts: [] };
       publish();
     },

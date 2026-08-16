@@ -8,6 +8,7 @@ import { Reader } from "./Reader";
 import { ClipPanel } from "./ClipPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { ChatPanel } from "./ChatPanel";
+import { RetentionNotice } from "./RetentionNotice";
 
 /**
  * 组件基本上是 `ws.state` 的投影加几个回调。**规则、顺序、落盘都不在这里**
@@ -95,6 +96,8 @@ export function App({
           <ChatPanel conversation={conversation} onJump={setPage} />
         ) : (
           <>
+            {/* 挂在阅读页最上面：打开书正是回收发生的时机，告知要在那之前看见。 */}
+            <RetentionNotice settings={settings} />
             <Shelf ws={ws} state={state} onOpen={openDoc} />
 
             <p className="empty">

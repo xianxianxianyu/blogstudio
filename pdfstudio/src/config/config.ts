@@ -22,14 +22,29 @@ export interface EndpointConfig {
   model: string;
 }
 
+/** 未标记摘录的保留策略（ADR-0012）。 */
+export interface RetentionConfig {
+  ttlDays: number;
+  /**
+   * 读者是否已经知道「未标记的摘录会到期衰减」。
+   *
+   * **默认 false，且没确认过一条都不回收。** ADR-0012 记着「首次运行必须显式告知」，
+   * 而删完再说不叫告知。默认 true 的话，读者第一次打开应用就可能已经丢了东西。
+   */
+  acknowledged: boolean;
+}
+
 export interface AppConfig {
   /** 没有单独配置的功能都落到它。 */
   default: EndpointConfig;
   /** 只写要覆盖的字段，其余跟随默认。 */
   capabilities: Partial<Record<Capability, Partial<EndpointConfig>>>;
+  retention: RetentionConfig;
 }
 
 const EMPTY: EndpointConfig = { baseURL: "", apiKey: "", model: "" };
+
+const DEFAULT_RETENTION: RetentionConfig = { ttlDays: 7, acknowledged: false };
 
 /** 从 JSON 读出配置。扁平写法与分组写法都认。 */
 export function parseConfig(raw: unknown): AppConfig {
@@ -41,7 +56,14 @@ export function parseConfig(raw: unknown): AppConfig {
       ? { ...EMPTY, ...source.default }
       : { ...EMPTY, baseURL: source.baseURL ?? "", apiKey: source.apiKey ?? "", model: source.model ?? "" };
 
-  return { default: fallback, capabilities: source.capabilities ?? {} };
+  return {
+    default: fallback,
+    capabilities: source.capabilities ?? {},
+    // 逐字段回退：旧文件根本没有这一段，落到 undefined 的话回收器那边
+    // `ttlDays` 会算出 NaN，而 `now - lastViewedAt > NaN` 永远是 false
+    // ——回收静默失效，不报任何错。
+    retention: { ...DEFAULT_RETENTION, ...source.retention },
+  };
 }
 
 /** 某个功能实际用哪个端点。逐字段回退到默认组。 */

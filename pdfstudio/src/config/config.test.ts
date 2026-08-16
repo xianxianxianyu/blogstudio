@@ -82,6 +82,7 @@ describe("某一栏是自己配的还是跟随默认组", () => {
   const config: AppConfig = {
     default: { baseURL: "https://a", apiKey: "k", model: "m" },
     capabilities: { translation: { model: "fast" }, recognition: { baseURL: "" } },
+    retention: { ttlDays: 7, acknowledged: false },
   };
 
   it("自己写了就是自己的", () => {
@@ -100,5 +101,31 @@ describe("某一栏是自己配的还是跟随默认组", () => {
     // 显式清空是一种真实配法。按真假值判会把它误认成未配置，然后偷偷灌进默认组的 key
     // ——那把云端的 key 发给了本地端点。
     expect(fieldSource(config, "recognition", "baseURL")).toBe("own");
+  });
+});
+
+describe("回收策略配置", () => {
+  it("默认 7 天，且默认**没有**确认过", async () => {
+    // acknowledged 默认 false 是要害：ADR-0012 说首次运行必须显式告知，而删完再说
+    // 不叫告知。默认 true 的话，读者第一次打开应用就可能已经丢了东西。
+    const config = parseConfig(null);
+
+    expect(config.retention).toEqual({ ttlDays: 7, acknowledged: false });
+  });
+
+  it("旧配置文件没有这一段，读成默认值而不是 undefined", async () => {
+    const config = parseConfig({ baseURL: "https://a", apiKey: "k", model: "m" });
+
+    expect(config.retention.ttlDays).toBe(7);
+    expect(config.retention.acknowledged).toBe(false);
+  });
+
+  it("改过的天数与确认状态存得住", async () => {
+    const file = path.join(await mkdtemp(path.join(tmpdir(), "cfg-")), "config.json");
+    const config = parseConfig(null);
+
+    await saveConfig(file, { ...config, retention: { ttlDays: 30, acknowledged: true } });
+
+    expect((await loadConfig(file)).retention).toEqual({ ttlDays: 30, acknowledged: true });
   });
 });

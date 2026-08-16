@@ -94,6 +94,9 @@ const ws = createWorkspace({
   },
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),
+  // 读函数而不是快照：读者随时会在设置里改天数或点「知道了」，钉死快照会让改动不生效
+  // 且不报错。
+  retention: () => settings.config.retention,
 });
 
 bindConversation(ws, conversation);

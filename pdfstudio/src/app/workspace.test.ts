@@ -243,3 +243,76 @@ describe("Workspace — 订阅", () => {
     expect(count).toBe(afterImport);
   });
 });
+
+describe("Workspace — 打开一本书时回收（ADR-0012）", () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** 一条到期很久、没标重要、没写笔记的摘录——正是该被回收的那种。 */
+  async function withExpiredClip(retention: { ttlDays: number; acknowledged: boolean }) {
+    const root = await mkdtemp(path.join(tmpdir(), "gc-"));
+    const store = createClipStore(root);
+    const ws = createWorkspace({
+      shelf: createBookshelf(root),
+      store,
+      openDocument: async () => ({ recognizer: recognizerReturning(CONTENT), chat: fakeChat() }),
+      newId: () => "c1",
+      // 时钟停在 30 天后：默认 7 天保留期早就过了。
+      now: () => NOW + 30 * DAY,
+      retention: () => retention,
+    });
+    const shelf = createBookshelf(root);
+    const doc = await shelf.import({ filename: "a.pdf", bytes: PAPER_A, at: NOW });
+    await store.save(doc.id, {
+      id: "old",
+      state: "ready",
+      region: region(),
+      content: CONTENT,
+      sourceText: CONTENT.sourceText,
+      translation: null,
+      note: null,
+      label: "dot",
+      important: false,
+      lastViewedAt: NOW,
+    });
+    return { ws, store, docId: doc.id };
+  }
+
+  it("到期的摘录在打开这本书时衰减成墓碑，锚点还在", async () => {
+    const { ws, docId } = await withExpiredClip({ ttlDays: 7, acknowledged: true });
+
+    await ws.openDoc(docId);
+
+    const [clip] = ws.state.clips;
+    expect(clip.content).toBeNull();
+    // 痕迹是永久的：标签还画得出来，点一下可以按锚点重新识别。
+    expect(clip.region.rect).toEqual(region().rect);
+  });
+
+  it("**没确认过告知就一条都不回收**，哪怕早就到期", async () => {
+    // ADR-0012 代价 1：自动删除不可逆，首次运行必须显式告知。删完再说不叫告知
+    // ——那时读者的东西已经没了。
+    const { ws, docId } = await withExpiredClip({ ttlDays: 7, acknowledged: false });
+
+    await ws.openDoc(docId);
+
+    expect(ws.state.clips[0].content).not.toBeNull();
+  });
+
+  it("保留期调长了就不该回收", async () => {
+    const { ws, docId } = await withExpiredClip({ ttlDays: 90, acknowledged: true });
+
+    await ws.openDoc(docId);
+
+    expect(ws.state.clips[0].content).not.toBeNull();
+  });
+
+  it("回收后读回来的是磁盘上的样子，不是内存里改过的", async () => {
+    // 内存说衰减了、磁盘上还留着字节，等于没省下任何东西——而省存储正是这件事的
+    // 全部目的。
+    const { ws, store, docId } = await withExpiredClip({ ttlDays: 7, acknowledged: true });
+
+    await ws.openDoc(docId);
+
+    expect((await store.listByDoc(docId))[0].content).toBeNull();
+  });
+});

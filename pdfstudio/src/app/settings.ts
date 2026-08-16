@@ -18,6 +18,9 @@ export interface Settings {
   setOverride(capability: Capability, field: keyof EndpointConfig, value: string): Promise<Result>;
   clearOverride(capability: Capability, field: keyof EndpointConfig): Promise<Result>;
   check(capability: Capability): Promise<Result>;
+  /** 读者已经知道「未标记的摘录会到期衰减」。在此之前一条都不回收。 */
+  acknowledgeRetention(): Promise<Result>;
+  setRetentionDays(days: number): Promise<Result>;
 }
 
 /**
@@ -80,6 +83,19 @@ export function createSettings(deps: SettingsDeps): Settings {
       const rest = { ...config.capabilities[capability] };
       delete rest[field];
       return persist({ ...config, capabilities: { ...config.capabilities, [capability]: rest } });
+    },
+
+    acknowledgeRetention(): Promise<Result> {
+      return persist({ ...config, retention: { ...config.retention, acknowledged: true } });
+    },
+
+    setRetentionDays(days: number): Promise<Result> {
+      // 0 或负数会让「到期」对所有摘录成立——一打开书就全清空，且不可撤销。
+      // NaN 更坏：`now - lastViewedAt > NaN` 恒为 false，回收静默失效，什么都不说。
+      if (!Number.isInteger(days) || days < 1) {
+        return Promise.resolve({ ok: false, reason: "保留天数要是 1 以上的整数。" });
+      }
+      return persist({ ...config, retention: { ...config.retention, ttlDays: days } });
     },
 
     async check(capability: Capability): Promise<Result> {

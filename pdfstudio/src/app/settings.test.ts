@@ -6,6 +6,7 @@ import type { AppConfig, EndpointConfig } from "../config/config";
 const START: AppConfig = {
   default: { baseURL: "https://cloud", apiKey: "cloud-key", model: "big" },
   capabilities: { translation: { model: "fast" } },
+  retention: { ttlDays: 7, acknowledged: false },
 };
 
 function settings(probe: (endpoint: EndpointConfig) => Promise<void> = async () => undefined) {
@@ -89,5 +90,41 @@ describe("设置", () => {
 
     expect(result.ok).toBe(false);
     expect(result.reason).toContain("Unauthorized");
+  });
+});
+
+describe("回收策略", () => {
+  it("确认告知会落盘", async () => {
+    // 没落盘的话每次启动都要再确认一遍，而读者会开始无脑点掉它——
+    // 那这条告知就白设了。
+    const { saved, it: s } = settings();
+    await s.load();
+
+    await s.acknowledgeRetention();
+
+    expect(s.config.retention.acknowledged).toBe(true);
+    expect(saved.at(-1)!.retention.acknowledged).toBe(true);
+  });
+
+  it("改保留天数会落盘", async () => {
+    const { saved, it: s } = settings();
+    await s.load();
+
+    await s.setRetentionDays(30);
+
+    expect(saved.at(-1)!.retention.ttlDays).toBe(30);
+  });
+
+  it("天数只收正整数", async () => {
+    // 0 或负数会让「到期」对所有摘录成立——一打开书就全清空，且不可撤销。
+    // NaN 更坏：`now - lastViewedAt > NaN` 恒为 false，回收静默失效，什么都不说。
+    const { it: s } = settings();
+    await s.load();
+
+    for (const bad of [0, -1, Number.NaN, 1.5]) {
+      const result = await s.setRetentionDays(bad);
+      expect(result.ok).toBe(false);
+    }
+    expect(s.config.retention.ttlDays).toBe(7);
   });
 });
