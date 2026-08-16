@@ -43,6 +43,8 @@ export function App({
   const [selected, setSelected] = useState<string | null>(null);
   const [pane, setPane] = useState<"clips" | "chat">("clips");
   const [page, setPage] = useState(1);
+  const [pages, setPages] = useState(1);
+  const [scale, setScale] = useState(1.5);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,6 +77,36 @@ export function App({
               ← 书架
             </button>
             <div className="title grow">{doc?.title ?? ""}</div>
+
+            <div className="row" style={{ gap: 6 }}>
+              <button className="btn" onClick={() => setPage((n) => Math.max(1, n - 1))}>
+                ←
+              </button>
+              <span className="faint" style={{ minWidth: "5.5em", textAlign: "center" }}>
+                {page} / {pages}
+              </span>
+              <button className="btn" onClick={() => setPage((n) => Math.min(pages, n + 1))}>
+                →
+              </button>
+              <button
+                className="btn"
+                title="缩小"
+                onClick={() => setScale((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
+              >
+                −
+              </button>
+              <span className="faint" style={{ minWidth: "3em", textAlign: "center" }}>
+                {Math.round(scale * 100)}%
+              </span>
+              <button
+                className="btn"
+                title="放大"
+                onClick={() => setScale((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
+              >
+                +
+              </button>
+            </div>
+
             <button className="btn" onClick={() => setShowSettings(true)}>
               设置
             </button>
@@ -88,7 +120,8 @@ export function App({
                 state={state}
                 selected={selected}
                 page={page}
-                onPage={setPage}
+                onPages={setPages}
+                scale={scale}
                 onSelect={(id) => {
                   setSelected(id);
                   if (id !== null) {

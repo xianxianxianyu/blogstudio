@@ -56,22 +56,17 @@ export function ShelfPage({
 
       <div className="books">
         {state.docs.map((doc) => (
-          <div key={doc.id} style={{ position: "relative" }}>
-            <button className="book" onClick={() => void onOpen(doc.id)}>
+          <div key={doc.id} className="book">
+            {/* 整张卡片是「打开」，删除是卡片内的另一个按钮——此前删除是绝对定位盖在
+                卡片上的，按钮嵌按钮既不合法也容易点错。 */}
+            <button className="open grow" onClick={() => void onOpen(doc.id)}>
               <span className="spine" />
               <span className="grow">
-                <div className="title">{doc.title}</div>
-                <div className="meta">{doc.filename}</div>
+                <span className="title">{doc.title}</span>
+                <span className="meta">{doc.filename}</span>
               </span>
             </button>
-            <button
-              className="btn"
-              style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)" }}
-              onClick={(event) => {
-                event.stopPropagation();
-                void remove(doc.id, doc.title);
-              }}
-            >
+            <button className="btn" onClick={() => void remove(doc.id, doc.title)}>
               删除
             </button>
           </div>

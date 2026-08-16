@@ -16,8 +16,9 @@ export function Reader({
   state,
   selected,
   page,
-  onPage,
+  onPages,
   onSelect,
+  scale,
   onCapturing,
   onError,
 }: {
@@ -26,13 +27,14 @@ export function Reader({
   state: WorkspaceState;
   selected: string | null;
   page: number;
-  onPage: (page: number) => void;
+  /** 总页数交给外面显示——翻页控件在顶栏，它是「这本书」的控件，不是画布的一部分。 */
+  onPages: (total: number) => void;
   onSelect: (clipId: string | null) => void;
+  scale: number;
   onCapturing: (busy: boolean) => void;
   onError: (message: string | null) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
-  const [scale, setScale] = useState(1.5);
   const [viewport, setViewport] = useState<pdfjs.PageViewport | null>(null);
   const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
   const [display, setDisplay] = useState<{ width: number; height: number } | null>(null);
@@ -64,12 +66,15 @@ export function Reader({
       canvas.current.width = vp.width;
       canvas.current.height = vp.height;
       await rendered.render({ canvas: canvas.current, viewport: vp }).promise;
-      if (!cancelled) setViewport(vp);
+      if (!cancelled) {
+        setViewport(vp);
+        onPages(document.numPages);
+      }
     })();
     return () => {
       cancelled = true;
     };
-  }, [host, state.docId, page, scale]);
+  }, [host, state.docId, page, scale, onPages]);
 
   /**
    * 指针坐标（CSS 像素）→ canvas 内部像素，并取整。
@@ -140,42 +145,7 @@ export function Reader({
   const document = host.document;
 
   return (
-    <>
-      <div className="row">
-        <button className="btn" onClick={() => onPage(Math.max(1, page - 1))}>
-          ← 上一页
-        </button>
-        <span>
-          第{" "}
-          <input
-            type="number"
-            value={page}
-            min={1}
-            style={{ width: "4em" }}
-            onChange={(event) => onPage(Math.max(1, Number(event.target.value)))}
-          />{" "}
-          / {document?.numPages ?? "?"} 页
-        </span>
-        <button
-          className="btn"
-          onClick={() => onPage(Math.min(document?.numPages ?? page, page + 1))}
-        >
-          下一页 →
-        </button>
-        <span>
-          缩放{" "}
-          <input
-            type="number"
-            value={scale}
-            step={0.25}
-            min={0.5}
-            style={{ width: "4em" }}
-            onChange={(event) => setScale(Number(event.target.value) || 1)}
-          />
-        </span>
-      </div>
-
-      <div className="frame">
+    <div className="frame">
         <canvas
           ref={canvas}
           onPointerDown={(event) => {
@@ -217,7 +187,7 @@ export function Reader({
               );
             })}
 
-        {drag && (
+      {drag && (
           <div
             className="drag"
             style={{
@@ -227,9 +197,8 @@ export function Reader({
               height: css(Math.abs(drag.to.y - drag.from.y), "y"),
             }}
           />
-        )}
-      </div>
-    </>
+      )}
+    </div>
   );
 }
 

@@ -54,18 +54,17 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 .book {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 14px 16px;
+  gap: 10px;
+  padding: 12px 14px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: #fff;
-  text-align: left;
-  width: 100%;
   transition: border-color .12s, box-shadow .12s;
 }
 .book:hover { border-color: var(--accent); box-shadow: 0 1px 6px rgba(37, 99, 235, .1); }
-.book .title { font-weight: 600; }
-.book .meta { color: var(--faint); font-size: 13px; }
+.book .open { display: flex; align-items: center; gap: 14px; background: none; border: none; text-align: left; padding: 2px 0; }
+.book .title { font-weight: 600; display: block; }
+.book .meta { color: var(--faint); font-size: 13px; display: block; }
 .book .spine { width: 34px; height: 44px; border-radius: 3px; background: linear-gradient(160deg, #e0e7ff, #c7d2fe); flex: none; }
 
 .dropzone {
