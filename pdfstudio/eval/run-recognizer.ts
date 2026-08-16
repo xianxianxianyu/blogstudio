@@ -97,7 +97,16 @@ async function main(): Promise<void> {
 
   // 走 Config 模块而不是自己读文件——识别这个功能配了自己的端点就用它，
   // 没配就落到默认组（ADR-0010）。既有的扁平 config.json 照样认。
-  const config = resolveEndpoint(await loadConfig(path.join(ROOT, "config.json")), "recognition");
+  // 环境变量覆盖：本地引擎的端口是每次启动随机分配的，写不进 config.json。
+  //   PDFSTUDIO_BASE_URL=http://127.0.0.1:xxxxx/v1 npm run eval:recognizer -- --local
+  const fromFile = resolveEndpoint(await loadConfig(path.join(ROOT, "config.json")), "recognition");
+  const config = process.env.PDFSTUDIO_BASE_URL
+    ? {
+        baseURL: process.env.PDFSTUDIO_BASE_URL,
+        apiKey: process.env.PDFSTUDIO_API_KEY ?? "-",
+        model: process.env.PDFSTUDIO_MODEL ?? "paddleocr-vl",
+      }
+    : fromFile;
 
   // 没配置也先把认出来的样本列出来，好确认 manifest 解析没歪。
   if (!config.apiKey) {
@@ -132,7 +141,9 @@ async function main(): Promise<void> {
   console.log(`模型 ${config.model} @ ${config.baseURL}，共 ${samples.length} 张`);
   if (local) {
     console.log("固定 prompt 模式：统一用 `OCR:`，kind 由「有没有认出字」合成。");
-    console.log("**公式那 6 张拿不到 LaTeX**——这是本地档相对云端的已知实质损失，正是要量的东西。\n");
+    console.log("注意：kind 由「有没有认出字」合成，只可能是 mixed 或 image——**这一档的");
+    console.log("kind 合规率不是模型分类能力的度量**，认出字的样本一律记 mixed。");
+    console.log("要看的是 sourceText：公式那 6 张的 LaTeX 质量才是本地档的真实读数。\n");
   } else {
     console.log("");
   }
