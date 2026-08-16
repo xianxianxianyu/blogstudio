@@ -2,6 +2,7 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import type { Workspace } from "../../src/app/workspace";
 import type { Settings } from "../../src/app/settings";
 import type { Conversation } from "../../src/app/conversation";
+import type { Progress } from "../../src/app/progress";
 import type { PdfHost } from "./pdf-host";
 import { Shelf } from "./Shelf";
 import { Reader } from "./Reader";
@@ -20,11 +21,13 @@ export function App({
   host,
   settings,
   conversation,
+  progress,
 }: {
   ws: Workspace;
   host: PdfHost;
   settings: Settings;
   conversation: Conversation;
+  progress: Progress;
 }) {
   const state = useSyncExternalStore(
     useCallback((listener: () => void) => ws.subscribe(listener), [ws]),
@@ -93,7 +96,7 @@ export function App({
         ) : tab === "chat" ? (
           // 引用点了就跳到那一页——出处不可点的话，「依据是检索到的原文」这句话
           // 读者没法自己核实，只能选择信或不信。
-          <ChatPanel conversation={conversation} onJump={setPage} />
+          <ChatPanel conversation={conversation} progress={progress} onJump={setPage} />
         ) : (
           <>
             {/* 挂在阅读页最上面：打开书正是回收发生的时机，告知要在那之前看见。 */}

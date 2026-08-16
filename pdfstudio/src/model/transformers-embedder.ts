@@ -27,6 +27,11 @@ export interface TransformersEmbedderConfig {
   queryPrefix?: string;
   /** 文档侧前缀。 */
   documentPrefix?: string;
+  /**
+   * 下载/加载进度。**不接的话首次调用就是几分钟毫无动静**——权重有几百 MB，
+   * 而调用方唯一能看到的是一个不返回的 promise，跟卡死没有区别。
+   */
+  onProgress?: (status: { file?: string; progress?: number; status?: string }) => void;
 }
 
 /** 一次前向的最大块数。 */
@@ -49,6 +54,7 @@ export function createTransformersEmbedder(config: TransformersEmbedderConfig = 
   const load = () => {
     extractor ??= pipeline("feature-extraction", settings.model, {
       dtype: settings.dtype,
+      progress_callback: config.onProgress,
     }).catch((error: unknown) => {
       extractor = null;
       throw error;

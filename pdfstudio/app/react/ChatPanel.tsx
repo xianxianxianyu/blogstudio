@@ -2,6 +2,7 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { Streamdown } from "streamdown";
 import "katex/dist/katex.min.css";
 import type { Conversation } from "../../src/app/conversation";
+import type { Progress } from "../../src/app/progress";
 import type { Citation, Turn } from "../../src/chat/chat";
 
 /**
@@ -14,14 +15,20 @@ import type { Citation, Turn } from "../../src/chat/chat";
  */
 export function ChatPanel({
   conversation,
+  progress,
   onJump,
 }: {
   conversation: Conversation;
+  progress: Progress;
   onJump: (page: number) => void;
 }) {
   const state = useSyncExternalStore(
     useCallback((listener: () => void) => conversation.subscribe(listener), [conversation]),
     () => conversation.state,
+  );
+  const working = useSyncExternalStore(
+    useCallback((listener: () => void) => progress.subscribe(listener), [progress]),
+    () => progress.text,
   );
   const [draft, setDraft] = useState("");
   const busy = state.streaming !== null;
@@ -46,9 +53,15 @@ export function ChatPanel({
         <Message key={index} turn={turn} />
       ))}
 
+      {/* streaming 为空串表示「在干活但还没有一个字」——建索引、跑向量都在这一段。
+          原本这里渲染的是一个空气泡，界面上什么都没有，跟卡死没有区别。 */}
       {state.streaming !== null && (
         <div className="msg bot">
-          <Streamdown>{state.streaming}</Streamdown>
+          {state.streaming === "" ? (
+            <span className="empty">{working ?? "正在检索…首次提问要先准备本地向量模型，可能要几分钟"}</span>
+          ) : (
+            <Streamdown>{state.streaming}</Streamdown>
+          )}
         </div>
       )}
 

@@ -13,6 +13,7 @@ import { createRecognizer } from "../../src/recognizer/recognizer";
 import { createChat } from "../../src/chat/chat";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
 import { bindConversation, createConversation } from "../../src/app/conversation";
+import { createProgress } from "../../src/app/progress";
 import { createModelClient } from "../../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../../src/config/config";
 import { createHttpClipStore } from "../http-clip-store";
@@ -63,7 +64,17 @@ function endpoint(capability: "recognition" | "translation" | "chat") {
   return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
 
-const embedder = createTransformersEmbedder();
+const progress = createProgress();
+const embedder = createTransformersEmbedder({
+  // 首次提问要下载几百 MB 权重。不报进度的话界面上几分钟毫无动静，跟卡死没有区别。
+  onProgress: (event) => {
+    if (event.status === "progress" && event.progress !== undefined) {
+      progress.set(`正在下载本地向量模型 ${Math.round(event.progress)}%（只需一次）`);
+    } else if (event.status === "ready" || event.status === "done") {
+      progress.set(null);
+    }
+  },
+});
 const conversation = createConversation();
 
 // pdf.js 的文档句柄归视图，Workspace 不认识它——它只要一个依赖都接好了的 Recognizer。
@@ -103,4 +114,4 @@ bindConversation(ws, conversation);
 await ws.refresh();
 if (ws.state.docs.length > 0) await ws.openDoc(ws.state.docs[0].id);
 
-createRoot(document.querySelector("#root")!).render(<App ws={ws} host={host} settings={settings} conversation={conversation} />);
+createRoot(document.querySelector("#root")!).render(<App ws={ws} host={host} settings={settings} conversation={conversation} progress={progress} />);
