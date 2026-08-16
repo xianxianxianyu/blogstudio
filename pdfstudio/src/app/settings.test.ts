@@ -7,6 +7,7 @@ const START: AppConfig = {
   default: { baseURL: "https://cloud", apiKey: "cloud-key", model: "big" },
   capabilities: { translation: { model: "fast" } },
   retention: { ttlDays: 7, acknowledged: false },
+  localRecognition: false,
 };
 
 function settings(probe: (endpoint: EndpointConfig) => Promise<void> = async () => undefined) {

@@ -21,6 +21,8 @@ export interface Settings {
   /** 读者已经知道「未标记的摘录会到期衰减」。在此之前一条都不回收。 */
   acknowledgeRetention(): Promise<Result>;
   setRetentionDays(days: number): Promise<Result>;
+  /** 识别走本地引擎还是云端（ADR-0015）。 */
+  setLocalRecognition(local: boolean): Promise<Result>;
 }
 
 /**
@@ -96,6 +98,10 @@ export function createSettings(deps: SettingsDeps): Settings {
         return Promise.resolve({ ok: false, reason: "保留天数要是 1 以上的整数。" });
       }
       return persist({ ...config, retention: { ...config.retention, ttlDays: days } });
+    },
+
+    setLocalRecognition(local: boolean): Promise<Result> {
+      return persist({ ...config, localRecognition: local });
     },
 
     async check(capability: Capability): Promise<Result> {

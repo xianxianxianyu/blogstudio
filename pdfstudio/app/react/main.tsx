@@ -11,6 +11,7 @@ import worker from "pdfjs-dist/build/pdf.worker.mjs?url";
 import { createWorkspace } from "../../src/app/workspace";
 import { createRecognizer } from "../../src/recognizer/recognizer";
 import { createChat } from "../../src/chat/chat";
+import { createFixedPromptRecognitionClient } from "../../src/model/fixed-prompt-recognition";
 import { bindConversation, createConversation } from "../../src/app/conversation";
 import { createProgress } from "../../src/app/progress";
 import { apiUrl } from "../api-base";
@@ -71,6 +72,36 @@ function endpoint(capability: "recognition" | "translation" | "chat") {
 const EMBEDDING_MODEL = "onnx-community/embeddinggemma-300m-ONNX@q8";
 
 const progress = createProgress();
+
+/**
+ * 识别这一档怎么构造：本地还是云端（ADR-0015）。
+ *
+ * **本地档是降级档**：PaddleOCR-VL 只认六个固定 prompt、不做翻译，所以
+ * `translation` 显式给 null——类型上它是必填的，正是为了让「这一档没有译文」成为一个
+ * 写出来的决定，而不是某处漏接的后果。
+ */
+async function recognitionTier() {
+  if (!settings.config.localRecognition) {
+    return {
+      recognition: createModelClient(endpoint("recognition")),
+      // 翻译是独立配置的（ADR-0010）。漏掉它译文永远不出现，那个 bug 真的发生过一次。
+      translation: createModelClient(endpoint("translation")),
+    };
+  }
+
+  const status = (await fetch(apiUrl("/__engine"), { method: "POST" }).then((r) => r.json())) as {
+    baseURL: string | null;
+  };
+  if (!status.baseURL) throw new Error("本地识别引擎还没就绪——去设置里看进度。");
+
+  return {
+    // 专用识别模型看不懂我们的 JSON 契约，套一层把它翻译成 `OCR:`。
+    recognition: createFixedPromptRecognitionClient(
+      createModelClient({ baseURL: viaProxy(status.baseURL), apiKey: "-", model: "paddleocr-vl" }),
+    ),
+    translation: null,
+  };
+}
 // 向量交给 dev server 算（onnxruntime-node 原生多线程），浏览器这侧只发请求。
 // 此前走的是 Worker + WASM：不卡界面，但建一篇论文的索引要几分钟，而且每次页面加载
 // 都要往 WASM 里塞 300 MB 权重。打包后主进程正是这么跑（ADR-0006）。
@@ -98,12 +129,7 @@ const ws = createWorkspace({
       // 浏览器 WASM 里要一两分钟——读者每次开书都得先等着才能问第一句。
       indexCache: createHttpIndexCache(apiUrl("/__index"), doc.id, EMBEDDING_MODEL),
     });
-    const recognizer = createRecognizer({
-      document,
-      recognition: createModelClient(endpoint("recognition")),
-      // 翻译是独立配置的（ADR-0010）。类型上必填——漏掉它译文永远不出现。
-      translation: createModelClient(endpoint("translation")),
-    });
+    const recognizer = createRecognizer({ document, ...(await recognitionTier()) });
     return { recognizer, chat };
   },
   newId: () => crypto.randomUUID(),

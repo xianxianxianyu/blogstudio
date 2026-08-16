@@ -40,6 +40,13 @@ export interface AppConfig {
   /** 只写要覆盖的字段，其余跟随默认。 */
   capabilities: Partial<Record<Capability, Partial<EndpointConfig>>>;
   retention: RetentionConfig;
+  /**
+   * 识别走本地引擎（ADR-0015）。
+   *
+   * 不写成「把 recognition 的 baseURL 填成本机地址」，因为引擎的端口是每次启动随机
+   * 分配的——写进配置的地址下次就失效了。这里只记「要不要用」，地址由 LocalEngine 给。
+   */
+  localRecognition: boolean;
 }
 
 const EMPTY: EndpointConfig = { baseURL: "", apiKey: "", model: "" };
@@ -63,6 +70,8 @@ export function parseConfig(raw: unknown): AppConfig {
     // `ttlDays` 会算出 NaN，而 `now - lastViewedAt > NaN` 永远是 false
     // ——回收静默失效，不报任何错。
     retention: { ...DEFAULT_RETENTION, ...source.retention },
+    // 默认关。本地档没过 ADR-0001 修订的准入门槛（19 张样本的 eval）之前不设为默认。
+    localRecognition: source.localRecognition ?? false,
   };
 }
 

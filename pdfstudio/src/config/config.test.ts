@@ -83,6 +83,7 @@ describe("某一栏是自己配的还是跟随默认组", () => {
     default: { baseURL: "https://a", apiKey: "k", model: "m" },
     capabilities: { translation: { model: "fast" }, recognition: { baseURL: "" } },
     retention: { ttlDays: 7, acknowledged: false },
+    localRecognition: false,
   };
 
   it("自己写了就是自己的", () => {

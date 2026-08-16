@@ -13,6 +13,9 @@ import { createModelDownloader } from "../model/model-download";
 import { DEFAULT_EMBEDDING_MODEL } from "../model/model-files";
 import { createTransformersEmbedder } from "../model/transformers-embedder";
 import { deserialize, serializeClip } from "../clip/clip-wire";
+import { createLocalEngine } from "../model/local-engine";
+import { llamaEngineDeps } from "../model/llama-server";
+import { errorChain } from "../app/error-chain";
 import type { Clip } from "../clip/clip";
 
 /**
@@ -48,9 +51,12 @@ export const ROUTES = {
   index: "/__index",
   models: "/__models",
   embed: "/__embed",
+  engine: "/__engine",
 } as const;
 
 export function createLocalApi(options: LocalApiOptions): Route[] {
+  const engineStatus = () => engine?.status() ?? { running: false, baseURL: null };
+
   // **先把目录建出来。** 首次运行时它们都不存在，而 sirv 启动时就会去扫模型目录，
   // 扫不到直接抛——窗口还没出现应用就崩了。开发环境一直没暴露这个问题，只是因为
   // 那两个目录早就被下载和导入建好了；换一台机器、全新 clone 就是同样的下场。
@@ -69,7 +75,32 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
   // 懒建：没人问文档时不该把 300 MB 加载进来。
   let embedder: ReturnType<typeof createTransformersEmbedder> | null = null;
 
+  // 本地识别引擎（ADR-0015）。懒建：没人启用时连它的依赖都不构造——构造函数里就会
+  // 因为平台不支持而抛。
+  let engine: ReturnType<typeof createLocalEngine> | null = null;
+  const engineRoot = path.join(options.modelsRoot, "llama");
+
   return [
+    {
+      prefix: ROUTES.engine,
+      handler: (request, response) =>
+        respond(response, async () => {
+          if (request.method === "DELETE") {
+            engine?.stop();
+            return json({ running: false, baseURL: null });
+          }
+          if (request.method === "POST") {
+            engine ??= createLocalEngine(llamaEngineDeps(engineRoot, (text) => (enginePhase = text)));
+            // 1.7 GB 的下载 + 加载，不能把一个请求挂住——立刻返回，进度靠轮询。
+            void engine.ensureReady().catch((error: unknown) => {
+              enginePhase = errorChain(error) || "本地识别引擎启动失败";
+            });
+            return json({ ...engineStatus(), phase: enginePhase });
+          }
+          return json({ ...engineStatus(), phase: enginePhase });
+        }),
+    },
+
     { prefix: ROUTES.model, handler: (request, response) => void forwardModel(request, response) },
 
     {
@@ -188,6 +219,9 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
     },
   ];
 }
+
+/** 引擎当前在做什么（下载哪个文件、启动到哪一步），或上一次失败的原因。 */
+let enginePhase: string | null = null;
 
 const JSON_TYPE = "application/json";
 const json = (data: unknown) => ({ type: JSON_TYPE, data: JSON.stringify(data) });
