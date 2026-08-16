@@ -24,6 +24,19 @@ export function ClipsPane({
   const ordered = [...clips].sort((a, b) => a.region.page - b.region.page);
   const current = clips.find((clip) => clip.id === selected) ?? null;
 
+  // 选中一条就整栏切到详情，和「书架 → 阅读」是同一个模式。此前详情接在列表下方，
+  // 点列表末尾那条还得再往下滚才看得见——摘录一多就很烦。
+  if (current !== null) {
+    return (
+      <div className="pane">
+        <button className="btn" style={{ marginBottom: 10 }} onClick={() => onSelect(null)}>
+          ← 全部摘录（{ordered.length}）
+        </button>
+        <ClipPanel ws={ws} clip={current} onRemoved={() => onSelect(null)} />
+      </div>
+    );
+  }
+
   if (ordered.length === 0) {
     return (
       <div className="pane">
@@ -65,12 +78,6 @@ export function ClipsPane({
           </div>
         </button>
       ))}
-
-      {current !== null && (
-        <div style={{ marginTop: 14, borderTop: "1px solid var(--line)", paddingTop: 12 }}>
-          <ClipPanel ws={ws} clip={current} onRemoved={() => onSelect(null)} />
-        </div>
-      )}
     </div>
   );
 }
