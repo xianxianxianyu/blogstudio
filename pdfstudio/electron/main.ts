@@ -16,6 +16,10 @@ import { createLocalApi } from "../src/server/local-api";
  * 摘录不能跟着版本走。
  */
 function dataPaths() {
+  // **先定名字再取路径。** `getPath("userData")` 用的是 package.json 的 `name`，
+  // 而这个仓库的 name 还是脚手架留下的 `site-creator-vinext-starter`——读者的书和摘录
+  // 会落进一个叫这个名字的目录里。这行必须在第一次 getPath 之前执行。
+  app.setName("PDF Studio");
   const root = app.getPath("userData");
   return {
     libraryRoot: path.join(root, "library"),
@@ -90,7 +94,7 @@ async function createWindow(): Promise<void> {
     // 开发时指向 vite，享受热更新；本机 API 仍由这个进程提供，与打包形态同一份实现。
     await window.loadURL(`${devServer}/react.html?api=${encodeURIComponent(api)}`);
   } else {
-    await window.loadFile(path.join(import.meta.dirname, "../renderer/react.html"), {
+    await window.loadFile(path.join(import.meta.dirname, "renderer/react.html"), {
       search: `api=${encodeURIComponent(api)}`,
     });
   }

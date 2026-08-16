@@ -1,0 +1,44 @@
+# PDF Studio 的打包配置（ADR-0006/0014）。
+appId: com.pdfstudio.app
+productName: PDF Studio
+directories:
+  output: pdfstudio/dist/app
+  buildResources: pdfstudio/electron
+
+# 入口是 esbuild 打好的那个 bundle；渲染侧是 vite 的产物。
+# **先全排除再逐个放行。** electron-builder 默认把 package.json 里的整棵生产依赖树
+# 装进去，而这个仓库还住着 Blog Studio（drizzle、wrangler、Cloudflare 那套）——不排除
+# 的话它们全都跟着 PDF Studio 分发出去。
+files:
+  - "!**/*"
+  - pdfstudio/dist/main.mjs
+  - pdfstudio/dist/renderer/**
+  # 主进程用 --packages=external 打包，这三个要在运行时从 node_modules 取。
+  - node_modules/@huggingface/transformers/**
+  # transformers.js 为图像处理带了 sharp（连同各平台的原生二进制），而我们只做文本
+  # 向量——那部分是纯死重量。onnxruntime-web 同理：Node 侧走的是 onnxruntime-node。
+  - "!node_modules/@huggingface/transformers/node_modules/sharp/**"
+  - "!node_modules/@huggingface/transformers/node_modules/@img/**"
+  - "!node_modules/@huggingface/transformers/node_modules/onnxruntime-web/**"
+  - "!node_modules/@huggingface/transformers/types/**"
+  - node_modules/onnxruntime-node/**
+  # **Mac 包里不放 Windows 和 Linux 的二进制**：124 MB + 52 MB 全是死重量。
+  - "!node_modules/onnxruntime-node/bin/napi-v6/win32/**"
+  - "!node_modules/onnxruntime-node/bin/napi-v6/linux/**"
+  - node_modules/onnxruntime-common/**
+  - node_modules/sirv/**
+  - node_modules/totalist/**
+  - node_modules/mrmime/**
+  - package.json
+
+# onnxruntime-node 带 .node 原生扩展，塞进 asar 里加载不了——必须解出来。
+asarUnpack:
+  - node_modules/onnxruntime-node/**
+
+# **权重不打进安装包**：326 MB 跟着分发一次都嫌多，而且读者可能想换模型。
+# 首次运行由设置页里的按钮下到应用数据目录（ModelDownloader）。
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dir # 先只出 .app 目录形态。dmg 要签名与公证，那需要开发者证书（ADR-0014 边界）。

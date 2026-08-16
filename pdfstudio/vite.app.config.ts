@@ -7,7 +7,14 @@ import { createLocalApi } from "./src/server/local-api";
 // PDF Studio 是 local-first 打包应用（ADR-0006/0014），不住在 Cloudflare 那套里。
 export default defineConfig({
   root: path.join(import.meta.dirname, "app"),
-  publicDir: path.join(import.meta.dirname, "eval"),
+  // **相对 base**：打包后页面走 `file://`，绝对路径的 /assets/... 会解析到文件系统
+  // 根目录，于是窗口起来了、白屏，控制台里一片 404。此前只验过 dev server 那条路
+  // （http 下绝对路径当然没问题），file:// 那条一次都没真跑过。
+  base: "./",
+  // **不设 publicDir。** 曾经指向 eval/ 是为了让旧页面能取 /papers/xxx.pdf，而书架
+  // 做好之后 PDF 从 .library/ 走，那条路早就没人用了。留着它会把三篇论文、19 张样本
+  // 和 eval 脚本一起打进应用——25 MB 的评测语料跟着产品分发出去。
+  publicDir: false,
   build: {
     // 两个入口：React 界面与旧的裸 DOM 页面。迁移期旧的必须一直能跑
     // ——它是唯一的回归基准（.scratch/pdfstudio-ui/spec.md）。

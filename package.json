@@ -11,16 +11,17 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "test:pdfstudio": "vitest run --config pdfstudio/vitest.config.ts",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern 'pdfstudio/dist'",
     "db:generate": "drizzle-kit generate",
     "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts",
     "eval:retrieval": "tsx pdfstudio/eval/retrieval/run.ts",
     "dev:pdfstudio": "vite --config pdfstudio/vite.app.config.ts",
     "eval:clips": "tsx pdfstudio/eval/retrieval/build-clips.ts",
-    "build:pdfstudio": "vite build --config pdfstudio/vite.app.config.ts --outDir dist/renderer --emptyOutDir",
-    "build:electron": "esbuild pdfstudio/electron/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=pdfstudio/dist/main.mjs --external:electron --external:@huggingface/transformers --external:sirv --external:onnxruntime-node --packages=external",
+    "build:pdfstudio": "vite build --config pdfstudio/vite.app.config.ts --outDir ../dist/renderer --emptyOutDir",
+    "build:electron": "esbuild pdfstudio/electron/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=pdfstudio/dist/main.mjs --external:electron --packages=external",
     "dev:electron": "npm run build:electron && PDFSTUDIO_DEV_SERVER=http://localhost:5174 electron pdfstudio/dist/main.mjs",
-    "app:pdfstudio": "npm run build:pdfstudio && npm run build:electron && electron pdfstudio/dist/main.mjs"
+    "app:pdfstudio": "npm run build:pdfstudio && npm run build:electron && electron pdfstudio/dist/main.mjs",
+    "dist:pdfstudio": "npm run build:pdfstudio && npm run build:electron && cp package.json .package.json.bak && (electron-builder --config pdfstudio/electron-builder.yml; cp .package.json.bak package.json && rm .package.json.bak)"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.30",
@@ -32,7 +33,8 @@
     "pdfjs-dist": "^6.2.108",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "streamdown": "^2.5.0"
+    "streamdown": "^2.5.0",
+    "sirv": "^3.0.2"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
@@ -53,7 +55,6 @@
     "eslint-plugin-react-hooks": "7.1.1",
     "globals": "16.4.0",
     "react-server-dom-webpack": "19.2.6",
-    "sirv": "^3.0.2",
     "tailwindcss": "4.2.1",
     "tsx": "^4.23.12",
     "typescript": "5.9.3",
@@ -63,5 +64,8 @@
     "vitest": "^4.1.10",
     "wrangler": "4.92.0"
   },
-  "type": "module"
+  "type": "module",
+  "main": "pdfstudio/dist/main.mjs",
+  "description": "PDF Studio — 本地优先的论文阅读与摘录工具",
+  "author": "xianxianxianyu"
 }
