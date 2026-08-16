@@ -1,6 +1,6 @@
 import type { Clip } from "../src/clip/clip";
 import type { ClipStore } from "../src/clip/clip-store";
-import { deserialize, serializeClip } from "./clip-wire";
+import { deserialize, serializeClip } from "../src/clip/clip-wire";
 
 /**
  * 浏览器侧的 `ClipStore`：把落盘转交给 dev server。

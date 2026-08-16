@@ -53,3 +53,6 @@ pdfstudio/.library/
 
 # 本地模型权重：几百 MB，不进仓库
 pdfstudio/.models/
+
+# Electron 构建产物
+pdfstudio/dist/

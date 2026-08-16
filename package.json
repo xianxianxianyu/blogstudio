@@ -16,7 +16,11 @@
     "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts",
     "eval:retrieval": "tsx pdfstudio/eval/retrieval/run.ts",
     "dev:pdfstudio": "vite --config pdfstudio/vite.app.config.ts",
-    "eval:clips": "tsx pdfstudio/eval/retrieval/build-clips.ts"
+    "eval:clips": "tsx pdfstudio/eval/retrieval/build-clips.ts",
+    "build:pdfstudio": "vite build --config pdfstudio/vite.app.config.ts --outDir dist/renderer --emptyOutDir",
+    "build:electron": "esbuild pdfstudio/electron/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=pdfstudio/dist/main.mjs --external:electron --external:@huggingface/transformers --external:sirv --external:onnxruntime-node --packages=external",
+    "dev:electron": "npm run build:electron && PDFSTUDIO_DEV_SERVER=http://localhost:5174 electron pdfstudio/dist/main.mjs",
+    "app:pdfstudio": "npm run build:pdfstudio && npm run build:electron && electron pdfstudio/dist/main.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.30",
@@ -41,6 +45,8 @@
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",
     "eslint-plugin-react": "7.37.5",

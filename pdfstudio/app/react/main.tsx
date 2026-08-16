@@ -13,6 +13,7 @@ import { createRecognizer } from "../../src/recognizer/recognizer";
 import { createChat } from "../../src/chat/chat";
 import { bindConversation, createConversation } from "../../src/app/conversation";
 import { createProgress } from "../../src/app/progress";
+import { apiUrl } from "../api-base";
 import { createHttpEmbedder } from "../http-embedder";
 import { createHttpIndexCache } from "../http-index-cache";
 import { createModelClient } from "../../src/model/openai-compatible";
@@ -26,7 +27,7 @@ import { createPdfHost } from "./pdf-host";
 
 pdfjs.GlobalWorkerOptions.workerSrc = worker as string;
 
-const configStore = createHttpConfigStore("/__config");
+const configStore = createHttpConfigStore(apiUrl("/__config"));
 let appConfig = await configStore.load().catch(() => parseConfig(null));
 
 const settings = createSettings({
@@ -57,7 +58,7 @@ settings.subscribe(() => {
  * **必须是绝对 URL**：SDK 会拿 baseURL 去构造 URL 对象，相对路径直接抛。
  */
 function viaProxy(baseURL: string): string {
-  return `${location.origin}/__model/${encodeURIComponent(baseURL)}`;
+  return `${apiUrl("/__model")}/${encodeURIComponent(baseURL)}`;
 }
 
 function endpoint(capability: "recognition" | "translation" | "chat") {
@@ -73,15 +74,15 @@ const progress = createProgress();
 // 向量交给 dev server 算（onnxruntime-node 原生多线程），浏览器这侧只发请求。
 // 此前走的是 Worker + WASM：不卡界面，但建一篇论文的索引要几分钟，而且每次页面加载
 // 都要往 WASM 里塞 300 MB 权重。打包后主进程正是这么跑（ADR-0006）。
-const embedder = createHttpEmbedder("/__embed", progress);
+const embedder = createHttpEmbedder(apiUrl("/__embed"), progress);
 const conversation = createConversation();
 
 // pdf.js 的文档句柄归视图，Workspace 不认识它——它只要一个依赖都接好了的 Recognizer。
 const host = createPdfHost();
 
 const ws = createWorkspace({
-  shelf: createHttpBookshelf("/__docs"),
-  store: createHttpClipStore("/__clips"),
+  shelf: createHttpBookshelf(apiUrl("/__docs")),
+  store: createHttpClipStore(apiUrl("/__clips")),
   async openDocument(bytes, doc, clips) {
     const document = await host.open(bytes);
     const chat = createChat({
@@ -95,7 +96,7 @@ const ws = createWorkspace({
       clips,
       // 正文向量缓存到这本书的文件夹里。不缓存的话每次打开都要重算一遍整篇论文，
       // 浏览器 WASM 里要一两分钟——读者每次开书都得先等着才能问第一句。
-      indexCache: createHttpIndexCache("/__index", doc.id, EMBEDDING_MODEL),
+      indexCache: createHttpIndexCache(apiUrl("/__index"), doc.id, EMBEDDING_MODEL),
     });
     const recognizer = createRecognizer({
       document,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ModelStatus } from "../../src/model/model-download";
+import { apiUrl } from "../api-base";
 
 const MB = 1024 * 1024;
 /** q8 档的大致体积，用来把「已下载多少」变成一个有参照的数。 */
@@ -18,7 +19,7 @@ export function LocalModel() {
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = (await fetch("/__models/__status").then((r) => r.json())) as ModelStatus;
+      const next = (await fetch(apiUrl("/__models/__status")).then((r) => r.json())) as ModelStatus;
       if (!alive) return;
       setStatus(next);
       // 只在下载中才继续轮询：下完还接着问就是白耗电。
@@ -52,12 +53,12 @@ export function LocalModel() {
         <button
           className="btn"
           onClick={() => {
-            void fetch("/__models/__status", { method: "POST" })
+            void fetch(apiUrl("/__models/__status"), { method: "POST" })
               .then((r) => r.json())
               .then((next: ModelStatus) => {
                 setStatus(next);
                 const poll = async () => {
-                  const now = (await fetch("/__models/__status").then((r) => r.json())) as ModelStatus;
+                  const now = (await fetch(apiUrl("/__models/__status")).then((r) => r.json())) as ModelStatus;
                   setStatus(now);
                   if (now.downloading) setTimeout(() => void poll(), 1000);
                 };

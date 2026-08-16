@@ -1,11 +1,13 @@
-import type { Clip } from "../src/clip/clip";
+import type { Clip } from "./clip";
 
 /**
  * 摘录在浏览器与 dev server 之间的线上格式。
  *
- * **这是开发脚手架，不是产品的传输格式。** ADR-0006 定的是 local-first 打包应用，
- * 那里渲染进程与主进程之间走 IPC，这条 HTTP 边界只是它在浏览器里的替身。所以它住在
- * `app/` 而不是 `src/`，也不参与 ADR-0011 说的「frontmatter 是内部存储格式」那套版本化。
+ * **只在本机流动**，不是跨产品的传输格式，所以不参与 ADR-0011 说的
+ * 「frontmatter 是内部存储格式」那套版本化。
+ *
+ * 起初它住在 `app/`，因为当时以为打包后会换成 IPC。ADR-0014 定了 dev server 与打包
+ * 应用**共用同一份本机 API**，于是它成了两侧共用的东西，搬进 `src/`。
  *
  * 唯一的实质问题是**截图字节**：JSON 装不下 `Uint8Array`。用 replacer/reviver 通吃，
  * 而不是逐字段手抄——手抄的话 `Clip` 将来多一个带字节的字段就会被静默丢掉，
