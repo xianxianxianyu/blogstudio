@@ -36,7 +36,7 @@ export function LocalModel() {
   return (
     <>
       <h3>本地向量模型</h3>
-      <p className="empty">
+      <p className="muted">
         中文问英文论文靠它。<b>不装它的话中文检索是零召回</b>——关键词那一路抽不出中文
         词元。约 {EXPECTED_MB} MB，下一次，之后离线也能用。
       </p>
@@ -113,7 +113,7 @@ export function LocalEngineSection({
   return (
     <>
       <h3>本地识别引擎</h3>
-      <p className="empty">
+      <p className="muted">
         公式和图走本机的 PaddleOCR-VL，不联网、不花钱。约 1.7 GB。
         <b>这一档只产出原文，没有译文和图像描述</b>——它是专用识别模型，不做翻译。
       </p>
@@ -124,7 +124,7 @@ export function LocalEngineSection({
       <label className="field">
         <span>启用</span>
         <input type="checkbox" checked={enabled} onChange={(event) => onToggle(event.target.checked)} />
-        <span className="empty">
+        <span className="muted">
           {enabled ? "识别走本地；第一次会下载并启动，要等一会儿" : "识别走云端（默认）"}
         </span>
       </label>

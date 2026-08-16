@@ -22,7 +22,7 @@ export function RetentionNotice({ settings }: { settings: Settings }) {
         <b>只保留位置标记</b>，原文、译文和截图会被删掉，且不可撤销。点开标记可以按位置
         重新识别一次。
       </p>
-      <p className="empty">
+      <p className="muted">
         写过笔记的、已入库的、标记为重要的都不会被清理。天数可以在下面改。
         <b>在你点「知道了」之前，不会清理任何东西。</b>
       </p>

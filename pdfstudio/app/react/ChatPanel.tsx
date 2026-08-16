@@ -41,9 +41,10 @@ export function ChatPanel({
   }
 
   return (
-    <div>
+    <div className="pane" style={{ display: "flex", flexDirection: "column", padding: 0 }}>
+      <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
       {state.turns.length === 0 && (
-        <p className="empty">
+        <p className="muted">
           问这一篇文档。答案只依据检索到的原文。第一次问某本书要先建一遍索引，
           之后打开就直接用缓存。
         </p>
@@ -58,7 +59,7 @@ export function ChatPanel({
       {state.streaming !== null && (
         <div className="msg bot">
           {state.streaming === "" ? (
-            <span className="empty">{working ?? "正在检索…"}</span>
+            <span className="muted">{working ?? "正在检索…"}</span>
           ) : (
             <Streamdown>{state.streaming}</Streamdown>
           )}
@@ -71,9 +72,12 @@ export function ChatPanel({
 
       {state.error !== null && <pre className="err">{state.error}</pre>}
 
-      <div className="row">
+      </div>
+
+      <div className="composer">
         <textarea
           rows={2}
+          className="grow"
           value={draft}
           placeholder="问点什么…"
           onChange={(event) => setDraft(event.target.value)}
@@ -132,8 +136,8 @@ function Citations({
   onJump: (page: number) => void;
 }) {
   return (
-    <div className={answer.grounding === "none" ? "cite err" : "cite"}>
-      <div>{GROUNDING[answer.grounding]}</div>
+    <div className={answer.grounding === "none" ? "cite none" : "cite"}>
+      <div className="what">{GROUNDING[answer.grounding]}</div>
       {answer.citations.map((citation, index) => (
         <button key={index} className="btn" onClick={() => onJump(citation.page)}>
           {citation.kind === "clip" ? "我的摘录" : "原文"} · 第 {citation.page} 页

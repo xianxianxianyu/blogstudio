@@ -50,7 +50,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
     <div>
       {/* 配置存在应用数据目录里，改完立刻落盘，下次打开还在。这句话要写出来
           ——读者填完一栏看不到任何反应时，第一个念头就是「是不是白填了」。 */}
-      <p className="empty">
+      <p className="muted">
         改动立刻保存，下次打开还在。
         {note && <b className={note.bad ? "err" : undefined}> {note.text}</b>}
       </p>
@@ -63,7 +63,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
       />
 
       <h3>自动清理</h3>
-      <p className="empty">
+      <p className="muted">
         没标记为重要的摘录，多少天没打开就只保留位置标记。
         {config.retention.acknowledged ? "" : "（你还没确认这条策略，目前不会清理任何东西。）"}
       </p>
@@ -84,7 +84,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
       </label>
 
       <h3>默认组</h3>
-      <p className="empty">没有单独配置的功能都用它。</p>
+      <p className="muted">没有单独配置的功能都用它。</p>
       {FIELDS.map((field) => (
         <label key={field.key} className="field">
           <span>{field.label}</span>
@@ -112,7 +112,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
               {checking === capability.key ? "试…" : "试一下"}
             </button>
           </h3>
-          <p className="empty">{capability.hint}</p>
+          <p className="muted">{capability.hint}</p>
           {checked[capability.key] !== undefined && (
             <pre className={checked[capability.key] === "通了" ? undefined : "err"}>
               {checked[capability.key]}
@@ -152,7 +152,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
                     ↩
                   </button>
                 ) : (
-                  <span className="empty">跟随默认</span>
+                  <span className="muted">跟随默认</span>
                 )}
               </label>
             );
