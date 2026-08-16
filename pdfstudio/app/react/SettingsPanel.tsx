@@ -24,6 +24,20 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
   );
   const [checking, setChecking] = useState<Capability | null>(null);
   const [checked, setChecked] = useState<Partial<Record<Capability, string>>>({});
+  const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
+
+  /**
+   * 每次改动都落盘，但**要说出来**。
+   *
+   * 此前这里是 `void settings.setDefault(...)`——返回的 Result 没人看，于是保存成功
+   * 没有任何提示（读者无从判断存没存上），保存失败也完全静默。填完一栏什么都不发生，
+   * 看起来就跟白填了一样。
+   */
+  function save(run: () => Promise<{ ok: boolean; reason?: string }>) {
+    void run().then((result) => {
+      setNote(result.ok ? { text: "已保存", bad: false } : { text: result.reason ?? "保存失败", bad: true });
+    });
+  }
 
   async function check(capability: Capability) {
     setChecking(capability);
@@ -34,6 +48,13 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
 
   return (
     <div>
+      {/* 配置存在应用数据目录里，改完立刻落盘，下次打开还在。这句话要写出来
+          ——读者填完一栏看不到任何反应时，第一个念头就是「是不是白填了」。 */}
+      <p className="empty">
+        改动立刻保存，下次打开还在。
+        {note && <b className={note.bad ? "err" : undefined}> {note.text}</b>}
+      </p>
+
       <LocalModel />
 
       <h3>自动清理</h3>
@@ -51,12 +72,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           onBlur={(event) => {
             const days = Number(event.target.value);
             if (days !== config.retention.ttlDays) {
-              void settings.setRetentionDays(days).then((result) => {
-                if (!result.ok) {
-                  window.alert(result.reason);
-                  event.target.value = String(config.retention.ttlDays);
-                }
-              });
+              save(() => settings.setRetentionDays(days));
             }
           }}
         />
@@ -72,7 +88,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
             defaultValue={config.default[field.key]}
             onBlur={(event) => {
               if (event.target.value !== config.default[field.key]) {
-                void settings.setDefault(field.key, event.target.value);
+                save(() => settings.setDefault(field.key, event.target.value));
               }
             }}
           />
@@ -116,7 +132,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
                   className={own ? "own" : "inherited"}
                   onBlur={(event) => {
                     if (event.target.value !== value) {
-                      void settings.setOverride(capability.key, field.key, event.target.value);
+                      save(() => settings.setOverride(capability.key, field.key, event.target.value));
                     }
                   }}
                 />
@@ -126,7 +142,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
                   <button
                     className="btn"
                     title="改回跟随默认组"
-                    onClick={() => void settings.clearOverride(capability.key, field.key)}
+                    onClick={() => save(() => settings.clearOverride(capability.key, field.key))}
                   >
                     ↩
                   </button>
