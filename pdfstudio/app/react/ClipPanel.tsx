@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Clip } from "../../src/clip/clip";
+import { clipTitle, type Clip } from "../../src/clip/clip";
 import type { Result, Workspace } from "../../src/app/workspace";
 import type { Tag } from "../../src/tag/tag";
 import { TagPalette } from "./TagPalette";
@@ -54,6 +54,21 @@ export function ClipPanel({
           删除
         </button>
       </div>
+
+      {/* 目录里显示的那一行。默认是从内容推导的，所以这里是 placeholder 而不是值——
+          填了才算读者定的，清空就退回推导。 */}
+      <input
+        className="title-input"
+        key={clip.id}
+        defaultValue={clip.title ?? ""}
+        placeholder={clipTitle(clip)}
+        title="目录里显示的标题；留空就按内容自动取"
+        onBlur={(event) => {
+          if (event.target.value !== (clip.title ?? "")) {
+            apply(() => ws.setTitle(clip.id, event.target.value));
+          }
+        }}
+      />
 
       {denied !== null && <p className="err">{denied}</p>}
 

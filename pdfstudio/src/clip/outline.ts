@@ -44,6 +44,13 @@ function precedes(section: Section, page: number, y: number): boolean {
   return section.y === null || section.y >= y;
 }
 
+/** a 是不是 b 的祖先：b 的路径以 a 的「路径 + 自己」开头。 */
+function isAncestor(a: ClipGroup, b: ClipGroup): boolean {
+  if (a.section === null || b.section === null) return false;
+  const prefix = [...a.section.path, a.section.title];
+  return prefix.length < b.section.path.length + 1 && prefix.every((title, i) => b.section!.path[i] === title);
+}
+
 export function groupClipsBySection(clips: Clip[], sections: Section[]): ClipGroup[] {
   const ordered = [...sections].sort(
     (a, b) => a.page - b.page || (b.y ?? Infinity) - (a.y ?? Infinity),
@@ -76,7 +83,11 @@ export function groupClipsBySection(clips: Clip[], sections: Section[]): ClipGro
   }
 
   // 空的小节不出现：22 项目录配 3 条摘录，画出 19 个空标题只会让这一栏没法看。
+  //
+  // **但祖先要留**：这一栏读起来像一份 markdown 文档，而 3.2.3 底下有摘录、3 和 3.2
+  // 自己没有的时候，只画出 3.2.3 就成了一个没有上文的孤零零三级标题。
+  const kept = groups.filter((group) => group.clips.length > 0);
   return groups
-    .filter((group) => group.clips.length > 0)
+    .filter((group) => group.clips.length > 0 || kept.some((other) => isAncestor(group, other)))
     .map((group) => ({ ...group, clips: group.clips.sort(byPosition) }));
 }

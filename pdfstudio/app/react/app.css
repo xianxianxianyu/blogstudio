@@ -193,30 +193,40 @@ canvas { display: block; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-radiu
 /* 目录标题：摘录的上一级容器。祖先路径用小字放在上面一行，不跟标题挤在一起——
    Attention 的目录有三层，「Model Architecture › Attention › Scaled Dot-Product
    Attention」挤成一行在 400px 的栏里会折成三行。 */
-.section-head {
-  font-size: 13px; font-weight: 600; margin: 14px 0 6px;
-  padding-bottom: 4px; border-bottom: 1px solid var(--line);
-}
+/* 层级靠字号和缩进，像 markdown 的 h1/h2/h3。只有顶层描一条线——三层都描的话，
+   一屏里六七条横线，反而看不出谁包着谁。 */
+.section-head { margin: 16px 0 4px; font-weight: 600; line-height: 1.35; }
 .section-head:first-child { margin-top: 0; }
-.section-head .crumbs { display: block; font-weight: 400; font-size: 11px; margin-bottom: 1px; }
+.section-head[data-level="0"] { font-size: 15px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.section-head[data-level="1"] { font-size: 13.5px; padding-left: 10px; }
+.section-head[data-level="2"] { font-size: 12.5px; padding-left: 20px; color: var(--muted); }
 
 /* ── 摘录 ───────────────────────────────────────────────────── */
 
 .clip-row {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
   width: 100%;
   text-align: left;
   background: none;
   border: none;
   border-left: 3px solid var(--line);
-  padding: 8px 10px;
-  margin-bottom: 6px;
+  padding: 5px 10px;
+  margin-bottom: 2px;
   border-radius: 0 6px 6px 0;
 }
 .clip-row:hover { background: var(--paper); }
 .clip-row.on { background: var(--accent-soft); border-left-color: var(--accent); }
 .clip-row.keep { border-left-color: var(--mark); }
-.clip-row .snippet { display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-size: 13px; }
+/* 一行就是一行：截断而不是折行——这一栏是目录，正文在详情里。 */
+.clip-row .line { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.clip-row .badge { flex: none; font-size: 11px; color: var(--muted); }
+.title-input {
+  width: 100%; font: inherit; font-weight: 600; padding: 5px 8px; margin-bottom: 8px;
+  border: 1px solid transparent; border-radius: 6px; background: var(--paper);
+}
+.title-input:focus { border-color: var(--accent); background: #fff; outline: none; }
 
 .field { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
 .field > span:first-child { width: 3.6em; color: var(--muted); flex: none; font-size: 13px; }

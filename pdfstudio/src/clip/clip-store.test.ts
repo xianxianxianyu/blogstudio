@@ -39,6 +39,7 @@ const CLIP: Clip = {
   label: "dot",
   important: false,
   tagId: null,
+  title: null,
   lastViewedAt: 1_700_000_000_000,
 };
 
@@ -149,6 +150,23 @@ describe("标签落盘（颜色即分类）", () => {
     await writeFile(file, (await readFile(file, "utf8")).replace(/\s*"tagId": null,?\n/, "\n"));
 
     expect((await target.listByDoc("d1"))[0].tagId).toBeNull();
+  });
+
+  it("读者定的标题存进 frontmatter，读回来还在", async () => {
+    const clips = await store();
+
+    await clips.save("d1", { ...CLIP, title: "残差块的定义" });
+
+    expect((await clips.listByDoc("d1"))[0].title).toBe("残差块的定义");
+  });
+
+  it("没定标题的摘录读回来是 null，不是空串", async () => {
+    // 空串会在目录里留下一行没有字的条目，而 null 是「按内容推导」。
+    const clips = await store();
+
+    await clips.save("d1", CLIP);
+
+    expect((await clips.listByDoc("d1"))[0].title).toBeNull();
   });
 
   it("改名不动摘录文件——摘录只存 id，名字在 tags.md 里", async () => {

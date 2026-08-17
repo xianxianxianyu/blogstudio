@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { can, reduce } from "./clip";
+import { can, clipTitle, reduce } from "./clip";
 import type { ClipsState } from "./clip";
 import type { ClipContent, Region, Screenshot } from "../recognizer/recognizer";
 
@@ -37,6 +37,52 @@ function readyClip(sourceText: string | null): ClipsState {
     { type: "recognized", id: "c1", content: textContent(sourceText) } as const,
   ].reduce(reduce, EMPTY);
 }
+
+describe("Clip 目录标题", () => {
+  it("没设标题时从内容推导，译文优先", () => {
+    const [clip] = readyClip("The dominant sequence transduction models").clips;
+
+    expect(clipTitle({ ...clip, translation: "主流的序列转换模型" })).toBe("主流的序列转换模型");
+  });
+
+  it("长内容截在读得通的地方，不是硬切", () => {
+    const [clip] = readyClip("x").clips;
+    const long = { ...clip, translation: "主流的序列转换模型基于复杂的循环或卷积神经网络，其中包括编码器和解码器。" };
+
+    // 逗号处断开，不留半个词，也不带省略号。
+    expect(clipTitle(long)).toBe("主流的序列转换模型基于复杂的循环或卷积神经网络");
+  });
+
+  it("找不到断句处才硬截加省略号", () => {
+    const [clip] = readyClip("x").clips;
+
+    expect(clipTitle({ ...clip, translation: "一".repeat(40) })).toBe(`${"一".repeat(24)}…`);
+  });
+
+  it("读者设的标题优先于推导", () => {
+    const [clip] = readyClip("正文").clips;
+    const named = reduce({ clips: [clip], contexts: [] }, { type: "set-title", id: clip.id, text: "损失函数的定义" });
+
+    expect(clipTitle(named.clips[0])).toBe("损失函数的定义");
+  });
+
+  it("清空标题是退回推导，不是设成空串", () => {
+    // 空串会在目录里留下一行没有字的条目——看起来像坏了。
+    const [clip] = readyClip("正文").clips;
+    const named = reduce({ clips: [clip], contexts: [] }, { type: "set-title", id: clip.id, text: "自定义" });
+
+    const cleared = reduce(named, { type: "set-title", id: clip.id, text: "   " });
+
+    expect(cleared.clips[0].title).toBeNull();
+    expect(clipTitle(cleared.clips[0])).toBe("正文");
+  });
+
+  it("纯图没有任何文字时给一个说得过去的占位", () => {
+    const [clip] = readyClip(null).clips;
+
+    expect(clipTitle(clip)).toBe("（纯图）");
+  });
+});
 
 describe("Clip reducer — 标签（颜色即分类）", () => {
   it("设上、改成别的、清掉", () => {

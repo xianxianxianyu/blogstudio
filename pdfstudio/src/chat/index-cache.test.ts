@@ -21,6 +21,7 @@ function noteClip(id: string, note: string): Clip {
     label: "dot",
     important: true,
     tagId: null,
+    title: null,
     lastViewedAt: 0,
   };
 }

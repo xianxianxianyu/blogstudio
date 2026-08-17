@@ -95,6 +95,8 @@ export interface Workspace {
   capture(region: Region, options?: RecognizeOptions): Promise<Result>;
   /** 给一条摘录设分类；`null` 是清掉。顺带记住这个颜色，下一条默认用它。 */
   setTag(clipId: string, tagId: TagColor | null): Promise<Result>;
+  /** 目录里显示的那一行。空串是退回从内容推导，不是设成空标题。 */
+  setTitle(clipId: string, text: string): Promise<Result>;
   /** 改标签名。只写 tags.md，摘录文件一个字节不动——摘录只存 id。 */
   renameTag(tagId: TagColor, name: string): Promise<Result>;
   viewClip(clipId: string): Promise<Result>;
@@ -249,6 +251,10 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
         publish();
       }
       return result;
+    },
+
+    setTitle(clipId: string, text: string): Promise<Result> {
+      return commit({ type: "set-title", id: clipId, text }, clipId);
     },
 
     async renameTag(tagId: TagColor, name: string): Promise<Result> {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Clip } from "../../src/clip/clip";
+import { clipTitle, type Clip } from "../../src/clip/clip";
 import type { Workspace } from "../../src/app/workspace";
 import { TAG_COLORS, type Tag, type TagColor } from "../../src/tag/tag";
 import { groupClipsBySection, type Section } from "../../src/clip/outline";
@@ -34,7 +34,15 @@ export function ClipsPane({
 
   const inScope = only === null ? clips : clips.filter((clip) => clip.tagId === only);
   // **先筛后分组**：筛掉之后空掉的小节不该还留着标题。
-  const groups = groupClipsBySection(inScope, sections);
+  // **没有目录时，页码本身就是目录。** 页码从每一行挪到标题上——逐行标「第 N 页」会
+  // 把一栏挤满重复信息，但整栏一个页码都没有又会彻底失去方位。
+  const asSections =
+    sections.length > 0
+      ? sections
+      : [...new Set(inScope.map((clip) => clip.region.page))]
+          .sort((a, b) => a - b)
+          .map((page) => ({ title: `第 ${page} 页`, page, y: null, level: 0, path: [] }));
+  const groups = groupClipsBySection(inScope, asSections);
   const ordered = groups.flatMap((group) => group.clips);
   const current = clips.find((clip) => clip.id === selected) ?? null;
 
@@ -94,21 +102,13 @@ export function ClipsPane({
 
       {ordered.length === 0 && <p className="faint">这一类还没有摘录。</p>}
 
+      {/* 这一栏读起来是一份 markdown 文档：目录是标题，摘录是正文。层级靠字号，
+          不靠面包屑——祖先标题即使自己没摘录也会留着（见 groupClipsBySection）。 */}
       {groups.map((group) => (
         <section key={group.section === null ? "#" : `${group.section.page}-${group.section.title}`}>
-          {/* 目录是摘录的上一级容器。没有目录时只有一个组、也没有标题——那就是加这个
-              功能之前的样子，不该凭空多出一行「（目录之前）」。 */}
-          {group.section !== null && (
-            <h4 className="section-head">
-              {group.section.path.length > 0 && (
-                <span className="faint crumbs">{group.section.path.join(" › ")}</span>
-              )}
-              {group.section.title}
-            </h4>
-          )}
-          {group.section === null && sections.length > 0 && (
-            <h4 className="section-head">开头</h4>
-          )}
+          <h4 className="section-head" data-level={Math.min(group.section?.level ?? 0, 2)}>
+            {group.section?.title ?? "开头"}
+          </h4>
 
           {group.clips.map((clip) => (
         <button
@@ -125,18 +125,15 @@ export function ClipsPane({
             onJump(clip.region.page);
           }}
         >
-          <div className="faint">
-            {clip.tagId !== null && <span className="swatch dot" data-tag={clip.tagId} />}
-            第 {clip.region.page} 页
-            {clip.important && " · ★"}
-            {clip.note !== null && " · 有笔记"}
-            {/* 墓碑：内容到期被清了，锚点还在（ADR-0012）。要说出来，否则读者
-                只会觉得「这条怎么空了」。 */}
-            {clip.content === null && clip.state === "ready" && " · 内容已过期"}
-          </div>
-          <div className="snippet">
-            {clip.translation ?? clip.sourceText ?? clip.content?.multimodal ?? "（纯图）"}
-          </div>
+          {clip.tagId !== null && <span className="swatch dot" data-tag={clip.tagId} />}
+          <span className="line">{clipTitle(clip)}</span>
+          {/* 星标与笔记只留一个字符的痕迹：一行放不下更多，而这两件事又是「三个月后
+              重开时想一眼看见」的（标签地图那套理由）。 */}
+          {clip.important && <span className="badge">★</span>}
+          {clip.note !== null && <span className="badge">✎</span>}
+          {/* 墓碑：内容到期被清了，锚点还在（ADR-0012）。要说出来，否则读者
+              只会觉得「这条怎么空了」。 */}
+          {clip.content === null && clip.state === "ready" && <span className="badge">已过期</span>}
         </button>
           ))}
         </section>

@@ -18,6 +18,7 @@ function clip(id: string, page: number, top: number): Clip {
     label: "dot",
     important: false,
     tagId: null,
+    title: null,
     lastViewedAt: 0,
   };
 }
@@ -64,9 +65,26 @@ describe("按目录组织摘录", () => {
   });
 
   it("空的小节不出现——22 项目录配 3 条摘录不该画出 19 个空标题", () => {
+    const groups = groupClipsBySection([clip("a", 2, 700)], ATTENTION);
+
+    // Introduction 是顶层，没有祖先要补。
+    expect(titles(groups)).toEqual(["Introduction"]);
+  });
+
+  it("祖先标题即使自己没摘录也要留——这一栏读起来是一份 markdown 文档", () => {
+    // 摘录只落在二级的 Attention 下。只画它的话，就是一个没有上文的孤零零二级标题。
     const groups = groupClipsBySection([clip("a", 3, 100)], ATTENTION);
 
-    expect(titles(groups)).toEqual(["Attention"]);
+    expect(titles(groups)).toEqual(["Model Architecture", "Attention"]);
+    expect(groups[0].clips).toEqual([]);
+  });
+
+  it("补出来的只是祖先，同级的旁支不跟着出现", () => {
+    const groups = groupClipsBySection([clip("a", 3, 100)], ATTENTION);
+
+    // Encoder and Decoder Stacks 与 Attention 同级、是旁支，不该被带出来。
+    expect(titles(groups)).not.toContain("Encoder and Decoder Stacks");
+    expect(titles(groups)).not.toContain("Background");
   });
 
   it("没有目录时就是一个组、按页排——加这个功能之前的样子", () => {

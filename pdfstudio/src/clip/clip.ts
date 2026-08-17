@@ -37,6 +37,13 @@ export interface Clip {
    */
   tagId: TagColor | null;
   /**
+   * 目录里显示的一行。`null` 表示**从内容推导**（见 `clipTitle`）。
+   *
+   * 不做成必填的字符串：主路径是「划一下、看懂、过」，没人会停下来起标题，全靠手填
+   * 的话十条里九条是空的，目录就成了一片空白。默认推导、想改再改。
+   */
+  title: string | null;
+  /**
    * 最后一次看它是什么时候（epoch 毫秒），保留期从这里起算而不是从创建起算——
    * 第 30 天点开了它，说明它还活着（ADR-0012）。
    *
@@ -63,6 +70,7 @@ export type Action =
   | { type: "toggle-label"; id: string }
   | { type: "toggle-important"; id: string }
   | { type: "set-tag"; id: string; tagId: TagColor | null }
+  | { type: "set-title"; id: string; text: string }
   | { type: "view"; id: string; at: number }
   | { type: "decay"; id: string }
   | { type: "recapture"; id: string; region: Region }
@@ -172,6 +180,9 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
   // 同理：读者是先认出「这段算哪一类」才划的。
   "set-tag": () => ALLOWED,
 
+  // 改标题不碰原文，入库冻结的是 evidence，与它无关。
+  "set-title": () => ALLOWED,
+
   view: () => ALLOWED,
 
   /**
@@ -265,6 +276,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
             label: "dot",
             important: false,
             tagId: action.tagId ?? null,
+            title: null,
             lastViewedAt: action.at,
           },
         ],
@@ -308,6 +320,10 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 
     case "set-tag":
       return patchClip(state, action.id, { tagId: action.tagId });
+
+    // 清空 = 退回推导，不是把标题设成空串——空串会在目录里留下一行没有字的条目。
+    case "set-title":
+      return patchClip(state, action.id, { title: action.text.trim() || null });
 
     case "toggle-important": {
       const clip = state.clips.find((candidate) => candidate.id === action.id);
@@ -364,4 +380,30 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
       };
     }
   }
+}
+
+/**
+ * 目录里显示的那一行：读者定的优先，没定就从内容推导。
+ *
+ * **一行，不是两行**——这一栏是目录，正文在详情里。所以要截断，而且要截在读得通的
+ * 地方：句末优先，其次逗号，都没有才硬截。
+ *
+ * 推导的取材顺序是「读者最先想看的」：译文 → 原文 → 图像描述。与 `ClipPanel` 里
+ * 「译文排在原文前面」同一个理由——中文读者读英文论文，先要看的是译文。
+ */
+const TITLE_CHARS = 24;
+
+export function clipTitle(clip: Clip): string {
+  if (clip.title !== null) return clip.title;
+
+  const source = (clip.translation ?? clip.sourceText ?? clip.content?.multimodal ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (source === "") return "（纯图）";
+  if (source.length <= TITLE_CHARS) return source;
+
+  const head = source.slice(0, TITLE_CHARS);
+  // 从后往前找一个能断句的地方，找不到就硬截加省略号。
+  const cut = Math.max(...["。", "．", ".", "；", ";", "，", ",", " "].map((mark) => head.lastIndexOf(mark)));
+  return cut > TITLE_CHARS / 2 ? head.slice(0, cut) : `${head}…`;
 }

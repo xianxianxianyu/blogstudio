@@ -399,6 +399,7 @@ function clipWith(note: string, page: number): Clip {
     label: "dot",
     important: true,
     tagId: null,
+    title: null,
     lastViewedAt: 0,
   };
 }

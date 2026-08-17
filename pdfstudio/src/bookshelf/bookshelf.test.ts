@@ -34,6 +34,7 @@ const clip = (id: string, docPage = 1): Clip => ({
   label: "dot",
   important: false,
     tagId: null,
+    title: null,
   lastViewedAt: IMPORTED_AT,
 });
 

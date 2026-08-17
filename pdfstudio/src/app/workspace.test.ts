@@ -341,6 +341,7 @@ describe("Workspace — 打开一本书时回收（ADR-0012）", () => {
       label: "dot",
       important: false,
     tagId: null,
+    title: null,
       lastViewedAt: NOW,
     });
     return { ws, store, docId: doc.id };
