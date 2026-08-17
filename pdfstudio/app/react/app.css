@@ -182,8 +182,9 @@ dialog.sheet::backdrop { background: rgba(24, 24, 27, .38); }
 /* ── 选区浮动菜单 ───────────────────────────────────────────── */
 
 .sel-menu {
-  position: absolute;
-  z-index: 5;
+  /* fixed + 挂在 body 上：绝对定位在画布容器里会被它的 overflow 裁掉。 */
+  position: fixed;
+  z-index: 50;
   display: flex;
   gap: 6px;
   align-items: center;

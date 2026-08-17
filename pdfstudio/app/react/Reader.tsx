@@ -102,11 +102,17 @@ export function Reader({
     };
   }
 
-  /** 菜单挂在选区下沿偏左，CSS 像素——它是绝对定位在画布容器里的。 */
+  /**
+   * 菜单挂在选区下沿偏左，**视口坐标**。
+   *
+   * 用视口坐标而不是容器内坐标：菜单挂在 body 上（滚动容器会裁掉溢出的部分，
+   * 页面右侧框选时会被右栏切掉一半）。canvas 的位置直接给出这一层换算。
+   */
   function menuAt(box: { x0: number; y0: number; x1: number; y1: number }) {
+    const rect = canvas.current!.getBoundingClientRect();
     return {
-      x: css(Math.min(box.x0, box.x1), "x"),
-      y: css(Math.max(box.y0, box.y1), "y") + 6,
+      x: rect.left + css(Math.min(box.x0, box.x1), "x"),
+      y: rect.top + css(Math.max(box.y0, box.y1), "y") + 6,
     };
   }
 
