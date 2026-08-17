@@ -8,6 +8,9 @@ import type { Rect, Screenshot } from "../../src/recognizer/recognizer";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { PdfHost } from "./pdf-host";
 
+/** 松手之后在等什么。 */
+export type Busy = "recognizing" | "translating" | null;
+
 interface Point {
   x: number;
   y: number;
@@ -37,7 +40,11 @@ export function Reader({
   scale: number;
   /** 浮动菜单由外面渲染——它要动到对话与摘录，那些不归 Reader 管。 */
   children?: React.ReactNode;
-  onCapturing: (busy: boolean) => void;
+  /**
+   * 正在忙什么。**不是一个 boolean**：文本流那条路根本不调识别模型（原文来自文本层、
+   * 是免费的，ADR-0016），报「识别中」是在说一件没发生的事。
+   */
+  onCapturing: (doing: Busy) => void;
   onError: (message: string | null) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -249,7 +256,8 @@ export function Reader({
     selection.removeAllRanges();
 
     onError(null);
-    onCapturing(true);
+    // 这条路只等翻译。
+    onCapturing("translating");
     try {
       const box = toCanvasBox(viewport, region.bounds);
       const pixels = await crop(canvas.current!, box);
@@ -262,7 +270,7 @@ export function Reader({
       if (result.ok) onSelect(result.clipId ?? null, menuAt(box));
       else onError(chain(result.error) || (result.reason ?? "识别失败"));
     } finally {
-      onCapturing(false);
+      onCapturing(null);
     }
   }
 
@@ -284,7 +292,7 @@ export function Reader({
     }
 
     onError(null);
-    onCapturing(true);
+    onCapturing("recognizing");
     try {
       const pixels = await crop(canvas.current!, box);
       const result = await ws.capture({ page, rect: toPageRect(viewport, box), pixels });
@@ -292,7 +300,7 @@ export function Reader({
       if (result.ok) onSelect(result.clipId ?? null, menuAt(box));
       else onError(chain(result.error) || (result.reason ?? "识别失败"));
     } finally {
-      onCapturing(false);
+      onCapturing(null);
     }
   }
 

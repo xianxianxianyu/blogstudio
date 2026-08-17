@@ -5,7 +5,7 @@ import type { Conversation } from "../../src/app/conversation";
 import type { Progress } from "../../src/app/progress";
 import type { PdfHost } from "./pdf-host";
 import { ShelfPage } from "./ShelfPage";
-import { Reader } from "./Reader";
+import { Reader, type Busy } from "./Reader";
 import { ClipsPane } from "./ClipsPane";
 import { ChatPanel } from "./ChatPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -47,7 +47,7 @@ export function App({
   const [pages, setPages] = useState(1);
   const [scale, setScale] = useState(1.5);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
 
   // 换书回到第一页：页码是上一本的位置，留着会打开一个可能不存在的页。渲染期比较
@@ -176,9 +176,11 @@ export function App({
 
               {pane === "clips" ? (
                 <>
-                  {(busy || error !== null) && (
+                  {(busy !== null || error !== null) && (
                     <div style={{ padding: "12px 14px 0" }}>
-                      {busy && <p className="muted">识别中…</p>}
+                      {busy !== null && (
+                        <p className="muted">{busy === "translating" ? "翻译中…" : "识别中…"}</p>
+                      )}
                       {error !== null && <pre className="err">{error}</pre>}
                     </div>
                   )}
