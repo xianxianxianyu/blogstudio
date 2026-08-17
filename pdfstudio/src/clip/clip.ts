@@ -1,5 +1,6 @@
 import type { ClipContent, Region } from "../recognizer/recognizer";
 import type { Context } from "../knowledge/context";
+import type { TagColor } from "../tag/tag";
 
 export type { Context };
 
@@ -28,6 +29,14 @@ export interface Clip {
    */
   important: boolean;
   /**
+   * 分类（颜色即标签）。名字住在书架根的 `tags.md` 里，这里只存 id——改名不该重写
+   * 几百个摘录文件。
+   *
+   * **与 `important` 是两回事**：标签说「这是什么」，☆ 说「别删」。合成一根轴的话，
+   * 想留一段「存疑」就只能把它改成别的颜色。
+   */
+  tagId: TagColor | null;
+  /**
    * 最后一次看它是什么时候（epoch 毫秒），保留期从这里起算而不是从创建起算——
    * 第 30 天点开了它，说明它还活着（ADR-0012）。
    *
@@ -43,7 +52,7 @@ export interface ClipsState {
 }
 
 export type Action =
-  | { type: "capture"; id: string; region: Region; at: number }
+  | { type: "capture"; id: string; region: Region; at: number; tagId?: TagColor | null }
   | { type: "recognize"; id: string }
   | { type: "recognize-failed"; id: string }
   | { type: "recognized"; id: string; content: ClipContent }
@@ -53,6 +62,7 @@ export type Action =
   | { type: "edit-translation"; id: string; text: string }
   | { type: "toggle-label"; id: string }
   | { type: "toggle-important"; id: string }
+  | { type: "set-tag"; id: string; tagId: TagColor | null }
   | { type: "view"; id: string; at: number }
   | { type: "decay"; id: string }
   | { type: "recapture"; id: string; region: Region }
@@ -159,6 +169,9 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
   // 任何状态都能标：读者是先认出「这块要留」才框的，不该等模型回答完才准标。
   "toggle-important": () => ALLOWED,
 
+  // 同理：读者是先认出「这段算哪一类」才划的。
+  "set-tag": () => ALLOWED,
+
   view: () => ALLOWED,
 
   /**
@@ -251,6 +264,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
             note: null,
             label: "dot",
             important: false,
+            tagId: action.tagId ?? null,
             lastViewedAt: action.at,
           },
         ],
@@ -291,6 +305,9 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
     // 而标签的独特价值恰恰全在这些随手划过的摘录上——「这儿我来过」。
     case "decay":
       return patchClip(state, action.id, { content: null, sourceText: null, translation: null });
+
+    case "set-tag":
+      return patchClip(state, action.id, { tagId: action.tagId });
 
     case "toggle-important": {
       const clip = state.clips.find((candidate) => candidate.id === action.id);

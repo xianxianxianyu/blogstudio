@@ -33,6 +33,7 @@ const clip = (id: string, docPage = 1): Clip => ({
   note: null,
   label: "dot",
   important: false,
+    tagId: null,
   lastViewedAt: IMPORTED_AT,
 });
 

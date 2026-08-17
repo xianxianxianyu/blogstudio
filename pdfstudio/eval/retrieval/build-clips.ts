@@ -87,6 +87,7 @@ async function main(): Promise<void> {
         note: null,
         label: "dot",
         important: true,
+        tagId: null,
         lastViewedAt: 0,
       });
       const preview = (content.sourceText ?? content.multimodal ?? "").replace(/\s+/g, " ").slice(0, 70);

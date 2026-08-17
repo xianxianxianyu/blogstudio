@@ -5,6 +5,8 @@ import path from "node:path";
 import { createClipStore } from "./clip-store";
 import type { Clip } from "./clip";
 import type { Region, Screenshot } from "../recognizer/recognizer";
+import { createTagStore } from "../tag/tag-store";
+import { defaultTags, renameTag } from "../tag/tag";
 
 const PNG: Screenshot = {
   mime: "image/png",
@@ -36,6 +38,7 @@ const CLIP: Clip = {
   note: "这段是全文的论点起点",
   label: "dot",
   important: false,
+  tagId: null,
   lastViewedAt: 1_700_000_000_000,
 };
 
@@ -125,6 +128,40 @@ describe("文本流选区的精确形状落盘（ADR-0016 第二步）", () => {
 
     // 空数组会被渲染端当成「精确形状是零行」，于是一条高亮都不画。
     expect(loaded.region.lines).toBeUndefined();
+  });
+});
+
+describe("标签落盘（颜色即分类）", () => {
+  it("tagId 存进 frontmatter，读回来还在", async () => {
+    const clips = await store();
+
+    await clips.save("d1", { ...CLIP, tagId: "pink" });
+
+    expect((await clips.listByDoc("d1"))[0].tagId).toBe("pink");
+  });
+
+  it("旧文件没有这个字段，读成没分类而不是 undefined", async () => {
+    // 照 important 的先例：undefined 会让 `!clip.tagId` 与 `clip.tagId === null`
+    // 得到不同答案，而这类差别通常要等到筛选少了几条才发现。
+    const { root, store: target } = await storeAt();
+    await target.save("d1", CLIP);
+    const file = path.join(root, "d1", "clips", CLIP.id, "index.md");
+    await writeFile(file, (await readFile(file, "utf8")).replace(/\s*"tagId": null,?\n/, "\n"));
+
+    expect((await target.listByDoc("d1"))[0].tagId).toBeNull();
+  });
+
+  it("改名不动摘录文件——摘录只存 id，名字在 tags.md 里", async () => {
+    // 这正是「Clip 只存 tagId」那个决定要换来的东西：改一次名不该重写几百个文件。
+    const { root, store: target } = await storeAt();
+    await target.save("d1", { ...CLIP, tagId: "blue" });
+    const file = path.join(root, "d1", "clips", CLIP.id, "index.md");
+    const before = await readFile(file, "utf8");
+
+    createTagStore(root);
+    await createTagStore(root).save(renameTag(defaultTags(), "blue", "定义"));
+
+    expect(await readFile(file, "utf8")).toBe(before);
   });
 });
 

@@ -38,6 +38,8 @@ interface Frontmatter {
   label: Clip["label"];
   /** 保留轴（ADR-0012）。真相在文件里——只存数据库的话，一次索引重建就全丢了。 */
   important: boolean;
+  /** 分类（颜色即标签）。只存 id，名字在书架根的 tags.md 里——改名不该重写几百个文件。 */
+  tagId: Clip["tagId"];
   lastViewedAt: number;
   region: Clip["region"];
   /** ClipContent 里除去图片字节的部分——图片另存在 .asset/ 下。 */
@@ -62,6 +64,7 @@ function render(clip: Clip): string {
     state: clip.state,
     label: clip.label,
     important: clip.important,
+    tagId: clip.tagId,
     lastViewedAt: clip.lastViewedAt,
     region: { ...clip.region, pixels: undefined as never },
     content: clip.content
@@ -120,6 +123,8 @@ function parse(
     id: front.id,
     state: front.state,
     region: { ...front.region, pixels: screenshot! },
+    // 旧文件没有这个字段，读成「没分类」而不是 undefined——照 important 的先例。
+    tagId: front.tagId ?? null,
     content:
       front.content && screenshot
         ? {

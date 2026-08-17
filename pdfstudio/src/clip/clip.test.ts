@@ -38,6 +38,56 @@ function readyClip(sourceText: string | null): ClipsState {
   ].reduce(reduce, EMPTY);
 }
 
+describe("Clip reducer — 标签（颜色即分类）", () => {
+  it("设上、改成别的、清掉", () => {
+    const tagged = reduce(readyClip("正文"), { type: "set-tag", id: "c1", tagId: "pink" });
+    expect(tagged.clips[0].tagId).toBe("pink");
+
+    const changed = reduce(tagged, { type: "set-tag", id: "c1", tagId: "blue" });
+    expect(changed.clips[0].tagId).toBe("blue");
+
+    const cleared = reduce(changed, { type: "set-tag", id: "c1", tagId: null });
+    expect(cleared.clips[0].tagId).toBeNull();
+  });
+
+  it("还在识别时就能标——读者是先认出这段算哪一类才划的", () => {
+    // 和 toggle-important 同一个理由：不该等模型回答完才准分类。
+    const capturing = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
+
+    expect(can(capturing, { type: "set-tag", id: "c1", tagId: "green" }).ok).toBe(true);
+    expect(reduce(capturing, { type: "set-tag", id: "c1", tagId: "green" }).clips[0].tagId).toBe(
+      "green",
+    );
+  });
+
+  it("衰减成墓碑之后标签还在——内容会过期，「这是什么」不会", () => {
+    const tagged = reduce(readyClip("正文"), { type: "set-tag", id: "c1", tagId: "purple" });
+
+    const decayed = reduce(tagged, { type: "decay", id: "c1" });
+
+    expect(decayed.clips[0].content).toBeNull();
+    expect(decayed.clips[0].tagId).toBe("purple");
+  });
+
+  it("新摘录默认没有标签，不强迫读者先选分类", () => {
+    const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
+
+    expect(captured.clips[0].tagId).toBeNull();
+  });
+
+  it("截图时可以带上默认标签——连续划同一类时一次都不用点", () => {
+    const captured = reduce(EMPTY, {
+      type: "capture",
+      id: "c1",
+      region: REGION,
+      at: CAPTURED_AT,
+      tagId: "blue",
+    });
+
+    expect(captured.clips[0].tagId).toBe("blue");
+  });
+});
+
 describe("Clip reducer — 截图后开始识别", () => {
   it("capture 建出 capturing 的摘录，recognize 让它进 recognizing", () => {
     const captured = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: CAPTURED_AT });
