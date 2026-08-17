@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import * as pdfjs from "pdfjs-dist";
 import { isMisTouch, toCanvasBox, toPageRect } from "../../src/capture/capture";
+import { selectionToRegion, type Fragment } from "../../src/capture/selection";
 import { highlightBoxes } from "../../src/recognizer/coverage";
 import type { Workspace, WorkspaceState } from "../../src/app/workspace";
-import type { Screenshot } from "../../src/recognizer/recognizer";
+import type { Rect, Screenshot } from "../../src/recognizer/recognizer";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { PdfHost } from "./pdf-host";
 
@@ -47,6 +48,8 @@ export function Reader({
   // 这一页的文字项，用来把文本摘录画成覆盖真实文字行的高亮（ADR-0016）。
   // 每页取一次——Recognizer 里也取，但那是识别时；渲染时要另取。
   const [textItems, setTextItems] = useState<TextItem[]>([]);
+  // 页面左右边界，判双栏要用。带 CropBox 偏移的 PDF 上 left 不为 0，所以取实际的 view。
+  const [pageBox, setPageBox] = useState<{ left: number; right: number } | null>(null);
   const start = useRef<Point | null>(null);
 
   /**
@@ -81,6 +84,7 @@ export function Reader({
       const content = await rendered.getTextContent();
       if (cancelled) return;
       setTextItems(content.items.filter((item): item is TextItem => "str" in item));
+      setPageBox({ left: rendered.view[0], right: rendered.view[2] });
 
       // 文本层：透明的真实文字，盖在 canvas 上，让浏览器接管命中测试与字形级偏移
       // （ADR-0016 第二步）。
@@ -158,6 +162,110 @@ export function Reader({
     return hit?.id ?? null;
   }
 
+  /** 视口坐标的矩形 → 页面坐标。和 `at()` 同一套换算，只是输入是 DOMRect。 */
+  function toPage(box: DOMRect): Rect {
+    const element = canvas.current!;
+    const bounds = element.getBoundingClientRect();
+    const sx = element.width / bounds.width;
+    const sy = element.height / bounds.height;
+    return toPageRect(viewport!, {
+      x0: (box.left - bounds.left) * sx,
+      y0: (box.top - bounds.top) * sy,
+      x1: (box.right - bounds.left) * sx,
+      y1: (box.bottom - bounds.top) * sy,
+    });
+  }
+
+  /**
+   * 原生选区 → 逐个片段的文本与页面矩形。
+   *
+   * 一个 span 一个片段，而不是整段 `selection.toString()`：那给的是 **DOM 顺序**，
+   * 在双栏页上是乱的（实测 ResNet p.8 左右栏切换 14 次）。归栏与读序归域层管，
+   * 这里只负责把浏览器知道的东西**逐片**交出去。
+   */
+  function fragmentsOf(selection: Selection): Fragment[] {
+    const fragments: Fragment[] = [];
+    if (!layer.current) return fragments;
+
+    for (let index = 0; index < selection.rangeCount; index++) {
+      const range = selection.getRangeAt(index);
+
+      for (const span of layer.current.querySelectorAll("span")) {
+        const node = span.firstChild;
+        if (!node || node.nodeType !== Node.TEXT_NODE || !range.intersectsNode(span)) continue;
+
+        // 收窄到「这个 span ∩ 选区」：首尾两个 span 只有一部分被选中，而它们恰恰是
+        // 整个功能的意义所在——一行常常只有一个 span 且装着整行。
+        // window.document——这个组件里 `document` 是 host.document（PDFDocumentProxy）。
+        const part = window.document.createRange();
+        part.selectNodeContents(node);
+        if (part.compareBoundaryPoints(Range.START_TO_START, range) < 0) {
+          part.setStart(range.startContainer, range.startOffset);
+        }
+        if (part.compareBoundaryPoints(Range.END_TO_END, range) > 0) {
+          part.setEnd(range.endContainer, range.endOffset);
+        }
+
+        const text = part.toString();
+        if (text !== "") fragments.push({ text, rect: toPage(part.getBoundingClientRect()) });
+      }
+    }
+
+    return fragments;
+  }
+
+  /**
+   * 松手时把原生选区变成一条摘录。
+   *
+   * 没选中东西（在文字上单击）就走标签命中——文字层吃掉了 pointerdown，canvas 那条
+   * 「点击 = 打开脚下的标签」的路径在文字上够不着了，要在这里补回来。
+   */
+  async function finishSelection(event: React.PointerEvent) {
+    const selection = window.getSelection();
+    const anchorNode = selection?.anchorNode ?? null;
+
+    if (!selection || selection.isCollapsed || !anchorNode || !viewport || !pageBox) {
+      const hit = clipAt(at(event));
+      if (hit) onSelect(hit, { x: event.clientX, y: event.clientY + 6 });
+      return;
+    }
+
+    // 起点用 anchorNode 而不是第一个片段：反向拖时 anchor 仍是手指落下的地方，
+    // 而归栏正是要看「起手在哪一栏」。
+    const anchorRange = window.document.createRange();
+    anchorRange.setStart(anchorNode, selection.anchorOffset);
+    anchorRange.collapse(true);
+    const anchorRect = toPage(anchorRange.getBoundingClientRect());
+
+    const region = selectionToRegion({
+      anchor: { x: anchorRect.x, y: anchorRect.y },
+      fragments: fragmentsOf(selection),
+      pageItems: textItems,
+      page: pageBox,
+    });
+    if (!region) return;
+
+    // 选区已经落成高亮了，蓝色的原生选区留着只会和它叠在一起。
+    selection.removeAllRanges();
+
+    onError(null);
+    onCapturing(true);
+    try {
+      const box = toCanvasBox(viewport, region.bounds);
+      const pixels = await crop(canvas.current!, box);
+      const result = await ws.capture(
+        { page, rect: region.bounds, pixels, lines: region.lines },
+        // 强制 text：这一路的原文来自文本层、是免费的（ADR-0016），不该再去调识别。
+        // 覆盖度判据在细长的选区上本来也容易误判成 vision。
+        { route: "text", sourceText: region.text },
+      );
+      if (result.ok) onSelect(result.clipId ?? null, menuAt(box));
+      else onError(chain(result.error) || (result.reason ?? "识别失败"));
+    } finally {
+      onCapturing(false);
+    }
+  }
+
   async function finish(end: Point) {
     const from = start.current;
     start.current = null;
@@ -191,12 +299,17 @@ export function Reader({
   const document = host.document;
 
   return (
-    <div className="frame">
+    // 松手统一在这里收：canvas 与字形 span 的事件都冒泡到这儿，两个处理器各管一半的话，
+    // 「在文字上起手、在空白处松手」这类手势会掉在缝里。
+    <div className="frame" onPointerUp={(event) => void (start.current ? finish(at(event)) : finishSelection(event))}>
       {children}
         <canvas
           ref={canvas}
           onPointerDown={(event) => {
             if (!document) return;
+            // 捕获指针：拖动中途划过文字层的话，后续 move/up 的 target 会变成字形
+            // span，canvas 的处理器就再也收不到了——框会停在半路，松手也不落地。
+            event.currentTarget.setPointerCapture(event.pointerId);
             start.current = at(event);
             setDrag({ from: start.current, to: start.current });
           }}
@@ -204,11 +317,11 @@ export function Reader({
             if (!start.current) return;
             setDrag({ from: start.current, to: at(event) });
           }}
-          onPointerUp={(event) => void finish(at(event))}
         />
 
         {/* 文本层盖在 canvas 上，但容器 pointer-events: none、只有字形 span 吃事件
-            （见 app.css）：落在空白或图上的 pointerdown 直接穿透回 canvas，框选照旧。 */}
+            （见 app.css）：落在空白或图上的 pointerdown 直接穿透回 canvas，框选照旧。
+            事件从 span 冒泡上来，所以监听挂在容器上。 */}
         <div ref={layer} className="textLayer" />
 
         {/* 标签的独特价值不是取回内容（重划也能取回），而是「这儿我来过」——三个月后

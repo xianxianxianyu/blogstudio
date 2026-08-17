@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "types": []
+  },
+  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "electron/**/*.ts", "eval/**/*.ts"],
+  "exclude": ["dist", "release"]
+}

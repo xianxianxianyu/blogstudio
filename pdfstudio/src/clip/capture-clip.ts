@@ -1,7 +1,7 @@
 import { reduce, sameRegion } from "./clip";
 import type { Clip, ClipsState } from "./clip";
 import type { ClipStore } from "./clip-store";
-import type { Recognizer, Region } from "../recognizer/recognizer";
+import type { RecognizeOptions, Recognizer, Region } from "../recognizer/recognizer";
 
 /**
  * 失败时**两样都要给**：调用方要用 state 继续（否则只能整个丢掉，摘录就没了），
@@ -38,6 +38,7 @@ export async function captureClip(
   state: ClipsState,
   docId: string,
   region: Region,
+  options?: RecognizeOptions,
 ): Promise<CaptureOutcome> {
   let next = reduce(state, { type: "capture", id: deps.newId(), region, at: deps.now() });
 
@@ -50,7 +51,7 @@ export async function captureClip(
 
   let content;
   try {
-    content = await deps.recognizer.recognize(region);
+    content = await deps.recognizer.recognize(region, options);
   } catch (error) {
     return {
       ok: false,

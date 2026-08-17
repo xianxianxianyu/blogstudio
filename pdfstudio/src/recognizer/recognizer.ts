@@ -74,6 +74,14 @@ export interface RecognizerDeps {
 /** rare，可省。`route` 是覆盖检测误判时的逃生口。 */
 export interface RecognizeOptions {
   route?: "auto" | "text" | "vision";
+  /**
+   * 调用方已经逐字拿到了原文（文本层的原生选区），不要再从文字项里拼。
+   *
+   * **这不是优化，是正确性。** 从文字项拼只能按整个 item 取，而实测一行常常只有一个
+   * item 且装着整行 70–103 个字符——「从第 1 行中间起」这种选区，再怎么按几何过滤也
+   * 只能拿到整行。字符级的边界只有浏览器知道（ADR-0016 第二步）。
+   */
+  sourceText?: string;
   targetLang?: string;
 }
 
@@ -278,7 +286,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
 
       // 这里也归一：强制 route: 'text' 打在无字区域上会拼出空串，
       // 而 '' 不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
-      const sourceText = blankToNull(joinVerbatim(inRegion));
+      const sourceText = blankToNull(options?.sourceText ?? joinVerbatim(inRegion));
 
       return {
         route: "text",

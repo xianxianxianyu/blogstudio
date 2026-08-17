@@ -4,7 +4,7 @@ import { can, reduce } from "../clip/clip";
 import type { Action, Clip, ClipsState } from "../clip/clip";
 import type { Bookshelf, Doc } from "../bookshelf/bookshelf";
 import type { ClipStore } from "../clip/clip-store";
-import type { Recognizer, Region } from "../recognizer/recognizer";
+import type { RecognizeOptions, Recognizer, Region } from "../recognizer/recognizer";
 import type { Chat } from "../chat/chat";
 import type { RetentionConfig } from "../config/config";
 
@@ -77,7 +77,7 @@ export interface Workspace {
   importDoc(file: { filename: string; bytes: Uint8Array }): Promise<Doc>;
   openDoc(docId: string): Promise<void>;
   removeDoc(docId: string): Promise<void>;
-  capture(region: Region): Promise<Result>;
+  capture(region: Region, options?: RecognizeOptions): Promise<Result>;
   viewClip(clipId: string): Promise<Result>;
   markImportant(clipId: string): Promise<Result>;
   editNote(clipId: string, text: string): Promise<Result>;
@@ -201,7 +201,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       publish();
     },
 
-    async capture(region: Region): Promise<Result> {
+    async capture(region: Region, options?: RecognizeOptions): Promise<Result> {
       if (!recognizer) return { ok: false, reason: "还没有打开任何文档。" };
 
       const outcome = await captureClip(
@@ -209,6 +209,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
         clips,
         requireDoc(),
         region,
+        options,
       );
       // 失败时也要收下 state：里面那条摘录已经退回可重试，丢掉它读者就得重新框。
       clips = outcome.state;

@@ -93,6 +93,34 @@ describe("Recognizer — 数字 PDF 文本区", () => {
   });
 });
 
+describe("Recognizer — 调用方给了逐字原文（文本流选区，ADR-0016 第二步）", () => {
+  it("用给的那份，不再从文字项里拼", async () => {
+    const { model, recognizer } = await setup("1706.03762.pdf");
+
+    // 从第一行中间起、第二行中间止的选区。字符级的边界只有浏览器知道：
+    // 实测一行常常只有一个 TextItem 且装着整行，按几何再怎么过滤也只能拿到整行。
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT), {
+      route: "text",
+      sourceText: "sequence transduction models are based on complex",
+    });
+
+    expect(content.sourceText).toBe("sequence transduction models are based on complex");
+    expect(model.completeCalls).toHaveLength(0);
+  });
+
+  it("给的是空白时归一成 null，不是空串", async () => {
+    // 空串不是 null，会让 Clip reducer 以为有 evidence 而放行 promote。
+    const { recognizer } = await setup("1706.03762.pdf");
+
+    const content = await recognizer.recognize(regionAt(1, ABSTRACT_RECT), {
+      route: "text",
+      sourceText: "   ",
+    });
+
+    expect(content.sourceText).toBeNull();
+  });
+});
+
 describe("Recognizer — 纯图区", () => {
   it("走 vision，且恰好调用一次 model.complete", async () => {
     const { model, recognizer } = await setup("2006.11239.pdf", {

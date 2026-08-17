@@ -26,6 +26,7 @@
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "test:pdfstudio": "vitest run --config pdfstudio/vitest.config.ts",
+    "typecheck:pdfstudio": "tsc --noEmit -p pdfstudio/tsconfig.json",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern 'pdfstudio/dist'",
     "db:generate": "drizzle-kit generate",
     "eval:recognizer": "tsx pdfstudio/eval/run-recognizer.ts",
