@@ -56,3 +56,4 @@ pdfstudio/.models/
 
 # Electron 构建产物
 pdfstudio/dist/
+pdfstudio/release/

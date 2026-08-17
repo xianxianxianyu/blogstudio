@@ -5,18 +5,17 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
-import { env } from "@huggingface/transformers";
 import sirv from "sirv";
 import { createClipStore } from "../clip/clip-store";
 import { createBookshelf } from "../bookshelf/bookshelf";
 import { createModelDownloader } from "../model/model-download";
 import { DEFAULT_EMBEDDING_MODEL } from "../model/model-files";
-import { createTransformersEmbedder } from "../model/transformers-embedder";
 import { deserialize, serializeClip } from "../clip/clip-wire";
 import { createLocalEngine } from "../model/local-engine";
 import { llamaEngineDeps } from "../model/llama-server";
 import { errorChain } from "../app/error-chain";
 import type { Clip } from "../clip/clip";
+import type { Embedder } from "../model/embedder";
 
 /**
  * 本机 API：摘录、书架、配置、索引缓存、模型权重、向量计算、模型端点转发。
@@ -34,6 +33,13 @@ export interface LocalApiOptions {
   modelsRoot: string;
   /** 配置文件路径（含 apiKey，只在本机流动）。 */
   configFile: string;
+  /**
+   * 算向量的实现。省略就在本进程里跑（dev server 下没问题）。
+   *
+   * 打包应用必须传一个跑在别处的——onnxruntime-node 的原生模块在 Electron 主进程上
+   * 加载并推理会直接 EXC_BREAKPOINT，整个应用当场消失，连错误都没有。
+   */
+  embedder?: Embedder;
 }
 
 export type Handler = (request: IncomingMessage, response: ServerResponse) => void;
@@ -67,13 +73,9 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
   const store = createClipStore(options.libraryRoot);
   const downloader = createModelDownloader(options.modelsRoot);
 
-  // 向量在这边算：onnxruntime-node 是原生多线程，浏览器那条 WASM 路是单线程，一篇
-  // 论文的索引差出一个量级（9.6 秒 vs 几分钟）。权重直接读下好的那份，不再另下一遍。
-  env.allowLocalModels = true;
-  env.allowRemoteModels = false;
-  env.localModelPath = `${options.modelsRoot}/`;
+
   // 懒建：没人问文档时不该把 300 MB 加载进来。
-  let embedder: ReturnType<typeof createTransformersEmbedder> | null = null;
+  let embedder: Embedder | null = options.embedder ?? null;
 
   // 本地识别引擎（ADR-0015）。懒建：没人启用时连它的依赖都不构造——构造函数里就会
   // 因为平台不支持而抛。
@@ -202,7 +204,23 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
       prefix: ROUTES.embed,
       handler: (request, response) =>
         respond(response, async () => {
-          embedder ??= createTransformersEmbedder();
+          if (!embedder) {
+            // **动态 import，整个 transformers 都不在启动路径上。** 顶层 import 会把
+            // onnxruntime 的原生库一起拉进来，而那在 Electron 主进程里直接崩
+            // （实测 EXC_BREAKPOINT）——应用连窗口都出不来，日志里一个字都没有。
+            const [{ env }, { createTransformersEmbedder }] = await Promise.all([
+              import("@huggingface/transformers"),
+              import("../model/transformers-embedder"),
+            ]);
+            env.allowLocalModels = true;
+            env.allowRemoteModels = false;
+            env.localModelPath = `${options.modelsRoot}/`;
+            // 关掉文件系统缓存：开着会先去 node_modules 里那个 .cache 找，而打包后那是
+            // asar 内部——文件不能内存映射，报「system error number 20」。
+            env.useFSCache = false;
+            embedder = createTransformersEmbedder();
+          }
+
           const { kind, texts } = JSON.parse(await readBody(request)) as {
             kind: "query" | "documents";
             texts: string[];

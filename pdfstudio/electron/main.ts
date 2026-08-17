@@ -1,8 +1,11 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
-import { app, BrowserWindow, shell } from "electron";
+import { appendFileSync } from "node:fs";
+import { app, BrowserWindow, dialog, shell } from "electron";
 import { createLocalApi } from "../src/server/local-api";
+import { createUtilityEmbedder } from "./utility-embedder";
+import { errorChain } from "../src/app/error-chain";
 
 /**
  * **必须在模块顶层、任何 getPath 之前。**
@@ -40,7 +43,14 @@ function dataPaths() {
  * （ADR-0005）。固定端口则会在开着两个实例时撞车。
  */
 function startApi(): Promise<string> {
-  const routes = createLocalApi(dataPaths());
+  const paths = dataPaths();
+  note(`数据目录 ${app.getPath("userData")}`);
+  // 向量必须跑在 utilityProcess 里：onnxruntime-node 在主进程上加载并推理会直接
+  // EXC_BREAKPOINT（实测崩溃点在 CrBrowserMain）。
+  const embedder = createUtilityEmbedder(paths.modelsRoot);
+  note("向量子进程已 fork");
+  const routes = createLocalApi({ ...paths, embedder });
+  note("本机 API 已构造");
 
   const server = createServer((request, response) => {
     const url = request.url ?? "/";
@@ -68,11 +78,23 @@ function startApi(): Promise<string> {
   });
 }
 
+/**
+ * 启动过程写进日志文件。
+ *
+ * 打包应用没有终端——console 里的东西读者和排查的人都看不到，而一个「活着但没有窗口」
+ * 的进程在外面看来就是「点了图标什么都没发生」。这条路踩过一次：主进程未捕获的
+ * rejection 让 startApi 停在半路，而外部什么线索都没有。
+ */
+function note(line: string): void {
+  const file = path.join(app.getPath("userData"), "startup.log");
+  appendFileSync(file, `${new Date().toISOString()} ${line}\n`);
+  console.log(`[pdfstudio] ${line}`);
+}
+
 async function createWindow(): Promise<void> {
+  note("createWindow 开始");
   const api = await startApi();
-  // 打出来好排查：端口是随机的，出问题时读者能直接 curl 一下看是主进程还是界面的事。
-  console.log(`[pdfstudio] 本机 API ${api}`);
-  console.log(`[pdfstudio] 数据目录 ${app.getPath("userData")}`);
+  note(`本机 API ${api}`);
 
   const window = new BrowserWindow({
     width: 1400,
@@ -105,7 +127,16 @@ async function createWindow(): Promise<void> {
   }
 }
 
-void app.whenReady().then(createWindow);
+app.whenReady()
+  .then(createWindow)
+  .catch((error: unknown) => {
+    // **主进程里未捕获的 rejection = 一个活着但没有窗口的进程。** 读者看到的是
+    // 「点了图标什么都没发生」，日志里一个字都没有。宁可弹个框说清楚。
+    const message = errorChain(error) || String(error);
+    note(`启动失败 ${message}`);
+    dialog.showErrorBox("PDF Studio 启动失败", message);
+    app.quit();
+  });
 
 app.on("window-all-closed", () => {
   // macOS 的惯例是关窗不退出，但这是个单窗口工具应用——留一个没有窗口的进程在后台，

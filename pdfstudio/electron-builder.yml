@@ -2,7 +2,10 @@
 appId: com.pdfstudio.app
 productName: PDF Studio
 directories:
-  output: pdfstudio/dist/app
+  # **不能嵌在 pdfstudio/dist 里面。** 那是构建产物目录，输出目录套在里面会让
+  # electron-builder 把 package.json 的 main 重算成 ./dist/index.js——于是打包后的应用
+  # 加载一个不存在的入口：进程活着、没有窗口、日志一个字都没有。
+  output: pdfstudio/release
   buildResources: pdfstudio/electron
 
 # 入口是 esbuild 打好的那个 bundle；渲染侧是 vite 的产物。
@@ -12,13 +15,25 @@ directories:
 files:
   - "!**/*"
   - pdfstudio/dist/main.mjs
+  # 向量子进程。**先全排除再逐个放行**的代价就是漏一个文件就是「模块找不到」，
+  # 而子进程的报错默认一个字都看不到——表现是「请求永远没有回音」。
+  - pdfstudio/dist/embedder-host.cjs
   - pdfstudio/dist/renderer/**
   # 主进程用 --packages=external 打包，这三个要在运行时从 node_modules 取。
   - node_modules/@huggingface/transformers/**
-  # transformers.js 为图像处理带了 sharp（连同各平台的原生二进制），而我们只做文本
-  # 向量——那部分是纯死重量。onnxruntime-web 同理：Node 侧走的是 onnxruntime-node。
-  - "!node_modules/@huggingface/transformers/node_modules/sharp/**"
-  - "!node_modules/@huggingface/transformers/node_modules/@img/**"
+  # **它的 .cache 绝不能打进去。** 在 Node 里跑过一次 eval，transformers.js 就会把
+  # 权重下到这里；打进 asar 之后运行时会优先命中它，而 **asar 里的文件不能内存映射**
+  # ——报的是「system error number 20」，跟「路径不对」毫无关系。顺带这份重复权重
+  # 就是 asar 那 329 MB 的绝大部分。
+  - "!node_modules/@huggingface/transformers/.cache/**"
+  # **sharp 必须带上。** 我一度以为「只做文本向量就用不到图像处理」而剪掉它，但
+  # transformers 的 Node 构建在 **加载时** 就 require 它——子进程直接
+  # Cannot find module 'sharp'，而子进程的报错默认一个字都看不到。
+  # 实际体积也不是当初以为的几百 MB：npm 只装本平台那份，一共 16 MB。
+  - node_modules/sharp/**
+  - node_modules/@img/**
+  - node_modules/@napi-rs/**
+  # onnxruntime-web 用不到：Node 侧走的是 onnxruntime-node。
   - "!node_modules/@huggingface/transformers/node_modules/onnxruntime-web/**"
   - "!node_modules/@huggingface/transformers/types/**"
   - node_modules/onnxruntime-node/**
