@@ -46,7 +46,7 @@ _Avoid_: 库、library、知识库
 
 **知识库 (Knowledge base)**:
 跨 PDF 的 context 聚合，由 PDF Studio 产出、Blog Studio 消费。它是第三个系统，
-有自己的术语表（`knowledge/CONTEXT.md`）——**摘录的「标记」不会跟着进去**，
+有自己的术语表（`contextstudio/CONTEXT.md`）——**摘录的「标记」不会跟着进去**，
 知识库那边连边用的是「主题」。
 _Avoid_: 书架、library
 

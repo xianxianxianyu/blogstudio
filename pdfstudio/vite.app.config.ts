@@ -1,7 +1,15 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { cpSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createLocalApi } from "./src/server/local-api";
+import { PDFJS_ASSET_DIRS } from "./src/pdf/assets";
+
+/** 用 import.meta.resolve 而不是从这里往上数 `../..`：包管理器的目录布局不归我们管。 */
+const PDFJS_ROOT = path.dirname(
+  path.dirname(fileURLToPath(import.meta.resolve("pdfjs-dist/build/pdf.mjs"))),
+);
 
 // 开发用的界面（`pdfstudio/app/`），与仓库根那个 Blog Studio 应用无关。
 // PDF Studio 是 local-first 打包应用（ADR-0006/0014），不住在 Cloudflare 那套里。
@@ -18,6 +26,25 @@ export default defineConfig({
   server: { port: 5174 },
   plugins: [
     react(),
+    {
+      /**
+       * 把 pdf.js 的 CMap / 标准字体 / wasm / ICC 拷进 `dist/pdfjs/`。
+       *
+       * 拷而不是让它留在 node_modules 里：`electron-builder.yml` 把整棵 node_modules
+       * 排除在安装包之外（不排的话 Blog Studio 那套依赖会一起进来，280 MB 涨到 526 MB）。
+       *
+       * 拷到 `dist/` 而不是 `dist/renderer/`：`app:pdfstudio` 与 `dist:pdfstudio` 两条
+       * 路径都从 `app.getAppPath()` 找它，位置必须只有一个。
+       */
+      name: "pdfstudio-pdfjs-assets",
+      apply: "build",
+      closeBundle() {
+        const target = path.join(import.meta.dirname, "dist", "pdfjs");
+        for (const dir of PDFJS_ASSET_DIRS) {
+          cpSync(path.join(PDFJS_ROOT, dir), path.join(target, dir), { recursive: true });
+        }
+      },
+    },
     {
       name: "pdfstudio-local-api",
       /**
@@ -43,5 +70,7 @@ function paths() {
     libraryRoot: path.join(here, ".library"),
     modelsRoot: path.join(here, ".models"),
     configFile: path.join(here, "config.json"),
+    // dev 下直接指包里那份，不用拷。
+    pdfjsRoot: PDFJS_ROOT,
   };
 }

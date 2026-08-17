@@ -4,6 +4,6 @@
     "incremental": false,
     "types": []
   },
-  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "electron/**/*.ts", "eval/**/*.ts"],
+  "include": ["app/**/*.ts", "app/**/*.tsx", "src/**/*.ts", "electron/**/*.ts", "eval/**/*.ts", "test/**/*.ts", "*.ts"],
   "exclude": ["dist", "release"]
 }

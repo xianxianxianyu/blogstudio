@@ -34,6 +34,16 @@ export interface LocalApiOptions {
   /** 配置文件路径（含 apiKey，只在本机流动）。 */
   configFile: string;
   /**
+   * pdf.js 随包静态资源的根（含 `cmaps/`、`standard_fonts/`、`wasm/`、`iccs/`）。
+   *
+   * **必填**：少了它，不嵌字体的中文书 `getTextContent()` 直接返回空串，而且不报错
+   * （见 `src/pdf/assets.ts`）。做成可选的话，忘了接线的那一天没有任何东西会提醒。
+   *
+   * dev 下指 `node_modules/pdfjs-dist`；打包应用里 node_modules 整个不进包，指的是
+   * 构建时拷进 `dist/pdfjs/` 的那份。
+   */
+  pdfjsRoot: string;
+  /**
    * 算向量的实现。省略就在本进程里跑（dev server 下没问题）。
    *
    * 打包应用必须传一个跑在别处的——onnxruntime-node 的原生模块在 Electron 主进程上
@@ -57,6 +67,7 @@ export const ROUTES = {
   index: "/__index",
   tags: "/__tags",
   models: "/__models",
+  pdfjs: "/__pdfjs",
   embed: "/__embed",
   engine: "/__engine",
 } as const;
@@ -205,6 +216,14 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
       // 刷新都要重新传 300 MB。权重不可变（模型 id + 文件名唯一确定内容），永久缓存。
       prefix: ROUTES.models,
       handler: sirv(options.modelsRoot, { etag: true, maxAge: 31536000, immutable: true }),
+    },
+
+    {
+      // pdf.js 的 CMap / 标准字体 / wasm / ICC。走本机 API 而不是相对路径：打包后页面
+      // 是 file://，没有 origin 可依（同 api-base.ts 的理由）。
+      // 内容随 pdf.js 版本固定，永久缓存。
+      prefix: ROUTES.pdfjs,
+      handler: sirv(options.pdfjsRoot, { etag: true, maxAge: 31536000, immutable: true }),
     },
 
     {

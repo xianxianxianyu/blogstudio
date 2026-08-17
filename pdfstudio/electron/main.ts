@@ -32,6 +32,9 @@ function dataPaths() {
     libraryRoot: path.join(root, "library"),
     modelsRoot: path.join(root, "models"),
     configFile: path.join(root, "config.json"),
+    // pdf.js 的静态资源**跟着应用走，不跟着数据走**：它由版本决定，不是读者的东西。
+    // node_modules 整个不进安装包（electron-builder.yml），所以构建时拷进了 dist/pdfjs。
+    pdfjsRoot: path.join(app.getAppPath(), "pdfjs"),
   };
 }
 
