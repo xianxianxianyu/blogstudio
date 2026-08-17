@@ -12,7 +12,8 @@ import { createModelDownloader } from "../model/model-download";
 import { DEFAULT_EMBEDDING_MODEL } from "../model/model-files";
 import { deserialize, serializeClip } from "../clip/clip-wire";
 import { createLocalEngine } from "../model/local-engine";
-import { llamaEngineDeps } from "../model/llama-server";
+import { EMBEDDING_SPEC, RECOGNITION_SPEC, llamaEngineDeps } from "../model/llama-server";
+import { createLlamaEmbedder } from "../model/llama-embedder";
 import { errorChain } from "../app/error-chain";
 import type { Clip } from "../clip/clip";
 import type { Embedder } from "../model/embedder";
@@ -77,9 +78,10 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
   // 懒建：没人问文档时不该把 300 MB 加载进来。
   let embedder: Embedder | null = options.embedder ?? null;
 
-  // 本地识别引擎（ADR-0015）。懒建：没人启用时连它的依赖都不构造——构造函数里就会
-  // 因为平台不支持而抛。
+  // 两个本地引擎，共用一份 llama.cpp 二进制：识别（ADR-0015，可选）与向量（问文档要用）。
+  // 懒建：没人用时连依赖都不构造——构造函数里就会因为平台不支持而抛。
   let engine: ReturnType<typeof createLocalEngine> | null = null;
+  let vectorEngine: ReturnType<typeof createLocalEngine> | null = null;
   const engineRoot = path.join(options.modelsRoot, "llama");
 
   return [
@@ -92,7 +94,9 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
             return json({ running: false, baseURL: null });
           }
           if (request.method === "POST") {
-            engine ??= createLocalEngine(llamaEngineDeps(engineRoot, (text) => (enginePhase = text)));
+            engine ??= createLocalEngine(
+              llamaEngineDeps(engineRoot, RECOGNITION_SPEC, (text) => (enginePhase = text)),
+            );
             // 1.7 GB 的下载 + 加载，不能把一个请求挂住——立刻返回，进度靠轮询。
             void engine.ensureReady().catch((error: unknown) => {
               enginePhase = errorChain(error) || "本地识别引擎启动失败";
@@ -205,20 +209,14 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
       handler: (request, response) =>
         respond(response, async () => {
           if (!embedder) {
-            // **动态 import，整个 transformers 都不在启动路径上。** 顶层 import 会把
-            // onnxruntime 的原生库一起拉进来，而那在 Electron 主进程里直接崩
-            // （实测 EXC_BREAKPOINT）——应用连窗口都出不来，日志里一个字都没有。
-            const [{ env }, { createTransformersEmbedder }] = await Promise.all([
-              import("@huggingface/transformers"),
-              import("../model/transformers-embedder"),
-            ]);
-            env.allowLocalModels = true;
-            env.allowRemoteModels = false;
-            env.localModelPath = `${options.modelsRoot}/`;
-            // 关掉文件系统缓存：开着会先去 node_modules 里那个 .cache 找，而打包后那是
-            // asar 内部——文件不能内存映射，报「system error number 20」。
-            env.useFSCache = false;
-            embedder = createTransformersEmbedder();
+            // 向量走 llama-server，不再走 onnxruntime-node——后者在 Electron 的进程里
+            // 根本跑不起来（主进程 EXC_BREAKPOINT，utilityProcess 同一个信号）。
+            // 首次会下 318 MB 权重并加载，进度经 enginePhase 报出去。
+            vectorEngine ??= createLocalEngine(
+              llamaEngineDeps(engineRoot, EMBEDDING_SPEC, (text) => (enginePhase = text)),
+            );
+            const { baseURL } = await vectorEngine.ensureReady();
+            embedder = createLlamaEmbedder(baseURL);
           }
 
           const { kind, texts } = JSON.parse(await readBody(request)) as {

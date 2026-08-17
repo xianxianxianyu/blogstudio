@@ -4,7 +4,6 @@ import path from "node:path";
 import { appendFileSync } from "node:fs";
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { createLocalApi } from "../src/server/local-api";
-import { createUtilityEmbedder } from "./utility-embedder";
 import { errorChain } from "../src/app/error-chain";
 
 /**
@@ -47,9 +46,9 @@ function startApi(): Promise<string> {
   note(`数据目录 ${app.getPath("userData")}`);
   // 向量必须跑在 utilityProcess 里：onnxruntime-node 在主进程上加载并推理会直接
   // EXC_BREAKPOINT（实测崩溃点在 CrBrowserMain）。
-  const embedder = createUtilityEmbedder(paths.modelsRoot);
-  note("向量子进程已 fork");
-  const routes = createLocalApi({ ...paths, embedder });
+  // 向量由本机 API 自己拉起 llama-server（与识别共用同一个二进制），主进程不碰
+  // 任何原生推理库——onnxruntime-node 在 Electron 的进程里跑不起来，那条路已退役。
+  const routes = createLocalApi(paths);
   note("本机 API 已构造");
 
   const server = createServer((request, response) => {

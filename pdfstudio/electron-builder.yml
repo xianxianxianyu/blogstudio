@@ -2,56 +2,24 @@
 appId: com.pdfstudio.app
 productName: PDF Studio
 directories:
-  # **不能嵌在 pdfstudio/dist 里面。** 那是构建产物目录，输出目录套在里面会让
-  # electron-builder 把 package.json 的 main 重算成 ./dist/index.js——于是打包后的应用
-  # 加载一个不存在的入口：进程活着、没有窗口、日志一个字都没有。
+  # **app 指向打包目录，不是仓库根。** 指向仓库根时 electron-builder 会反复改写仓库的
+  # package.json（scripts 整段删掉、main 重算成某个依赖里的路径），而且会把整棵生产
+  # 依赖树装进去——这个仓库还住着 Blog Studio。
+  #
+  # 主进程全量打包（只有 electron 外部），所以这个目录里不需要 node_modules：
+  # 一个 main.mjs、一份 renderer/、一个自己的 package.json。
+  app: pdfstudio/dist
   output: pdfstudio/release
-  buildResources: pdfstudio/electron
 
-# 入口是 esbuild 打好的那个 bundle；渲染侧是 vite 的产物。
-# **先全排除再逐个放行。** electron-builder 默认把 package.json 里的整棵生产依赖树
-# 装进去，而这个仓库还住着 Blog Studio（drizzle、wrangler、Cloudflare 那套）——不排除
-# 的话它们全都跟着 PDF Studio 分发出去。
+# 主进程是全量打包的，运行时不 require 任何包——所以整棵 node_modules 都不要。
+# 不排的话 electron-builder 会顺着目录往上找到仓库的 node_modules，把 Blog Studio 那套
+# （drizzle、wrangler、Cloudflare）一起装进去，安装包从 280 MB 涨到 526 MB。
 files:
-  - "!**/*"
-  - pdfstudio/dist/main.mjs
-  # 向量子进程。**先全排除再逐个放行**的代价就是漏一个文件就是「模块找不到」，
-  # 而子进程的报错默认一个字都看不到——表现是「请求永远没有回音」。
-  - pdfstudio/dist/embedder-host.cjs
-  - pdfstudio/dist/renderer/**
-  # 主进程用 --packages=external 打包，这三个要在运行时从 node_modules 取。
-  - node_modules/@huggingface/transformers/**
-  # **它的 .cache 绝不能打进去。** 在 Node 里跑过一次 eval，transformers.js 就会把
-  # 权重下到这里；打进 asar 之后运行时会优先命中它，而 **asar 里的文件不能内存映射**
-  # ——报的是「system error number 20」，跟「路径不对」毫无关系。顺带这份重复权重
-  # 就是 asar 那 329 MB 的绝大部分。
-  - "!node_modules/@huggingface/transformers/.cache/**"
-  # **sharp 必须带上。** 我一度以为「只做文本向量就用不到图像处理」而剪掉它，但
-  # transformers 的 Node 构建在 **加载时** 就 require 它——子进程直接
-  # Cannot find module 'sharp'，而子进程的报错默认一个字都看不到。
-  # 实际体积也不是当初以为的几百 MB：npm 只装本平台那份，一共 16 MB。
-  - node_modules/sharp/**
-  - node_modules/@img/**
-  - node_modules/@napi-rs/**
-  # onnxruntime-web 用不到：Node 侧走的是 onnxruntime-node。
-  - "!node_modules/@huggingface/transformers/node_modules/onnxruntime-web/**"
-  - "!node_modules/@huggingface/transformers/types/**"
-  - node_modules/onnxruntime-node/**
-  # **Mac 包里不放 Windows 和 Linux 的二进制**：124 MB + 52 MB 全是死重量。
-  - "!node_modules/onnxruntime-node/bin/napi-v6/win32/**"
-  - "!node_modules/onnxruntime-node/bin/napi-v6/linux/**"
-  - node_modules/onnxruntime-common/**
-  - node_modules/sirv/**
-  - node_modules/totalist/**
-  - node_modules/mrmime/**
-  - package.json
+  - "**/*"
+  - "!node_modules/**"
 
-# onnxruntime-node 带 .node 原生扩展，塞进 asar 里加载不了——必须解出来。
-asarUnpack:
-  - node_modules/onnxruntime-node/**
-
-# **权重不打进安装包**：326 MB 跟着分发一次都嫌多，而且读者可能想换模型。
-# 首次运行由设置页里的按钮下到应用数据目录（ModelDownloader）。
+# **权重与 llama.cpp 都不打进安装包**：识别 1.7 GB + 向量 318 MB，跟着分发一次都嫌多，
+# 而且读者可能想换模型。首次用到时由 LocalEngine 下到应用数据目录。
 
 mac:
   category: public.app-category.productivity
