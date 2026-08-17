@@ -10,6 +10,7 @@ import { ClipsPane } from "./ClipsPane";
 import { ChatPanel } from "./ChatPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { RetentionNotice } from "./RetentionNotice";
+import { SelectionMenu } from "./SelectionMenu";
 
 /**
  * 两层：**书架页**（有哪些书）与**阅读页**（读这一本）。
@@ -45,6 +46,7 @@ export function App({
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [scale, setScale] = useState(1.5);
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,6 +57,7 @@ export function App({
     setOpenedDoc(state.docId);
     setPage(1);
     setSelected(null);
+    setMenuAt(null);
     setError(null);
   }
 
@@ -122,8 +125,9 @@ export function App({
                 page={page}
                 onPages={setPages}
                 scale={scale}
-                onSelect={(id) => {
+                onSelect={(id, at) => {
                   setSelected(id);
+                  setMenuAt(at ?? null);
                   if (id !== null) {
                     // 划完就展开摘录那栏：读者的下一个动作是看译文，不该还要自己切。
                     setPane("clips");
@@ -133,7 +137,31 @@ export function App({
                 }}
                 onCapturing={setBusy}
                 onError={setError}
-              />
+              >
+                {/* 松手就浮出来，翻译同时已经在跑——菜单不能挡在日常主路径上
+                    （ADR-0016）。 */}
+                {clip !== null && menuAt !== null && (
+                  <SelectionMenu
+                    ws={ws}
+                    clip={clip}
+                    at={menuAt}
+                    onClose={() => setMenuAt(null)}
+                    onAsk={() => {
+                      conversation.attachClip({
+                        clipId: clip.id,
+                        // 纯图没有原文，就把图像描述当材料；两个都没有才退回空串。
+                        sourceText: clip.sourceText ?? clip.content?.multimodal ?? "",
+                        translation: clip.translation ?? undefined,
+                        image: clip.content?.screenshot,
+                        page: clip.region.page,
+                        note: clip.note ?? undefined,
+                      });
+                      setMenuAt(null);
+                      setPane("chat");
+                    }}
+                  />
+                )}
+              </Reader>
             </div>
 
             <div className="side">

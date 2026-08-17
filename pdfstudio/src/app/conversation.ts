@@ -1,5 +1,5 @@
 import { errorChain } from "./error-chain";
-import type { Answer, Chat, Turn } from "../chat/chat";
+import type { Answer, Chat, ClipSnapshot, Part, Turn } from "../chat/chat";
 import type { Result, Workspace } from "./workspace";
 
 export interface ConversationState {
@@ -8,6 +8,12 @@ export interface ConversationState {
   streaming: string | null;
   /** 最后一次回答的出处与依据成色，供界面显眼地摆出来。 */
   answer: Answer | null;
+  /**
+   * 贴进来、还没发出去的摘录（ADR-0016 的「问这段」）。
+   *
+   * 要能看见也要能撤掉：看不见读者不知道自己贴了什么，撤不掉就只能整段重来。
+   */
+  attached: ClipSnapshot[];
   /**
    * 上一次失败的原因。放在这里而不是视图里：它属于**这次对话**，换书时该跟着一起清
    * ——留在视图的局部 state 里，换本书还挂着上一本的报错。
@@ -20,6 +26,9 @@ export interface Conversation {
   subscribe(listener: () => void): () => void;
   /** 换文档就换一个 Chat。传 null 表示当前没有打开任何文档。 */
   attach(chat: Chat | null): void;
+  /** 把一条摘录贴进下一句问题。 */
+  attachClip(snapshot: ClipSnapshot): void;
+  detachClip(clipId: string): void;
   send(text: string): Promise<Result>;
   stop(): void;
 }
@@ -37,18 +46,26 @@ export function createConversation(): Conversation {
   let streaming: string | null = null;
   let answer: Answer | null = null;
   let error: string | null = null;
+  let attached: ClipSnapshot[] = [];
   let controller: AbortController | null = null;
 
-  let snapshot: ConversationState = { turns, streaming, answer, error };
+  let snapshot: ConversationState = { turns, streaming, answer, error, attached };
   const listeners = new Set<() => void>();
 
   function publish(): void {
     // 引用要稳：React 的 useSyncExternalStore 拿它做相等性判断（同 Workspace）。
-    snapshot = { turns, streaming, answer, error };
+    snapshot = { turns, streaming, answer, error, attached };
     for (const listener of listeners) listener();
   }
 
-  const textOf = (text: string): Turn => ({ role: "user", parts: [{ kind: "text", text }] });
+  /** 贴着的摘录排在问题前面：模型先看到材料，再看到问题。 */
+  const askOf = (text: string): Turn => ({
+    role: "user",
+    parts: [
+      ...attached.map((clip): Part => ({ kind: "clip", snapshot: clip })),
+      { kind: "text", text },
+    ],
+  });
 
   return {
     get state() {
@@ -60,6 +77,18 @@ export function createConversation(): Conversation {
       return () => listeners.delete(listener);
     },
 
+    attachClip(clip: ClipSnapshot): void {
+      // 同一条不贴两次：读者点两下「问这段」不该发两份一样的材料。
+      if (attached.some((existing) => existing.clipId === clip.clipId)) return;
+      attached = [...attached, clip];
+      publish();
+    },
+
+    detachClip(clipId: string): void {
+      attached = attached.filter((clip) => clip.clipId !== clipId);
+      publish();
+    },
+
     attach(next: Chat | null): void {
       // **单文档封闭**：`CONTEXT.md` 说 chat「绝不跨 PDF」。不清空的话，上一篇论文的
       // 问答会作为上下文一起发给下一篇——模型拿 A 的内容回答关于 B 的问题，而且不报
@@ -69,6 +98,8 @@ export function createConversation(): Conversation {
       streaming = null;
       answer = null;
       error = null;
+      // 贴着的也清掉：单文档封闭，上一本的摘录不该跟着发给下一本。
+      attached = [];
       controller?.abort();
       controller = null;
       publish();
@@ -77,7 +108,10 @@ export function createConversation(): Conversation {
     async send(text: string): Promise<Result> {
       if (!chat) return { ok: false, reason: "还没有打开任何文档。" };
 
-      turns = [...turns, textOf(text)];
+      turns = [...turns, askOf(text)];
+      // 发完就清空：不清的话第二问、第三问都会带上它——既费 token，也会让模型以为
+      // 读者还在问那一段。
+      attached = [];
       streaming = "";
       error = null;
       publish();

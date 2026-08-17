@@ -108,3 +108,26 @@ export function textCoverage(rect: Rect, items: TextItem[]): number {
   return unionArea(boxes) / (rect.width * rect.height);
 }
 
+
+/**
+ * 区域内每个文字项的裁剪框，用来把标签画成**覆盖真实文字行的高亮**而不是一个大矩形
+ * （ADR-0016）。
+ *
+ * 一个矩形一条高亮的话，跨行选择会糊成一整块、连行距都盖住——那就不是荧光笔了。
+ * 逐项给框，行与行之间自然留白。
+ *
+ * 复用覆盖度检测那两个函数，不另写一套几何：那里已经处理了旋转文本（`width` 沿基线
+ * 方向而非水平），自己动手最容易漏掉的正是这一项。
+ */
+export function highlightBoxes(rect: Rect, items: TextItem[]): Rect[] {
+  const boxes: Rect[] = [];
+
+  for (const item of items) {
+    if (!baselineIntersectsRect(rect, item)) continue;
+    const box = clippedBox(rect, item);
+    // 只与基线相交、但横向被裁光的项（区域擦着行尾过去）不产出零宽的框。
+    if (box) boxes.push({ x: box.x0, y: box.y0, width: box.x1 - box.x0, height: box.y1 - box.y0 });
+  }
+
+  return boxes;
+}

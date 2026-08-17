@@ -179,3 +179,55 @@ describe("绑定到 Workspace", () => {
     expect(conversation.state.turns).toHaveLength(2);
   });
 });
+
+describe("把摘录贴进对话", () => {
+  const snapshot = { clipId: "c1", sourceText: "Attention is all you need", page: 4 };
+
+  it("贴进来的摘录会跟着下一句问题一起发出去", async () => {
+    const seen: Turn[][] = [];
+    const conversation = createConversation();
+    conversation.attach(fakeChat({ deltas: ["好"], seen }));
+
+    conversation.attachClip(snapshot);
+    await conversation.send("这段在讲什么");
+
+    const parts = seen.at(-1)![0].parts;
+    expect(parts.map((part) => part.kind)).toEqual(["clip", "text"]);
+  });
+
+  it("发完就清空，不会跟着后面每一句反复发", async () => {
+    // 不清的话第二问、第三问都会带上它——既费 token，也会让模型以为读者还在问那一段。
+    const seen: Turn[][] = [];
+    const conversation = createConversation();
+    conversation.attach(fakeChat({ deltas: ["好"], seen }));
+    conversation.attachClip(snapshot);
+    await conversation.send("第一问");
+
+    await conversation.send("第二问");
+
+    expect(seen.at(-1)!.at(-1)!.parts.map((part) => part.kind)).toEqual(["text"]);
+  });
+
+  it("贴了但还没发的能看见，也能撤掉", async () => {
+    // 看不见的话读者不知道自己贴了什么，撤不掉就只能整段重来。
+    const conversation = createConversation();
+    conversation.attach(fakeChat({ deltas: ["好"] }));
+
+    conversation.attachClip(snapshot);
+    expect(conversation.state.attached).toHaveLength(1);
+
+    conversation.detachClip("c1");
+    expect(conversation.state.attached).toEqual([]);
+  });
+
+  it("换一本书，贴着的也一起清掉", async () => {
+    // 单文档封闭：上一本的摘录不该跟着发给下一本（CONTEXT.md「绝不跨 PDF」）。
+    const conversation = createConversation();
+    conversation.attach(fakeChat({ deltas: ["好"] }));
+    conversation.attachClip(snapshot);
+
+    conversation.attach(fakeChat({ deltas: ["好"] }));
+
+    expect(conversation.state.attached).toEqual([]);
+  });
+});

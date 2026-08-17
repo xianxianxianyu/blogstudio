@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import type * as pdfjs from "pdfjs-dist";
 import { isMisTouch, toCanvasBox, toPageRect } from "../../src/capture/capture";
+import { highlightBoxes } from "../../src/recognizer/coverage";
 import type { Workspace, WorkspaceState } from "../../src/app/workspace";
 import type { Screenshot } from "../../src/recognizer/recognizer";
+import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { PdfHost } from "./pdf-host";
 
 interface Point {
@@ -19,6 +21,7 @@ export function Reader({
   onPages,
   onSelect,
   scale,
+  children,
   onCapturing,
   onError,
 }: {
@@ -29,8 +32,10 @@ export function Reader({
   page: number;
   /** 总页数交给外面显示——翻页控件在顶栏，它是「这本书」的控件，不是画布的一部分。 */
   onPages: (total: number) => void;
-  onSelect: (clipId: string | null) => void;
+  onSelect: (clipId: string | null, at?: { x: number; y: number }) => void;
   scale: number;
+  /** 浮动菜单由外面渲染——它要动到对话与摘录，那些不归 Reader 管。 */
+  children?: React.ReactNode;
   onCapturing: (busy: boolean) => void;
   onError: (message: string | null) => void;
 }) {
@@ -38,6 +43,9 @@ export function Reader({
   const [viewport, setViewport] = useState<pdfjs.PageViewport | null>(null);
   const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
   const [display, setDisplay] = useState<{ width: number; height: number } | null>(null);
+  // 这一页的文字项，用来把文本摘录画成覆盖真实文字行的高亮（ADR-0016）。
+  // 每页取一次——Recognizer 里也取，但那是识别时；渲染时要另取。
+  const [textItems, setTextItems] = useState<TextItem[]>([]);
   const start = useRef<Point | null>(null);
 
   /**
@@ -66,10 +74,11 @@ export function Reader({
       canvas.current.width = vp.width;
       canvas.current.height = vp.height;
       await rendered.render({ canvas: canvas.current, viewport: vp }).promise;
-      if (!cancelled) {
-        setViewport(vp);
-        onPages(document.numPages);
-      }
+      if (cancelled) return;
+      setViewport(vp);
+      onPages(document.numPages);
+      const { items } = await rendered.getTextContent();
+      if (!cancelled) setTextItems(items.filter((item): item is TextItem => "str" in item));
     })();
     return () => {
       cancelled = true;
@@ -90,6 +99,14 @@ export function Reader({
     return {
       x: Math.round(((event.clientX - rect.left) * element.width) / rect.width),
       y: Math.round(((event.clientY - rect.top) * element.height) / rect.height),
+    };
+  }
+
+  /** 菜单挂在选区下沿偏左，CSS 像素——它是绝对定位在画布容器里的。 */
+  function menuAt(box: { x0: number; y0: number; x1: number; y1: number }) {
+    return {
+      x: css(Math.min(box.x0, box.x1), "x"),
+      y: css(Math.max(box.y0, box.y1), "y") + 6,
     };
   }
 
@@ -126,7 +143,8 @@ export function Reader({
     // 会吃掉 pointerdown，在已有摘录上就重新框不了了——所以由坐标判。
     // 误触判定本来就在分辨「这是点击还是拖动」，正好是同一个问题。
     if (isMisTouch(box)) {
-      onSelect(clipAt(end));
+      const hit = clipAt(end);
+      onSelect(hit, hit === null ? undefined : menuAt(box));
       return;
     }
 
@@ -135,7 +153,8 @@ export function Reader({
     try {
       const pixels = await crop(canvas.current!, box);
       const result = await ws.capture({ page, rect: toPageRect(viewport, box), pixels });
-      if (result.ok) onSelect(result.clipId ?? null);
+      // 菜单挂在选区下沿，位置在这里算——只有这里知道刚才框到了哪儿。
+      if (result.ok) onSelect(result.clipId ?? null, menuAt(box));
       else onError(chain(result.error) || (result.reason ?? "识别失败"));
     } finally {
       onCapturing(false);
@@ -146,6 +165,7 @@ export function Reader({
 
   return (
     <div className="frame">
+      {children}
         <canvas
           ref={canvas}
           onPointerDown={(event) => {
@@ -161,30 +181,37 @@ export function Reader({
         />
 
         {/* 标签的独特价值不是取回内容（重划也能取回），而是「这儿我来过」——三个月后
-            重开论文，标签疏密就是当初的注意力地图。所以随手划过的那批也画，只是淡一点。 */}
+            重开论文，标签疏密就是当初的注意力地图。所以随手划过的那批也画，只是淡一点。
+
+            文本摘录画成**覆盖真实文字行的高亮**，视觉摘录（公式、图）仍画框：那里本来
+            就没有文字行可覆盖。框选文本本身就是高亮，不需要第二个工具（ADR-0016）。 */}
         {viewport &&
           state.clips
             .filter((clip) => clip.region.page === page)
-            .map((clip) => {
-              const box = toCanvasBox(viewport, clip.region.rect);
-              return (
-                <div
-                  key={clip.id}
-                  className={[
-                    "mark",
-                    clip.important ? "keep" : "",
-                    clip.id === selected ? "on" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  style={{
-                    left: css(box.x0, "x"),
-                    top: css(box.y0, "y"),
-                    width: css(box.x1 - box.x0, "x"),
-                    height: css(box.y1 - box.y0, "y"),
-                  }}
-                />
-              );
+            .flatMap((clip) => {
+              const highlight = clip.content?.route === "text";
+              const rects = highlight
+                ? highlightBoxes(clip.region.rect, textItems)
+                : [clip.region.rect];
+              const shape = highlight ? "mark line" : "mark";
+
+              return rects.map((rect, index) => {
+                const box = toCanvasBox(viewport, rect);
+                return (
+                  <div
+                    key={`${clip.id}-${index}`}
+                    className={[shape, clip.important ? "keep" : "", clip.id === selected ? "on" : ""]
+                      .filter(Boolean)
+                      .join(" ")}
+                    style={{
+                      left: css(box.x0, "x"),
+                      top: css(box.y0, "y"),
+                      width: css(box.x1 - box.x0, "x"),
+                      height: css(box.y1 - box.y0, "y"),
+                    }}
+                  />
+                );
+              });
             })}
 
       {drag && (

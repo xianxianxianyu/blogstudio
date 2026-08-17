@@ -74,6 +74,26 @@ export function ChatPanel({
 
       </div>
 
+      {/* 贴进来还没发的摘录要看得见、能撤掉：看不见读者不知道自己贴了什么，
+          撤不掉就只能整段重来。 */}
+      {state.attached.length > 0 && (
+        <div style={{ padding: "0 10px 6px" }}>
+          {state.attached.map((clip) => (
+            <div key={clip.clipId} className="cite" style={{ margin: "6px 0" }}>
+              <div className="what">
+                带上第 {clip.page} 页的摘录一起问{" "}
+                <button className="btn" onClick={() => conversation.detachClip(clip.clipId)}>
+                  撤掉
+                </button>
+              </div>
+              <div className="faint" style={{ display: "-webkit-box", WebkitLineClamp: 2, lineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                {clip.translation ?? clip.sourceText}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="composer">
         <textarea
           rows={2}
