@@ -251,7 +251,10 @@ describe("Chat — 检索命中且贴了摘录", () => {
     // 依据里有检索到的原文，所以 grounding 是 retrieved；但读者贴进来的摘录
     // 同样是这次回答的依据，出处不该被吞掉。
     expect(answer.grounding).toBe("retrieved");
-    expect(answer.citations.map((citation) => citation.kind).sort()).toEqual(["chunk", "clip"]);
+    // 两类都要在，条数不管：检索现在喂 top-3（与 eval 的 k 一致），断言精确序列
+    // 会把「喂几块」这个可调的量钉死在一条讲出处种类的测试里。
+    const kinds = new Set(answer.citations.map((citation) => citation.kind));
+    expect([...kinds].sort()).toEqual(["chunk", "clip"]);
   });
 });
 
@@ -499,5 +502,65 @@ describe("检索到的原文怎么送给模型", () => {
 
     expect(answer.grounding).toBe("retrieved");
     expect(seen[0]).toContain(answer.citations[0].snippet!.slice(0, 40));
+  });
+});
+
+describe("喂给模型几块原文", () => {
+  /** 记下真正发给模型的那条消息。 */
+  function spy(document: PDFDocumentProxy) {
+    const seen: string[] = [];
+    const model = createFakeModelClient({ completeText: "好" });
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: {
+        complete: model.complete.bind(model),
+        streamComplete: (request) => {
+          seen.push(request.messages.map((m) => String(m.content)).join("\n"));
+          return model.streamComplete(request);
+        },
+      },
+    });
+    return { seen, chat };
+  }
+
+  it("检索到几块就喂几块，不是只喂第一块", async () => {
+    // eval 量的是 recall@3（README：「k 取实际喂给 LLM 的块数」），而此前生产只喂
+    // top-1——于是汇报的 85% 是模型根本看不到的数字，它实际只有 45% 的机会拿到
+    // 正确那段。度量和实现必须跑在同一套参数上。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const { seen, chat } = spy(document);
+
+    const answer = await chat.ask([
+      { role: "user", parts: [{ kind: "text", text: "training hardware GPUs steps" }] },
+    ]);
+
+    expect(answer.citations.filter((c) => c.kind === "chunk").length).toBeGreaterThan(1);
+    for (const citation of answer.citations) {
+      if (citation.snippet) expect(seen[0]).toContain(citation.snippet.slice(0, 40));
+    }
+  });
+
+  it("每块都标出页码", async () => {
+    // 不标的话模型说不清依据来自哪一页，读者点引用跳过去也对不上——而引用可点
+    // 正是 grounding: 'retrieved' 这个语义成立的必要条件。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const { seen, chat } = spy(document);
+
+    const answer = await chat.ask([
+      { role: "user", parts: [{ kind: "text", text: "training hardware GPUs steps" }] },
+    ]);
+
+    expect(seen[0]).toContain(`第 ${answer.citations[0].page} 页`);
+  });
+
+  it("一块都没检索到时不往消息里塞任何材料", async () => {
+    const document = await openFixturePdf("1706.03762.pdf");
+    const { seen, chat } = spy(document);
+
+    const answer = await chat.ask([{ role: "user", parts: [{ kind: "text", text: "你好" }] }]);
+
+    expect(answer.grounding).toBe("none");
+    expect(seen[0]).toBe("你好");
   });
 });

@@ -139,6 +139,19 @@ function queryOf(turns: Turn[]): string {
   );
 }
 
+/**
+ * 喂给模型几块原文。
+ *
+ * **必须与 eval 的 k 一致。** `eval/retrieval/README.md` 写着「recall@k 的 k 取实际
+ * 喂给 LLM 的块数」，而此前生产只喂 top-1——于是汇报的 zh@3 = 85% 是模型根本看不到的
+ * 数字，它实际只有 zh@1 = 45% 的机会拿到正确那段。
+ *
+ * 还有一处更隐蔽的对不上：`searchChunks` 的融合深度是 `limit * 3`，所以 limit 从 1 改成
+ * 3 连**排第一的那块**都可能变——eval 一直跑在 limit=3 上，生产跑在 limit=1 上，
+ * 两边的第一名本来就不保证是同一块。改成 3 之后两边才第一次是同一套参数。
+ */
+const TOP_K = 3;
+
 export function createChat(deps: ChatDeps): Chat {
   // 懒加载 + 只建一次（不变量 ④）。索引绑在这个实例上，天然不可能串到别的文档。
   let index: Promise<Chunk[]> | null = null;
@@ -154,7 +167,7 @@ export function createChat(deps: ChatDeps): Chat {
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
-      const [hit] = await searchChunks(await ensureIndex(), queryOf(turns), 1, deps.embedder);
+      const hits = await searchChunks(await ensureIndex(), queryOf(turns), TOP_K, deps.embedder);
 
       // **检索到的原文并进最后一条 user 消息，不发 system 角色。**
       //
@@ -164,12 +177,16 @@ export function createChat(deps: ChatDeps): Chat {
       //
       // 并进**最后一条**而不是插在最前：那是读者刚问的那句，材料紧挨着问题，
       // 也不会被前面几轮对话推远。
+      //
+      // 每块标出页码：不标的话模型说不清依据来自哪一页，读者点引用跳过去也对不上
+      // ——而引用可点正是 `grounding: 'retrieved'` 这个语义成立的必要条件。
       const messages = turns.map(toMessage);
       const last = messages.at(-1);
-      if (hit && last) {
+      if (hits.length > 0 && last) {
+        const material = hits.map((hit) => `[第 ${hit.page} 页]\n${hit.text}`).join("\n\n");
         messages[messages.length - 1] = {
           ...last,
-          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${hit.text}\n\n问题：${String(last.content)}`,
+          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${material}\n\n问题：${String(last.content)}`,
         };
       }
 
@@ -192,13 +209,13 @@ export function createChat(deps: ChatDeps): Chat {
       const citations: Citation[] = [
         // 命中的可能是正文块，也可能是读者自己的摘录——出处要如实说是哪一种，
         // 否则「这是原文」和「这是我当时记下的」在读者眼里没法区分。
-        ...(hit
-          ? [
-              hit.clipId === undefined
-                ? { kind: "chunk" as const, page: hit.page, snippet: hit.text }
-                : { kind: "clip" as const, page: hit.page, snippet: hit.text, clipId: hit.clipId },
-            ]
-          : []),
+        // 喂进去几块就给几条出处：读者要能逐条核对模型看到的是什么，
+        // 只给第一条等于把其余材料藏起来。
+        ...hits.map((hit) =>
+          hit.clipId === undefined
+            ? { kind: "chunk" as const, page: hit.page, snippet: hit.text }
+            : { kind: "clip" as const, page: hit.page, snippet: hit.text, clipId: hit.clipId },
+        ),
         ...collectSnapshots(turns).map((snapshot) => ({
           kind: "clip" as const,
           page: snapshot.page,
@@ -208,7 +225,7 @@ export function createChat(deps: ChatDeps): Chat {
 
       // grounding 是「依据的成色」，不是「有几条出处」：检索到原文最硬；
       // 只有贴入内容时是 pasted；两者都没有就必须诚实地说 none（不变量 ⑤）。
-      const grounding = hit ? "retrieved" : citations.length > 0 ? "pasted" : "none";
+      const grounding = hits.length > 0 ? "retrieved" : citations.length > 0 ? "pasted" : "none";
 
       return { text, citations, grounding };
     },
