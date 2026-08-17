@@ -25,6 +25,7 @@ export function Reader({
   onPages,
   onSelect,
   scale,
+  pinch,
   children,
   onCapturing,
   onError,
@@ -38,6 +39,13 @@ export function Reader({
   onPages: (total: number) => void;
   onSelect: (clipId: string | null, at?: { x: number; y: number }) => void;
   scale: number;
+  /**
+   * 捏合过程中的临时倍率，只做 CSS 缩放不重渲染（见 App 里的注释）。1 表示不在手势中。
+   *
+   * 加在 `.frame` 上而不是 `.stage` 上：文字层和标签都住在 `.frame` 里，一起缩放才
+   * 不会在手势中途相互错位。
+   */
+  pinch: number;
   /** 浮动菜单由外面渲染——它要动到对话与摘录，那些不归 Reader 管。 */
   children?: React.ReactNode;
   /**
@@ -309,7 +317,10 @@ export function Reader({
   return (
     // 松手统一在这里收：canvas 与字形 span 的事件都冒泡到这儿，两个处理器各管一半的话，
     // 「在文字上起手、在空白处松手」这类手势会掉在缝里。
-    <div className="frame" onPointerUp={(event) => void (start.current ? finish(at(event)) : finishSelection(event))}>
+    <div
+      className="frame"
+      style={pinch === 1 ? undefined : { transform: `scale(${pinch})`, transformOrigin: "50% 0" }}
+      onPointerUp={(event) => void (start.current ? finish(at(event)) : finishSelection(event))}>
       {children}
         <canvas
           ref={canvas}

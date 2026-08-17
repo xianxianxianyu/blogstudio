@@ -46,6 +46,58 @@ export function App({
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [scale, setScale] = useState(1.5);
+  /**
+   * 捏合过程中的临时倍率。**手势中只做 CSS 缩放，松手才真的重渲染。**
+   *
+   * 触控板一次捏合会打出几十个事件，每个都重渲染 PDF 加重建文字层的话必然卡顿。
+   * CSS 变换是白捡的：`at()` 与 `toPage()` 都按 `canvas.width / getBoundingClientRect().width`
+   * 换算，被 CSS 缩放过照样对；文字层在同一个 `.frame` 里，一起缩放，也不会错位。
+   */
+  const [pinch, setPinch] = useState(1);
+  const stage = useRef<HTMLDivElement>(null);
+  // 手势里要读当前 scale，但那个监听只挂一次，闭包会钉住旧值。同步进 ref 而不是
+  // 在渲染期直接写（渲染期写 ref 会被 react-hooks/refs 拦下，理由也确实成立）。
+  const scaleNow = useRef(scale);
+  useEffect(() => {
+    scaleNow.current = scale;
+  }, [scale]);
+
+  /**
+   * 双指捏合缩放。
+   *
+   * **Electron 是 Chromium，触控板捏合到不了 touch 事件**——浏览器把它映射成
+   * `ctrlKey` 为真的 wheel。必须 `preventDefault()`，否则 Chromium 会去缩放整个窗口，
+   * 连右栏一起变大；而 React 的 `onWheel` 是 passive 的，`preventDefault` 会被忽略
+   * 且只在 console 里警告，所以这里手动挂原生监听。
+   */
+  useEffect(() => {
+    const element = stage.current;
+    if (!element) return;
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    let factor = 1;
+
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return; // 普通滚动照旧翻页面
+      event.preventDefault();
+      const clamped = Math.min(4, Math.max(0.5, scaleNow.current * factor * Math.exp(-event.deltaY / 120)));
+      factor = clamped / scaleNow.current;
+      setPinch(factor);
+
+      clearTimeout(settle);
+      settle = setTimeout(() => {
+        // 松手了才落成真的 scale：这一下才重渲染 PDF。
+        setScale(Number((scaleNow.current * factor).toFixed(2)));
+        factor = 1;
+        setPinch(1);
+      }, 140);
+    };
+
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      element.removeEventListener("wheel", onWheel);
+      clearTimeout(settle);
+    };
+  }, []);
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +168,7 @@ export function App({
           </div>
 
           <div className="panes">
-            <div className="stage">
+            <div className="stage" ref={stage}>
               <Reader
                 ws={ws}
                 host={host}
@@ -125,6 +177,7 @@ export function App({
                 page={page}
                 onPages={setPages}
                 scale={scale}
+                pinch={pinch}
                 onSelect={(id, at) => {
                   setSelected(id);
                   setMenuAt(at ?? null);
