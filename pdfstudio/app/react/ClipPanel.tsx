@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Clip } from "../../src/clip/clip";
 import type { Result, Workspace } from "../../src/app/workspace";
+import type { Tag } from "../../src/tag/tag";
+import { TagPalette } from "./TagPalette";
 
 /**
  * 一条摘录的详情。
@@ -14,10 +16,12 @@ import type { Result, Workspace } from "../../src/app/workspace";
 export function ClipPanel({
   ws,
   clip,
+  tags,
   onRemoved,
 }: {
   ws: Workspace;
   clip: Clip;
+  tags: Tag[];
   onRemoved: () => void;
 }) {
   const [denied, setDenied] = useState<string | null>(null);
@@ -42,6 +46,7 @@ export function ClipPanel({
         <span className="faint grow">
           第 {clip.region.page} 页 · {clip.content?.route === "text" ? "文本层" : "视觉识别"}
         </span>
+        <TagPalette tags={tags} value={clip.tagId} onPick={(tagId) => apply(() => ws.setTag(clip.id, tagId))} />
         <button className="btn" onClick={() => apply(() => ws.markImportant(clip.id))}>
           {clip.important ? "★ 重要" : "☆ 标记重要"}
         </button>

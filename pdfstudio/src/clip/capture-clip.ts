@@ -2,6 +2,7 @@ import { reduce, sameRegion } from "./clip";
 import type { Clip, ClipsState } from "./clip";
 import type { ClipStore } from "./clip-store";
 import type { RecognizeOptions, Recognizer, Region } from "../recognizer/recognizer";
+import type { TagColor } from "../tag/tag";
 
 /**
  * 失败时**两样都要给**：调用方要用 state 继续（否则只能整个丢掉，摘录就没了），
@@ -39,8 +40,10 @@ export async function captureClip(
   docId: string,
   region: Region,
   options?: RecognizeOptions,
+  /** 上一次用过的颜色。连续划同一类时读者一次都不用点。 */
+  tagId: TagColor | null = null,
 ): Promise<CaptureOutcome> {
-  let next = reduce(state, { type: "capture", id: deps.newId(), region, at: deps.now() });
+  let next = reduce(state, { type: "capture", id: deps.newId(), region, at: deps.now(), tagId });
 
   // capture 会合并到同区域的已有摘录上，所以这条摘录的 id 未必是 newId() 给的那个
   // ——重试同一块地方时用的是原来那条的 id。按区域回查才拿得准。

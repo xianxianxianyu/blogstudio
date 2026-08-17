@@ -5,6 +5,8 @@ import type { Action, Clip, ClipsState } from "../clip/clip";
 import type { Bookshelf, Doc } from "../bookshelf/bookshelf";
 import type { ClipStore } from "../clip/clip-store";
 import type { RecognizeOptions, Recognizer, Region } from "../recognizer/recognizer";
+import { normalizeTags, renameTag as rename, type Tag, type TagColor } from "../tag/tag";
+import type { TagStore } from "../tag/tag-store";
 import type { Chat } from "../chat/chat";
 import type { RetentionConfig } from "../config/config";
 
@@ -19,6 +21,8 @@ import type { RetentionConfig } from "../config/config";
 export interface WorkspaceDeps {
   shelf: Bookshelf;
   store: ClipStore;
+  /** 标签表。省略就只有内存里那五个默认值，改名不落盘。 */
+  tags?: TagStore;
   /**
    * 视图在这里建 pdf.js 文档，交回依赖都接好了的 `Recognizer` 与 `Chat`。
    *
@@ -46,6 +50,15 @@ export interface WorkspaceState {
   docs: Doc[];
   docId: string | null;
   clips: Clip[];
+  /** 五个标签，全局共用（颜色即分类）。 */
+  tags: Tag[];
+  /**
+   * 上一次用过的颜色，新划的摘录默认带上它。
+   *
+   * 连续划同一类时一次都不用点——主路径仍是零点击（ADR-0016 的口径）。不落盘：
+   * 它是「这一阵在读什么」的痕迹，不是设置。
+   */
+  defaultTagId: TagColor | null;
 }
 
 /** 统一的返回形状：拒绝有理由（给读者看），失败有错误（给排查看）。 */
@@ -78,6 +91,10 @@ export interface Workspace {
   openDoc(docId: string): Promise<void>;
   removeDoc(docId: string): Promise<void>;
   capture(region: Region, options?: RecognizeOptions): Promise<Result>;
+  /** 给一条摘录设分类；`null` 是清掉。顺带记住这个颜色，下一条默认用它。 */
+  setTag(clipId: string, tagId: TagColor | null): Promise<Result>;
+  /** 改标签名。只写 tags.md，摘录文件一个字节不动——摘录只存 id。 */
+  renameTag(tagId: TagColor, name: string): Promise<Result>;
   viewClip(clipId: string): Promise<Result>;
   markImportant(clipId: string): Promise<Result>;
   editNote(clipId: string, text: string): Promise<Result>;
@@ -93,12 +110,14 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
   let chat: Chat | null = null;
   let clips: ClipsState = { clips: [], contexts: [] };
 
-  let snapshot: WorkspaceState = { docs, docId, clips: clips.clips };
+  let tags: Tag[] = normalizeTags([]);
+  let defaultTagId: TagColor | null = null;
+  let snapshot: WorkspaceState = { docs, docId, clips: clips.clips, tags, defaultTagId };
   const listeners = new Set<() => void>();
 
   /** 每个改状态的地方都要调它——漏掉一处，界面就会停在旧数据上而不报错。 */
   function publish(): void {
-    snapshot = { docs, docId, clips: clips.clips };
+    snapshot = { docs, docId, clips: clips.clips, tags, defaultTagId };
     for (const listener of listeners) listener();
   }
 
@@ -142,7 +161,8 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
     },
 
     async refresh(): Promise<void> {
-      docs = await deps.shelf.list();
+      // 标签跟书架一起刷：开机时先让读者看见有哪些书，调色盘也得同时是对的。
+      [docs, tags] = await Promise.all([deps.shelf.list(), deps.tags?.load() ?? tags]);
       publish();
     },
 
@@ -210,6 +230,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
         requireDoc(),
         region,
         options,
+        defaultTagId,
       );
       // 失败时也要收下 state：里面那条摘录已经退回可重试，丢掉它读者就得重新框。
       clips = outcome.state;
@@ -217,6 +238,27 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       return outcome.ok
         ? { ok: true, clipId: outcome.clipId }
         : { ok: false, reason: "识别失败", error: outcome.error, clipId: outcome.clipId };
+    },
+
+    async setTag(clipId: string, tagId: TagColor | null): Promise<Result> {
+      const result = await commit({ type: "set-tag", id: clipId, tagId }, clipId);
+      if (result.ok && tagId !== null) {
+        defaultTagId = tagId;
+        publish();
+      }
+      return result;
+    },
+
+    async renameTag(tagId: TagColor, name: string): Promise<Result> {
+      const next = rename(tags, tagId, name);
+      try {
+        await deps.tags?.save(next);
+      } catch (error) {
+        return { ok: false, reason: "保存标签失败", error };
+      }
+      tags = next;
+      publish();
+      return OK;
     },
 
     viewClip(clipId: string): Promise<Result> {

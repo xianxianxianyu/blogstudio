@@ -1,4 +1,6 @@
 import { useCallback, useState, useSyncExternalStore } from "react";
+import { TAG_COLORS } from "../../src/tag/tag";
+import type { Workspace } from "../../src/app/workspace";
 import { fieldSource } from "../../src/config/config";
 import type { Capability, EndpointConfig } from "../../src/config/config";
 import type { Settings } from "../../src/app/settings";
@@ -17,7 +19,7 @@ const FIELDS: { key: keyof EndpointConfig; label: string; secret?: boolean }[] =
   { key: "model", label: "模型" },
 ];
 
-export function SettingsPanel({ settings }: { settings: Settings }) {
+export function SettingsPanel({ settings, ws }: { settings: Settings; ws: Workspace }) {
   const config = useSyncExternalStore(
     useCallback((listener: () => void) => settings.subscribe(listener), [settings]),
     () => settings.config,
@@ -157,6 +159,24 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           })}
         </div>
       ))}
+
+      {/* 标签：颜色是它的身份，所以只能改名不能换色。改名只写 tags.md，
+          已有摘录的颜色和归属都不变——它们存的是 id。 */}
+      <h3 className="section">标签</h3>
+      <div>
+        {TAG_COLORS.map((id) => (
+          <label className="field" key={id}>
+            {/* 色块是给眼睛认的，标签的可读名字给读屏器——只有一个色块的话，
+                这一栏在读屏器里就是五个没有名字的输入框。 */}
+            <span className="swatch" data-tag={id} aria-hidden="true" />
+            <span className="sr-only">{id}</span>
+            <input
+              defaultValue={ws.state.tags.find((tag) => tag.id === id)?.name ?? ""}
+              onBlur={(event) => save(() => ws.renameTag(id, event.target.value))}
+            />
+          </label>
+        ))}
+      </div>
     </div>
   );
 }

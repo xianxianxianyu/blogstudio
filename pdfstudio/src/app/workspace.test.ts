@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, readdir } from "node:fs/promises";
+import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createWorkspace } from "./workspace";
 import { createBookshelf } from "../bookshelf/bookshelf";
 import { createClipStore } from "../clip/clip-store";
+import { createTagStore } from "../tag/tag-store";
 import { RecognizeError } from "../recognizer/recognizer";
 import type { ClipStore } from "../clip/clip-store";
 import type { Chat } from "../chat/chat";
@@ -53,6 +54,7 @@ async function workspace(recognizer: Recognizer = recognizerReturning(CONTENT), 
     ws: createWorkspace({
       shelf: createBookshelf(root),
       store: store ?? createClipStore(root),
+      tags: createTagStore(root),
       // 视图那侧在这里建 pdf.js 文档并接好 Recognizer 的依赖；Workspace 不认识 pdf.js。
       openDocument: async () => ({ recognizer, chat: fakeChat() }),
       newId: () => `c${++n}`,
@@ -60,6 +62,72 @@ async function workspace(recognizer: Recognizer = recognizerReturning(CONTENT), 
     }),
   };
 }
+
+describe("Workspace — 标签（颜色即分类）", () => {
+  it("设了标签之后，下一条新摘录默认带同一个颜色", async () => {
+    // 连续划同一类时一次都不用点——主路径仍是零点击。
+    const { ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    const first = await ws.capture(region());
+
+    await ws.setTag(first.clipId!, "pink");
+    await ws.capture(region(1, 10));
+
+    expect(ws.state.clips.map((clip) => clip.tagId)).toEqual(["pink", "pink"]);
+  });
+
+  it("清掉标签不会把「上次用的颜色」也清掉", async () => {
+    // 清掉是「这条不属于任何一类」，不是「我不想再用这个颜色了」。
+    const { ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    const first = await ws.capture(region());
+    await ws.setTag(first.clipId!, "blue");
+
+    await ws.setTag(first.clipId!, null);
+    await ws.capture(region(1, 10));
+
+    expect(ws.state.clips.find((clip) => clip.id !== first.clipId)!.tagId).toBe("blue");
+  });
+
+  it("改名落盘，重开还在，而摘录文件没被动过", async () => {
+    const { root, ws } = await workspace();
+    await ws.importDoc({ filename: "a.pdf", bytes: PAPER_A });
+    const captured = await ws.capture(region());
+    await ws.setTag(captured.clipId!, "green");
+    const clipFile = path.join(root, ws.state.docId!, "clips", captured.clipId!, "index.md");
+    const before = await readFile(clipFile, "utf8");
+
+    await ws.renameTag("green", "读懂了没");
+
+    // 摘录只存 id，所以改名不该重写它——这正是那个存储决定要换来的东西。
+    expect(await readFile(clipFile, "utf8")).toBe(before);
+    const reopened = createWorkspace({
+      shelf: createBookshelf(root),
+      store: createClipStore(root),
+      tags: createTagStore(root),
+      openDocument: async () => ({ recognizer: recognizerReturning(CONTENT), chat: fakeChat() }),
+      newId: () => "fresh",
+      now: () => NOW,
+    });
+    await reopened.refresh();
+    expect(reopened.state.tags.find((tag) => tag.id === "green")!.name).toBe("读懂了没");
+  });
+
+  it("没接标签存储时也能跑，只是改名不落盘", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "workspace-"));
+    const bare = createWorkspace({
+      shelf: createBookshelf(root),
+      store: createClipStore(root),
+      openDocument: async () => ({ recognizer: recognizerReturning(CONTENT), chat: fakeChat() }),
+      newId: () => "c1",
+      now: () => NOW,
+    });
+
+    await bare.refresh();
+
+    expect(bare.state.tags).toHaveLength(5);
+  });
+});
 
 describe("Workspace — 书架", () => {
   it("导入后自动打开，书架列表跟着更新", async () => {

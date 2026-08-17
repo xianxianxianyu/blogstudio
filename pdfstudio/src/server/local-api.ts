@@ -8,6 +8,7 @@ import type { ReadableStream } from "node:stream/web";
 import sirv from "sirv";
 import { createClipStore } from "../clip/clip-store";
 import { createBookshelf } from "../bookshelf/bookshelf";
+import { createTagStore } from "../tag/tag-store";
 import { deserialize, serializeClip } from "../clip/clip-wire";
 import { createLocalEngine } from "../model/local-engine";
 import { EMBEDDING_SPEC, RECOGNITION_SPEC, llamaEngineDeps } from "../model/llama-server";
@@ -54,6 +55,7 @@ export const ROUTES = {
   clips: "/__clips",
   docs: "/__docs",
   index: "/__index",
+  tags: "/__tags",
   models: "/__models",
   embed: "/__embed",
   engine: "/__engine",
@@ -70,6 +72,7 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
 
   const shelf = createBookshelf(options.libraryRoot);
   const store = createClipStore(options.libraryRoot);
+  const tags = createTagStore(options.libraryRoot);
 
 
   // 懒建：没人问文档时不该把 300 MB 加载进来。
@@ -138,6 +141,20 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
             return json({});
           }
           return { type: "application/pdf", data: Buffer.from(await shelf.read(docId)) };
+        });
+      },
+    },
+
+    {
+      // 标签表落在书架根上，不在某本书里——「存疑」在这篇和那篇是同一件事。
+      prefix: ROUTES.tags,
+      handler: (request, response) => {
+        respond(response, async () => {
+          if (request.method === "POST") {
+            await tags.save(JSON.parse(await readBody(request)));
+            return json({});
+          }
+          return json(await tags.load());
         });
       },
     },

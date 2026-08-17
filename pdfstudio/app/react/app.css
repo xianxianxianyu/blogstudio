@@ -158,10 +158,37 @@ canvas { display: block; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-radiu
 .mark.keep { border: 2px solid var(--mark); background: rgba(245, 158, 11, .2); }
 .mark.on { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* 文本摘录：荧光笔痕迹，不描边——描了就又变回「框」了。 */
-.mark.line { border: none; background: rgba(250, 204, 21, .34); border-radius: 1px; mix-blend-mode: multiply; }
-.mark.line.keep { background: rgba(245, 158, 11, .5); }
+/* 文本摘录：荧光笔痕迹，不描边——描了就又变回「框」了。
+
+   **色相归读者，浓淡归 important。** 颜色本来已经有含义（淡 = 随手划的，浓 = 重要），
+   读者能自选之后这条轴就没地方显示了，所以两轴拆开：标签给色相，important 给明度。
+   一个变量搞定，不给五种颜色各写两套规则。 */
+[data-tag="none"]   { --tag: 250, 204, 21; }
+[data-tag="yellow"] { --tag: 250, 204, 21; }
+[data-tag="green"]  { --tag: 74, 222, 128; }
+[data-tag="blue"]   { --tag: 96, 165, 250; }
+[data-tag="pink"]   { --tag: 244, 114, 182; }
+[data-tag="purple"] { --tag: 192, 132, 252; }
+
+.mark.line { border: none; background: rgba(var(--tag, 250, 204, 21), .34); border-radius: 1px; mix-blend-mode: multiply; }
+.mark.line.keep { background: rgba(var(--tag, 245, 158, 11), .55); }
 .mark.line.on { outline: 1.5px solid var(--accent); outline-offset: 0; }
+
+/* ── 调色盘 ─────────────────────────────────────────────────── */
+
+.swatch {
+  width: 18px; height: 18px; flex: none; padding: 0;
+  border: 1px solid rgba(0, 0, 0, .18); border-radius: 5px;
+  background: rgba(var(--tag, 228, 228, 231), .85);
+}
+/* 没分类时露出的是个空框，不是一块黄——「还没选」和「选了黄」得看得出区别。 */
+.swatch.current[data-tag="none"] { background: transparent; border-style: dashed; }
+.swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.palette { display: inline-flex; gap: 4px; }
+.row.filter { margin-bottom: 10px; gap: 6px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+/* 列表里的小圆点：只是认色，不可点，所以比调色盘上的小一圈。 */
+.swatch.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
 
 /* ── 摘录 ───────────────────────────────────────────────────── */
 

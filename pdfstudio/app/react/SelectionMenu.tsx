@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Clip } from "../../src/clip/clip";
+import type { Tag } from "../../src/tag/tag";
+import { TagPalette } from "./TagPalette";
 import type { Workspace } from "../../src/app/workspace";
 
 /**
@@ -15,12 +17,14 @@ import type { Workspace } from "../../src/app/workspace";
 export function SelectionMenu({
   ws,
   clip,
+  tags,
   at,
   onAsk,
   onClose,
 }: {
   ws: Workspace;
   clip: Clip;
+  tags: Tag[];
   /** 菜单挂在哪，**视口坐标**（指针事件的 clientX/clientY）。 */
   at: { x: number; y: number };
   onAsk: () => void;
@@ -80,6 +84,7 @@ export function SelectionMenu({
         }}
         onBlur={commit}
       />
+      <TagPalette tags={tags} value={clip.tagId} onPick={(tagId) => void ws.setTag(clip.id, tagId)} />
       <button
         className="btn"
         title={clip.important ? "取消重要" : "标记为重要（不会被自动清理）"}

@@ -20,6 +20,7 @@ import { createHttpIndexCache } from "../http-index-cache";
 import { createModelClient } from "../../src/model/openai-compatible";
 import { parseConfig, resolveEndpoint } from "../../src/config/config";
 import { createHttpClipStore } from "../http-clip-store";
+import { createHttpTagStore } from "../http-tags";
 import { createHttpBookshelf } from "../http-bookshelf";
 import { createHttpConfigStore } from "../http-config";
 import { createSettings } from "../../src/app/settings";
@@ -114,6 +115,7 @@ const host = createPdfHost();
 const ws = createWorkspace({
   shelf: createHttpBookshelf(apiUrl("/__docs")),
   store: createHttpClipStore(apiUrl("/__clips")),
+  tags: createHttpTagStore(apiUrl("/__tags")),
   async openDocument(bytes, doc, clips) {
     const document = await host.open(bytes);
     const chat = createChat({

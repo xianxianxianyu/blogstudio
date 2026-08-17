@@ -144,6 +144,7 @@ export function App({
                   <SelectionMenu
                     ws={ws}
                     clip={clip}
+                    tags={state.tags}
                     at={menuAt}
                     onClose={() => setMenuAt(null)}
                     onAsk={() => {
@@ -186,6 +187,7 @@ export function App({
                   )}
                   <ClipsPane
                     ws={ws}
+                    tags={state.tags}
                     clips={state.clips}
                     selected={clip?.id ?? null}
                     onSelect={setSelected}
@@ -203,7 +205,7 @@ export function App({
 
       <SettingsSheet open={showSettings} onClose={() => setShowSettings(false)}>
         <RetentionNotice settings={settings} />
-        <SettingsPanel settings={settings} />
+        <SettingsPanel settings={settings} ws={ws} />
       </SettingsSheet>
     </>
   );

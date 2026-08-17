@@ -355,6 +355,7 @@ export function Reader({
                 return (
                   <div
                     key={`${clip.id}-${index}`}
+                    data-tag={clip.tagId ?? "none"}
                     className={[shape, clip.important ? "keep" : "", clip.id === selected ? "on" : ""]
                       .filter(Boolean)
                       .join(" ")}
