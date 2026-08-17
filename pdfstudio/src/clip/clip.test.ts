@@ -45,18 +45,28 @@ describe("Clip 目录标题", () => {
     expect(clipTitle({ ...clip, translation: "主流的序列转换模型" })).toBe("主流的序列转换模型");
   });
 
-  it("长内容截在读得通的地方，不是硬切", () => {
+  it("不在这里按字数截——截断交给 CSS，它按像素断且自带省略号", () => {
+    // 按字数截会撞在词中间：实测截出过 `\mathrm{FFN}(x)=\max(0`、`（NIPS`、光秃秃一个
+    // `Jakob`。这里只留一个宽松上限，别让整段正文进 DOM。
     const [clip] = readyClip("x").clips;
     const long = { ...clip, translation: "主流的序列转换模型基于复杂的循环或卷积神经网络，其中包括编码器和解码器。" };
 
-    // 逗号处断开，不留半个词，也不带省略号。
-    expect(clipTitle(long)).toBe("主流的序列转换模型基于复杂的循环或卷积神经网络");
+    expect(clipTitle(long)).toBe(long.translation);
+    expect(clipTitle({ ...clip, translation: "一".repeat(200) })).toHaveLength(60);
   });
 
-  it("找不到断句处才硬截加省略号", () => {
+  it("开头的标点去掉——摘录常常从半句话开始", () => {
     const [clip] = readyClip("x").clips;
 
-    expect(clipTitle({ ...clip, translation: "一".repeat(40) })).toBe(`${"一".repeat(24)}…`);
+    expect(clipTitle({ ...clip, translation: "。不仅各个注意力头明显学会了执行不同的任务" })).toBe(
+      "不仅各个注意力头明显学会了执行不同的任务",
+    );
+  });
+
+  it("换行和连续空白压成单个空格，一行放得下", () => {
+    const [clip] = readyClip("x").clips;
+
+    expect(clipTitle({ ...clip, translation: "第一行\n\n  第二行" })).toBe("第一行 第二行");
   });
 
   it("读者设的标题优先于推导", () => {

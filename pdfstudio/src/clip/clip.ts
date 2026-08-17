@@ -385,25 +385,25 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 /**
  * 目录里显示的那一行：读者定的优先，没定就从内容推导。
  *
- * **一行，不是两行**——这一栏是目录，正文在详情里。所以要截断，而且要截在读得通的
- * 地方：句末优先，其次逗号，都没有才硬截。
+ * **截断交给 CSS**（`text-overflow: ellipsis`），这里只做一个宽松的上限。
+ * 在这儿按字数截会撞在词中间——实测截出过 `\mathrm{FFN}(x)=\max(0`、`（NIPS`、
+ * 光秃秃一个 `Jakob`。CSS 按像素断，且断在哪都自带省略号。
  *
- * 推导的取材顺序是「读者最先想看的」：译文 → 原文 → 图像描述。与 `ClipPanel` 里
- * 「译文排在原文前面」同一个理由——中文读者读英文论文，先要看的是译文。
+ * 取材顺序是「读者最先想看的」：译文 → 原文 → 图像描述。与 `ClipPanel` 里「译文排在
+ * 原文前面」同一个理由——中文读者读英文论文，先要看的是译文。
  */
-const TITLE_CHARS = 24;
+const TITLE_CHARS = 60;
+
+/** 摘录常常从半句话开始，开头那个标点留着很难看（`。不仅各个注意力头…`）。 */
+const LEADING_PUNCTUATION = /^[\s。．.，,、；;：:）)】\]」』”’!?！？]+/;
 
 export function clipTitle(clip: Clip): string {
   if (clip.title !== null) return clip.title;
 
   const source = (clip.translation ?? clip.sourceText ?? clip.content?.multimodal ?? "")
     .replace(/\s+/g, " ")
+    .replace(LEADING_PUNCTUATION, "")
     .trim();
   if (source === "") return "（纯图）";
-  if (source.length <= TITLE_CHARS) return source;
-
-  const head = source.slice(0, TITLE_CHARS);
-  // 从后往前找一个能断句的地方，找不到就硬截加省略号。
-  const cut = Math.max(...["。", "．", ".", "；", ";", "，", ",", " "].map((mark) => head.lastIndexOf(mark)));
-  return cut > TITLE_CHARS / 2 ? head.slice(0, cut) : `${head}…`;
+  return source.length <= TITLE_CHARS ? source : source.slice(0, TITLE_CHARS);
 }

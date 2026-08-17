@@ -193,40 +193,47 @@ canvas { display: block; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-radiu
 /* 目录标题：摘录的上一级容器。祖先路径用小字放在上面一行，不跟标题挤在一起——
    Attention 的目录有三层，「Model Architecture › Attention › Scaled Dot-Product
    Attention」挤成一行在 400px 的栏里会折成三行。 */
-/* 层级靠字号和缩进，像 markdown 的 h1/h2/h3。只有顶层描一条线——三层都描的话，
-   一屏里六七条横线，反而看不出谁包着谁。 */
-.section-head { margin: 16px 0 4px; font-weight: 600; line-height: 1.35; }
-.section-head:first-child { margin-top: 0; }
-.section-head[data-level="0"] { font-size: 15px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
-.section-head[data-level="1"] { font-size: 13.5px; padding-left: 10px; }
-.section-head[data-level="2"] { font-size: 12.5px; padding-left: 20px; color: var(--muted); }
+/* 这一栏读起来是一份文档：目录是标题、摘录是正文。层级靠字号与缩进，不靠横线——
+   三层各描一条线的话一屏六七条，反而看不出谁包着谁。 */
+.outline-part { padding-left: calc(var(--depth) * 14px); }
+
+.section-head {
+  margin: 22px 0 6px;
+  font-weight: 600;
+  line-height: 1.4;
+  font-size: calc(15px - var(--depth) * 1px);
+}
+.outline-part:first-child .section-head { margin-top: 2px; }
+/* 只有顶层描线：它是「换了一个大节」的信号，二三层靠缩进就够。 */
+.outline-part:not([data-depth="0"]) .section-head { color: var(--muted); }
+.outline-part[data-depth="0"] .section-head { padding-bottom: 5px; border-bottom: 1px solid var(--line); }
 
 /* ── 摘录 ───────────────────────────────────────────────────── */
 
 .clip-row {
   display: flex;
   align-items: baseline;
-  gap: 5px;
+  gap: 7px;
   width: 100%;
   text-align: left;
   background: none;
   border: none;
-  border-left: 3px solid var(--line);
-  padding: 5px 10px;
-  margin-bottom: 2px;
-  border-radius: 0 6px 6px 0;
+  /* 不再描左边那条竖线：分类已经有色点、重要已经有 ★，它不承载任何信息，只是把
+     每一行框成一个格子，看着像表格而不是笔记。 */
+  padding: 7px 10px;
+  margin-bottom: 1px;
+  border-radius: 7px;
+  color: var(--muted);
+  transition: background .12s;
 }
-.clip-row:hover { background: var(--paper); }
-.clip-row.on { background: var(--accent-soft); border-left-color: var(--accent); }
-.clip-row.keep { border-left-color: var(--mark); }
-/* 一行就是一行：截断而不是折行——这一栏是目录，正文在详情里。 */
+.clip-row:hover { background: var(--paper); color: var(--ink); }
+.clip-row.on { background: var(--accent-soft); color: var(--accent); }
+/* 标了重要的用字重提出来，不用颜色——颜色那条通道归分类（ADR-0017）。 */
+.clip-row.keep { color: var(--ink); font-weight: 500; }
+
+/* 一行就是一行：截断交给 CSS，它按像素断且自带省略号。 */
 .clip-row .line { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
-.clip-row .badge { flex: none; font-size: 11px; color: var(--muted); }
-.title-input {
-  width: 100%; font: inherit; font-weight: 600; padding: 5px 8px; margin-bottom: 8px;
-  border: 1px solid transparent; border-radius: 6px; background: var(--paper);
-}
-.title-input:focus { border-color: var(--accent); background: #fff; outline: none; }
+.clip-row .badge { flex: none; font-size: 11px; opacity: .75; }
 
 .field { display: flex; gap: 10px; align-items: center; margin: 6px 0; }
 .field > span:first-child { width: 3.6em; color: var(--muted); flex: none; font-size: 13px; }

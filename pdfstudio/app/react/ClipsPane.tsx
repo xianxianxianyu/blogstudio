@@ -105,10 +105,19 @@ export function ClipsPane({
       {/* 这一栏读起来是一份 markdown 文档：目录是标题，摘录是正文。层级靠字号，
           不靠面包屑——祖先标题即使自己没摘录也会留着（见 groupClipsBySection）。 */}
       {groups.map((group) => (
-        <section key={group.section === null ? "#" : `${group.section.page}-${group.section.title}`}>
-          <h4 className="section-head" data-level={Math.min(group.section?.level ?? 0, 2)}>
-            {group.section?.title ?? "开头"}
-          </h4>
+        <section
+          key={group.section === null ? "#" : `${group.section.page}-${group.section.title}`}
+          className="outline-part"
+          // 标题和它底下的摘录用同一个缩进：正文跟着自己的标题走，读起来才是一份文档，
+          // 而不是标题缩进、正文各自贴在左边。
+          //
+          // 层级同时写成 data 属性和 CSS 变量：变量给 calc() 算缩进与字号，data 属性给
+          // 选择器。**不拿 [style*="--depth: 0"] 去选**——React 序列化内联样式时空格或
+          // 分号一变，那种选择器就静默失效。
+          data-depth={Math.min(group.section?.level ?? 0, 2)}
+          style={{ "--depth": Math.min(group.section?.level ?? 0, 2) } as React.CSSProperties}
+        >
+          <h4 className="section-head">{group.section?.title ?? "开头"}</h4>
 
           {group.clips.map((clip) => (
         <button
