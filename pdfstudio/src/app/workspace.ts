@@ -34,6 +34,8 @@ export interface WorkspaceDeps {
     bytes: Uint8Array,
     doc: Doc,
     clips: () => Clip[],
+    /** 标签表访问器。同样传函数：改个名不该等到重开这本书才生效。 */
+    tags: () => Tag[],
   ): Promise<{ recognizer: Recognizer; chat: Chat }>;
   newId(): string;
   now(): number;
@@ -180,7 +182,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       const doc = docs.find((candidate) => candidate.id === id);
       if (!doc) throw new Error("书架上没有这本书。");
 
-      ({ recognizer, chat } = await deps.openDocument(bytes, doc, () => clips.clips));
+      ({ recognizer, chat } = await deps.openDocument(bytes, doc, () => clips.clips, () => tags));
       docId = id;
 
       // 打开这本书时顺手回收它到期的摘录（ADR-0012）。

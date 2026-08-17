@@ -70,6 +70,10 @@
 | fu-07 | zh | 基础版模型是在什么硬件上训练的？ ‖ 那要多久？ | arXiv:1706.03762 (Transformer) | 7 | The big models were trained for 300,000 steps (3.5 days). | **退化追问**：整句只剩「多久」，没有任何可检索的名词 |
 | fu-08 | zh | 多头注意力一共并行几个头？ ‖ 那它呢？ | arXiv:1706.03762 (Transformer) | 5 | In this work we employ h = 8 parallel attention layers, or heads. | **退化追问**：整句只有指代 |
 | fu-09 | zh | 编码器由多少个相同的层堆叠而成？ ‖ 再详细点 | arXiv:1706.03762 (Transformer) | 3 | The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers. | **退化追问**：整句不含任何实词 |
+| tg-01 | zh | 读懂了的那段讲了什么？ | arXiv:1512.03385 (ResNet) | 2 | (or unable to do so in feasible time). In this paper, we address the degradation problem | **标签题**：**退化问句**，除了标签名没有任何主题词。ResNet 里 green 只有 p04 一条，无歧义 |
+| tg-02 | zh | 我标成读懂了的地方是什么内容？ | arXiv:2006.11239 (DDPM) | 2 | This paper presents progress in diffusion probabilistic models | **标签题**：DDPM 里 green 只有 p01 一条，无歧义 |
+| tg-03 | zh | 标成读懂了的那段说了什么？ | arXiv:1706.03762 (Transformer) | 2 | Recurrent neural networks, long short-term memory | **标签题**：Transformer 里 green 只有 p02 一条，无歧义 |
+| tg-04 | zh | 标成要点的那些图表都在说什么？ | arXiv:1512.03385 (ResNet) | 4 | VGG-19 / 34-layer plain / 34-layer residual 结构对比图 | **标签题**：yellow 三条里两条在 p.4 |
 | na-01 | zh | 这个模型在语音识别任务上的词错误率是多少？ | arXiv:1706.03762 (Transformer) | — | — | 文档答不了。全文无 `speech` / `word error`；结论只把 audio 列为未来工作，是设计好的近似诱饵 |
 | na-02 | zh | 这些网络在语义分割数据集上的平均交并比是多少？ | arXiv:1512.03385 (ResNet) | — | — | 文档答不了。全文只把 COCO segmentation 作为比赛名次提了一句，无任何分割指标；`IoU` 仅作检测阈值出现（`mAP @ IoU = 0.5`），是设计好的近似诱饵 |
 | na-03 | en | What FID does the model achieve on class-conditional ImageNet 128×128 generation? | arXiv:2006.11239 (DDPM) | — | — | 文档答不了。全文 0 次提及 ImageNet；但满页都是 FID 表格，最易诱发假出处 |

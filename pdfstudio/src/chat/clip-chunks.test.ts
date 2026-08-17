@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { clipChunks } from "./clip-chunks";
+import { defaultTags } from "../tag/tag";
 import type { Clip } from "../clip/clip";
 import type { Screenshot } from "../recognizer/recognizer";
 
@@ -101,5 +102,31 @@ describe("摘录进检索索引", () => {
     const chunks = clipChunks([vision({ sourceText: "   ", multimodal: "" })]);
 
     expect(chunks).toEqual([]);
+  });
+});
+
+describe("标签名进检索文本", () => {
+  it("带标签的摘录，块里有标签名", () => {
+    // 量过才加的：退化的分类问句（「读懂了的那段讲了什么」，除了标签名没有任何主题词）
+    // 0/4 → 3/4，而摘录题 6/6、追问题 9/9、abstention 2/2、margin 分布全部不动。
+    const [chunk] = clipChunks([{ ...vision({ multimodal: "结构对比图" }), tagId: "green" }], defaultTags());
+
+    expect(chunk.text).toContain("读懂了");
+  });
+
+  it("没标签的摘录，块里一个字都不多", () => {
+    const untagged = vision({ multimodal: "结构对比图" });
+    const [tagged] = clipChunks([untagged], defaultTags());
+    const [bare] = clipChunks([untagged]);
+
+    expect(tagged.text).toBe(bare.text);
+  });
+
+  it("标签表里查不到那个 id 时不塞空串", () => {
+    // 塞空串会在块头上留一行空行，而空白进不了任何查询、只会往背景分布掺水——
+    // abstention 的门槛正是按背景分布标定的。
+    const [chunk] = clipChunks([{ ...vision({ multimodal: "结构对比图" }), tagId: "purple" }], []);
+
+    expect(chunk.text.startsWith("\n")).toBe(false);
   });
 });

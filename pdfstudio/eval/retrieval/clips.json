@@ -31,7 +31,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "pink"
     },
     {
       "id": "f02",
@@ -64,7 +65,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "pink"
     },
     {
       "id": "f03",
@@ -97,7 +99,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "pink"
     },
     {
       "id": "f04",
@@ -130,7 +133,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "pink"
     },
     {
       "id": "g01",
@@ -164,7 +168,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     },
     {
       "id": "p01",
@@ -198,7 +203,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "green"
     },
     {
       "id": "m03",
@@ -232,7 +238,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     }
   ],
   "1706.03762.pdf": [
@@ -267,7 +274,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "pink"
     },
     {
       "id": "f06",
@@ -300,7 +308,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "pink"
     },
     {
       "id": "g02",
@@ -334,7 +343,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     },
     {
       "id": "g03",
@@ -368,7 +378,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     },
     {
       "id": "g04",
@@ -402,7 +413,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     },
     {
       "id": "p02",
@@ -436,7 +448,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "green"
     },
     {
       "id": "m02",
@@ -470,7 +483,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     }
   ],
   "1512.03385.pdf": [
@@ -506,7 +520,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     },
     {
       "id": "g06",
@@ -540,7 +555,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     },
     {
       "id": "p04",
@@ -574,7 +590,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "green"
     },
     {
       "id": "m01",
@@ -608,7 +625,8 @@
       "note": null,
       "label": "dot",
       "important": true,
-      "lastViewedAt": 0
+      "lastViewedAt": 0,
+      "tagId": "yellow"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import type { Clip } from "../clip/clip";
+import type { Tag } from "../tag/tag";
 import type { Chunk } from "./retrieval";
 
 /**
@@ -45,16 +46,44 @@ function retrievableText(clip: Clip): string[] {
  * 空白一律不产出块：空块对任何查询都不命中，却会进背景分布把中位数拉低，于是
  * `peakMargin` 虚高——**看起来更有把握，其实只是掺了水**。
  */
-export function clipChunks(clips: Clip[]): Chunk[] {
+export function clipChunks(clips: Clip[], tags: Tag[] = []): Chunk[] {
   const chunks: Chunk[] = [];
+  const nameOf = (clip: Clip) =>
+    tags.find((tag) => tag.id === clip.tagId)?.name ?? null;
 
   for (const clip of clips) {
     // 墓碑（content 为 null）与还没识别完的都在这里被滤掉：
     // 保留规则即索引规则（ADR-0012 边界），内容过期，索引项随之过期。
-    const text = retrievableText(clip).join("\n\n");
-    if (text.trim() === "") continue;
+    const parts = retrievableText(clip);
+    if (parts.join("").trim() === "") continue;
+    // 标签名进检索文本——是不是值得，由 eval 决定，见文件末尾。
+    const name = nameOf(clip);
+    const text = (name === null ? parts : [name, ...parts]).join("\n\n");
     chunks.push({ page: clip.region.page, text, clipId: clip.id });
   }
 
   return chunks;
 }
+
+/**
+ * ## 标签名为什么进了检索文本
+ *
+ * 本来是有理由不加的：上面那条注释说文本路由的原文**故意不进索引**，因为重复内容会
+ * 往背景分布掺水，而 abstention 的门槛（`MIN_PEAK_MARGIN`）正是按背景分布标定出来
+ * 的——刚从 0.10 重标到 0.15。一个 2–4 字的名字附在**每一条**摘录块上，风险是同一个。
+ *
+ * 所以先量了再定（`eval/retrieval` 的 `tg-*`，退化问句，除标签名外没有任何主题词）：
+ *
+ *   标签题 recall@3   0/4 → 3/4     基线那 4 条**全部 abstain**，一条都没检索到
+ *   摘录题 / 追问题   6/6 / 9/9     不动
+ *   abstention        2/2 → 2/2     不动
+ *   中文 margin 中位  0.236 → 0.231
+ *   答不了 margin 中位 0.127 → 0.127 不动
+ *   权衡曲线          每一档完全一样
+ *
+ * 掺水没有发生。收益大、代价量不出来，所以加。
+ *
+ * 唯一没救回来的是 tg-04（「标成要点的那些图表都在说什么」）：yellow 挂在 18 条里的
+ * 7 条上，**没有哪一条能形成尖峰**，于是判据照常 abstain。这是对的行为——成员太多的
+ * 标签本来就不该靠语义检索找，那是**筛选**要干的事（右栏那排颜色点）。
+ */

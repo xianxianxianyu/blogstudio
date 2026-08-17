@@ -116,7 +116,7 @@ const ws = createWorkspace({
   shelf: createHttpBookshelf(apiUrl("/__docs")),
   store: createHttpClipStore(apiUrl("/__clips")),
   tags: createHttpTagStore(apiUrl("/__tags")),
-  async openDocument(bytes, doc, clips) {
+  async openDocument(bytes, doc, clips, tags) {
     const document = await host.open(bytes);
     const chat = createChat({
       document,
@@ -127,6 +127,8 @@ const ws = createWorkspace({
       embedder,
       // 摘录进检索池：文本层在公式和图上是空的，那两处只有摘录里有。
       clips,
+      // 标签名也进摘录块：量过，退化的分类问句 0/4 → 3/4，别的指标一个没动。
+      tags,
       // 正文向量缓存到这本书的文件夹里。不缓存的话每次打开都要重算一遍整篇论文，
       // 浏览器 WASM 里要一两分钟——读者每次开书都得先等着才能问第一句。
       indexCache: createHttpIndexCache(apiUrl("/__index"), doc.id, EMBEDDING_MODEL),

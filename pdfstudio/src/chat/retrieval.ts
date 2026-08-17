@@ -2,6 +2,7 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { Embedder } from "../model/embedder";
 import { chunkDocument } from "./chunking";
 import { clipChunks } from "./clip-chunks";
+import type { Tag } from "../tag/tag";
 import type { Clip } from "../clip/clip";
 
 // Chat 的**内部缝**：`chat-retrieval-interface.md` 判定 Retrieval 不独立成模块，
@@ -43,6 +44,7 @@ export async function buildIndex(
   embedder?: Embedder,
   clips: Clip[] = [],
   cache?: IndexCache,
+  tags: Tag[] = [],
 ): Promise<Chunk[]> {
   // 正文这一半可以从缓存来：不缓存的话每次打开这本书都要给整篇论文重算一遍向量，
   // 浏览器 WASM 里要一两分钟——读者每次打开书都得先等着才能问第一句。
@@ -57,7 +59,7 @@ export async function buildIndex(
   // 摘录块每次现算。正文块与它们进同一个池子：读者问的是「这篇论文怎么说的」，
   // 不是「去正文里找」还是「去我的摘录里找」。合库的代价是摘录短而密，可能在融合里
   // 系统性压过正文块——那要用 eval 量，不能靠直觉判（`.scratch/pdfstudio-clip/issues/01`）。
-  const fromClips = clipChunks(clips);
+  const fromClips = clipChunks(clips, tags);
   if (embedder) await attachVectors(fromClips, embedder);
 
   return [...body, ...fromClips];

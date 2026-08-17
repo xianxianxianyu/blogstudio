@@ -3,6 +3,7 @@ import { buildIndex, searchChunks } from "./retrieval";
 import type { Embedder } from "../model/embedder";
 import type { Chunk, IndexCache } from "./retrieval";
 import type { Clip } from "../clip/clip";
+import type { Tag } from "../tag/tag";
 import type { ModelClient, ModelMessage } from "../model/model-client";
 import type { Screenshot } from "../recognizer/recognizer";
 
@@ -61,6 +62,13 @@ export interface ChatDeps {
    * 把建索引那一刻的快照钉死，之后新框的摘录永远检索不到，而且不会有任何报错。
    */
   clips?: () => Clip[];
+  /**
+   * 标签表。标签名进摘录块的检索文本——eval 量过：退化的分类问句 0/4 → 3/4，而摘录题、
+   * 追问题、abstention 与 margin 分布全部不动（见 eval/retrieval/README.md）。
+   *
+   * 同样是函数：改个名不该等到重开这本书才生效。
+   */
+  tags?: () => Tag[];
   /** 正文向量的缓存。不给就每次重算——一篇论文在浏览器里要一两分钟。 */
   indexCache?: IndexCache;
 }
@@ -205,7 +213,14 @@ export function createChat(deps: ChatDeps): Chat {
   let index: Promise<Chunk[]> | null = null;
   // 摘录也进索引：文本层在公式和图上是空的，那两处只有摘录里有
   //（`.scratch/pdfstudio-clip/issues/01`）。取值时才读，reindex 之后能拿到新摘录。
-  const ensureIndex = () => (index ??= buildIndex(deps.document, deps.embedder, deps.clips?.() ?? [], deps.indexCache));
+  const ensureIndex = () =>
+    (index ??= buildIndex(
+      deps.document,
+      deps.embedder,
+      deps.clips?.() ?? [],
+      deps.indexCache,
+      deps.tags?.() ?? [],
+    ));
 
   return {
     async reindex(): Promise<void> {

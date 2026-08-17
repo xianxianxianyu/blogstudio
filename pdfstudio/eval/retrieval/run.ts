@@ -13,6 +13,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { openFixturePdf } from "../../test/fixtures";
+import { defaultTags } from "../../src/tag/tag";
 import { buildIndex, searchChunks, scoreChunks, peakMargin } from "../../src/chat/retrieval";
 import type { Clip } from "../../src/clip/clip";
 import type { Chunk } from "../../src/chat/retrieval";
@@ -42,7 +43,7 @@ async function readQuestions(): Promise<Question[]> {
     const cells = line.split("|").map((cell) => cell.trim());
     if (cells.length < 8) continue;
     const [, id, lang, question, source, page] = cells;
-    if (!/^(zh|en|na|cl|fu)-\d\d$/.test(id)) continue;
+    if (!/^(zh|en|na|cl|fu|tg)-\d\d$/.test(id)) continue;
 
     const arxiv = source.match(/arXiv:([\d.]+)/);
     if (!arxiv) continue;
@@ -139,6 +140,8 @@ async function main(): Promise<void> {
           await openFixturePdf(question.paper),
           embedder,
           clipsByPaper[question.paper] ?? [],
+          undefined,
+          defaultTags(),
         ),
       );
     }
@@ -181,8 +184,12 @@ async function main(): Promise<void> {
   // ——那条门槛是在原来 29 条上标出来的。
   const clipQuestions = outcomes.filter((outcome) => outcome.question.id.startsWith("cl-"));
   const followUps = outcomes.filter((outcome) => outcome.question.id.startsWith("fu-"));
+  const tagged = outcomes.filter((outcome) => outcome.question.id.startsWith("tg-"));
   const main = outcomes.filter(
-    (outcome) => !outcome.question.id.startsWith("cl-") && !outcome.question.id.startsWith("fu-"),
+    (outcome) =>
+      !outcome.question.id.startsWith("cl-") &&
+      !outcome.question.id.startsWith("fu-") &&
+      !outcome.question.id.startsWith("tg-"),
   );
 
   // 「答不了」的题也带 lang，但它们没有正确页，混进 recall 的分母会把成绩冲淡。
@@ -198,6 +205,7 @@ async function main(): Promise<void> {
 
   reportClipQuestions(clipQuestions, useClips);
   reportFollowUps(followUps);
+  reportTagQuestions(tagged);
   console.log(`语料 ${indexes.size} 篇，问题 ${questions.length} 条（zh ${zh.length} / en ${en.length} / 答不了 ${na.length}）\n`);
 
   console.log("           recall@1  recall@3");
@@ -309,6 +317,28 @@ function reportClipQuestions(outcomes: Outcome[], useClips: boolean): void {
  * 那条规则**，不是它的复制品：eval 与生产在参数上对不上的亏已经吃过一次（生产喂
  * top-1 而这里量 recall@3）。
  */
+/**
+ * 标签题：**退化问句**，除了标签名没有任何主题词。
+ *
+ * 「标签名要不要进检索文本」只能这么量——留着主题词的话，检索本来就能命中，
+ * 测的是别的东西。fu-01…06 那次已经栽过一回：六条追问题全中，因为它们其实都还
+ * 保留着主题词，假设根本没被检验。
+ */
+function reportTagQuestions(outcomes: Outcome[]): void {
+  if (outcomes.length === 0) return;
+  const hit = outcomes.filter((outcome) => outcome.pages.slice(0, 3).includes(outcome.question.page!));
+
+  console.log(
+    `标签题 recall@3：${((hit.length / outcomes.length) * 100).toFixed(1)}% (${hit.length}/${outcomes.length})`,
+  );
+  for (const outcome of outcomes) {
+    const ok = hit.includes(outcome);
+    const from = outcome.pages.length === 0 ? "什么都没检索到" : `检索到 p.${outcome.pages.slice(0, 3).join("/")}`;
+    console.log(`  ${outcome.question.id}  ${ok ? "✓" : "✗"} 期待 p.${outcome.question.page}，${from}`);
+  }
+  console.log("");
+}
+
 function reportFollowUps(outcomes: Outcome[]): void {
   if (outcomes.length === 0) return;
   const hit = outcomes.filter((outcome) => outcome.pages.slice(0, 3).includes(outcome.question.page!));
