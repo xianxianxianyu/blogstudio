@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type * as pdfjs from "pdfjs-dist";
+import * as pdfjs from "pdfjs-dist";
 import { isMisTouch, toCanvasBox, toPageRect } from "../../src/capture/capture";
 import { highlightBoxes } from "../../src/recognizer/coverage";
 import type { Workspace, WorkspaceState } from "../../src/app/workspace";
@@ -40,6 +40,7 @@ export function Reader({
   onError: (message: string | null) => void;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState<pdfjs.PageViewport | null>(null);
   const [drag, setDrag] = useState<{ from: Point; to: Point } | null>(null);
   const [display, setDisplay] = useState<{ width: number; height: number } | null>(null);
@@ -77,8 +78,28 @@ export function Reader({
       if (cancelled) return;
       setViewport(vp);
       onPages(document.numPages);
-      const { items } = await rendered.getTextContent();
-      if (!cancelled) setTextItems(items.filter((item): item is TextItem => "str" in item));
+      const content = await rendered.getTextContent();
+      if (cancelled) return;
+      setTextItems(content.items.filter((item): item is TextItem => "str" in item));
+
+      // 文本层：透明的真实文字，盖在 canvas 上，让浏览器接管命中测试与字形级偏移
+      // （ADR-0016 第二步）。
+      //
+      // **它失败不该让阅读页挂掉**：没有文本层只是选不了文字，框选、识别、翻译全都
+      // 还在。pdf.js 的这个 API 在版本间换过名字和签名，而它是 app 层——这一层的
+      // 东西没有测试守着，只能靠「坏了也还能用」兜。
+      const container = layer.current;
+      if (!container) return;
+      try {
+        container.replaceChildren();
+        // TextLayer 自己会调 setLayerDimensions，而那里的宽高是
+        // `round(down, var(--total-scale-factor) * Npx, …)`——这个变量得先有值。
+        container.style.setProperty("--total-scale-factor", String(vp.scale));
+        await new pdfjs.TextLayer({ textContentSource: content, container, viewport: vp }).render();
+      } catch (error) {
+        container.replaceChildren();
+        console.warn("文本层渲染失败，退回纯框选", error);
+      }
     })();
     return () => {
       cancelled = true;
@@ -185,6 +206,10 @@ export function Reader({
           }}
           onPointerUp={(event) => void finish(at(event))}
         />
+
+        {/* 文本层盖在 canvas 上，但容器 pointer-events: none、只有字形 span 吃事件
+            （见 app.css）：落在空白或图上的 pointerdown 直接穿透回 canvas，框选照旧。 */}
+        <div ref={layer} className="textLayer" />
 
         {/* 标签的独特价值不是取回内容（重划也能取回），而是「这儿我来过」——三个月后
             重开论文，标签疏密就是当初的注意力地图。所以随手划过的那批也画，只是淡一点。

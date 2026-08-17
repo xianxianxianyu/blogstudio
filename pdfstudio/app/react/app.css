@@ -106,6 +106,51 @@ h1, h2, h3 { margin: 0; font-weight: 600; }
 canvas { display: block; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-radius: 2px; }
 
 .drag { position: absolute; border: 2px solid var(--accent); background: rgba(37, 99, 235, .12); pointer-events: none; }
+
+/* 文本层：pdf.js 把每个 TextItem 渲染成一个透明 span，盖在 canvas 上。
+   自己做命中测试是死路——实测一行常常只有一个 item 且装着整行 70–103 个字符，
+   而 pdf.js 只给整个 item 的 width，不给每个字的 x（见 .scratch/pdfstudio-selection/spec.md）。
+
+   这里只抄 pdf.js 6.2 里 .textLayer 必需的那十几条，不 import 它那 6347 行的
+   pdf_viewer.css——那里面还有 :root/html/body 的全局规则，会漫进整个应用。
+   代价是升级 pdf.js 时这段可能悄悄过期，所以版本钉在 package.json 里。
+
+   **容器不吃指针事件，span 吃**：于是「起点落在文字上走文本流、落在空白或图上走矩形」
+   （ADR-0016 决策 1）由 CSS 直接给出——空白处的 pointerdown 穿透到 canvas，框选照旧。 */
+.textLayer {
+  position: absolute; top: 0; left: 0; overflow: clip;
+  line-height: 1; letter-spacing: normal; word-spacing: normal;
+  text-align: initial; transform-origin: 0 0; forced-color-adjust: none;
+  text-size-adjust: none; caret-color: CanvasText; z-index: 0;
+  /* 容器不吃事件，只有下面的字形 span 吃。 */
+  pointer-events: none;
+  /* setLayerDimensions 把 width/height 写成 round(down, var(--total-scale-factor) * Npx,
+     var(--scale-round-x))，这两个变量少一个整条 round() 就是无效值，宽高直接塌掉。
+     --total-scale-factor 由 Reader 按 viewport.scale 逐页写进来。 */
+  --scale-round-x: 1px;
+  --scale-round-y: 1px;
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+}
+.textLayer :is(span, br) {
+  color: transparent; position: absolute; white-space: pre; cursor: text;
+  transform-origin: 0% 0%; user-select: text; pointer-events: auto;
+}
+/* span 的位置是百分比，但**字号和横向拉伸靠这两条**——少了它们所有字都是默认 16px，
+   选区框会跟真实字形整体错位，而且不报错。 */
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+.textLayer .markedContent { display: contents; }
+.textLayer span[role="img"] { user-select: none; cursor: default; }
+.textLayer ::selection { background: rgba(37, 99, 235, .3); }
 /* 标签一律 pointer-events: none：它盖在 canvas 上，一旦吃掉 pointerdown，
    在已有摘录上就重新框不了了。点击命中由坐标判（见 Reader）。 */
 /* 视觉摘录（公式、图）：一个框。 */
