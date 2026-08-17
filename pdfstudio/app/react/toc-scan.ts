@@ -56,14 +56,26 @@ export async function suggestTocPages(
   return { from: hits[0], to };
 }
 
+/**
+ * 读目录页。**有文本层就本地解析，没有才调模型。**
+ *
+ * 不为几页目录去花一次模型调用——数字版的书那几行本来就在文本层里躺着。扫描书没得选，
+ * 但也只是那几页：这不是全书 OCR，全书都认了框选就没有意义了。
+ */
 export async function readTocPages(
   document: PDFDocumentProxy,
   from: number,
   to: number,
+  recognize: (page: number) => Promise<TocEntry[]>,
+  onPage?: (page: number) => void,
 ): Promise<TocEntry[]> {
-  const pages: Line[][] = [];
-  for (let page = from; page <= to; page++) pages.push(await pageLines(document, page));
-  return parseToc(pages);
+  const entries: TocEntry[] = [];
+  for (let page = from; page <= to; page++) {
+    onPage?.(page);
+    const lines = await pageLines(document, page);
+    entries.push(...(lines.length > 0 ? parseToc([lines]) : await recognize(page)));
+  }
+  return entries;
 }
 
 /** 标题在这一页出现了没。压掉空白再比——文本层里的空格分布跟目录页对不上。 */
@@ -119,4 +131,45 @@ export async function inferPageOffset(
   }
 
   return inferOffset(sampled, (title) => found.get(title) ?? null);
+}
+
+/**
+ * 整页渲染成一张图，交给模型认。
+ *
+ * 长边限在 `MAX_EDGE`：这本书的页面是 1586×2259pt（A4 的 2.7 倍），原样渲染一页就是
+ * 几十 MB，而目录页 OCR 并不需要那个分辨率。
+ */
+const MAX_EDGE = 2000;
+
+export async function renderPage(
+  document: PDFDocumentProxy,
+  page: number,
+): Promise<{ mime: "image/png"; bytes: Uint8Array; width: number; height: number }> {
+  const loaded = await document.getPage(page);
+  const base = loaded.getViewport({ scale: 1 });
+  const viewport = loaded.getViewport({
+    scale: Math.min(1, MAX_EDGE / Math.max(base.width, base.height)),
+  });
+
+  const canvas = window.document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  await loaded.render({ canvas, viewport }).promise;
+
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+  if (!blob) throw new Error("这一页渲染不出来");
+  // 画完就把画布缩到 0：不释放的话几页目录就是上百 MB，而它已经没用了。
+  canvas.width = canvas.height = 0;
+
+  return {
+    mime: "image/png",
+    bytes: new Uint8Array(await blob.arrayBuffer()),
+    width: canvas.width || Math.ceil(viewport.width),
+    height: Math.ceil(viewport.height),
+  };
+}
+
+/** 这一页有没有文本层。没有就是扫描版，只能走模型。 */
+export async function hasTextLayer(document: PDFDocumentProxy, page: number): Promise<boolean> {
+  return (await pageLines(document, page)).length > 0;
 }

@@ -149,4 +149,20 @@ bindConversation(ws, conversation);
 await ws.refresh();
 if (ws.state.docs.length > 0) await ws.openDoc(ws.state.docs[0].id);
 
-createRoot(document.querySelector("#root")!).render(<App ws={ws} host={host} settings={settings} conversation={conversation} progress={progress} />);
+/**
+ * 认扫描版目录页用的模型。**每次现建**而不是建好一个传进去：读者随时可能在设置里
+ * 换端点，钉死一个实例就会让改完的配置不生效，而且不报错（`settings.subscribe` 那边
+ * 已经为同样的理由踩过一次）。
+ */
+const tocModel = () => createModelClient(endpoint("recognition"));
+
+createRoot(document.querySelector("#root")!).render(
+  <App
+    ws={ws}
+    host={host}
+    settings={settings}
+    conversation={conversation}
+    progress={progress}
+    tocModel={tocModel}
+  />,
+);

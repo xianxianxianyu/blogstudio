@@ -11,6 +11,26 @@ import type { PdfHost } from "./pdf-host";
 /** 松手之后在等什么。 */
 export type Busy = "recognizing" | "translating" | null;
 
+/**
+ * 按像素总数封顶的视口。
+ *
+ * **扫描书的页面可以非常大**：《分布式系统概念与设计》每页 1586×2259pt，是 A4 的 2.7
+ * 倍，按 scale 1.5 渲染就是 2379×3389 ≈ 8 M 像素、32 MB，捏合到 3 倍就是 129 MB。
+ * pdf.js 自己的 viewer 有 `maxCanvasPixels = 2**25` 这道护栏，我们此前一个都没有。
+ *
+ * 超了就把 scale 压回去，而不是拒绝渲染——读者要的是看见这一页，清晰度可以让。
+ * **返回的 viewport 是唯一真相**：框选、标签、文字层全都从它换算，所以压过之后
+ * 那几套坐标自动跟着走，不需要另外补偿。
+ */
+const MAX_CANVAS_PIXELS = 2 ** 25;
+
+function cappedViewport(page: pdfjs.PDFPageProxy, scale: number): pdfjs.PageViewport {
+  const wanted = page.getViewport({ scale });
+  const pixels = wanted.width * wanted.height;
+  if (pixels <= MAX_CANVAS_PIXELS) return wanted;
+  return page.getViewport({ scale: scale * Math.sqrt(MAX_CANVAS_PIXELS / pixels) });
+}
+
 interface Point {
   x: number;
   y: number;
@@ -88,7 +108,7 @@ export function Reader({
       const document = host.document;
       if (!document || !canvas.current) return;
       const rendered = await document.getPage(Math.min(page, document.numPages));
-      const vp = rendered.getViewport({ scale });
+      const vp = cappedViewport(rendered, scale);
       if (cancelled) return;
       canvas.current.width = vp.width;
       canvas.current.height = vp.height;

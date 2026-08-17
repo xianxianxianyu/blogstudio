@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import type { PDFDocumentProxy } from "pdfjs-dist";
 import { toSections, type Offset, type TocEntry } from "../../src/outline/toc";
+import { recognizeTocPage } from "../../src/outline/toc-recognize";
+import type { ModelClient } from "../../src/model/model-client";
 import type { Section } from "../../src/clip/outline";
-import { inferPageOffset, readTocPages, suggestTocPages } from "./toc-scan";
+import { inferPageOffset, readTocPages, renderPage, suggestTocPages } from "./toc-scan";
 
 /**
  * 从书自己印的目录页生成目录。
@@ -17,16 +19,22 @@ import { inferPageOffset, readTocPages, suggestTocPages } from "./toc-scan";
 
 type Stage =
   | { at: "pick"; suggested: { from: number; to: number } | null; scanning: boolean }
-  | { at: "read"; from: number; to: number }
+  | { at: "read"; from: number; to: number; now: number }
   | { at: "confirm"; from: number; to: number; entries: TocEntry[]; offset: Offset | null };
 
 export function TocWizard({
   document,
+  model,
   page,
   onDone,
   onCancel,
 }: {
   document: PDFDocumentProxy;
+  /**
+   * 认扫描版目录页用的模型。**只认目录那几页**——这不是全书 OCR，全书都认了框选就
+   * 没有意义了。有文本层的页面根本不会走到这里。
+   */
+  model: ModelClient | null;
   /** 当前翻到第几页——「我自己选」时读者是**翻书**指定的，不是填数字。 */
   page: number;
   onDone: (sections: Section[]) => void;
@@ -51,10 +59,19 @@ export function TocWizard({
   }, [document]);
 
   async function read(from: number, to: number) {
-    setStage({ at: "read", from, to });
+    setStage({ at: "read", from, to, now: from });
     setError(null);
     try {
-      const entries = await readTocPages(document, from, to);
+      const entries = await readTocPages(
+        document,
+        from,
+        to,
+        async (target) => {
+          if (!model) throw new Error("这是扫描版，认目录要用识别模型，先在设置里配一个。");
+          return recognizeTocPage(model, await renderPage(document, target));
+        },
+        (now) => setStage({ at: "read", from, to, now }),
+      );
       if (entries.length === 0) {
         setError("这几页里没找到目录条目。翻到真正的目录页再选一次？");
         setStage({ at: "pick", suggested: null, scanning: false });
@@ -127,7 +144,7 @@ export function TocWizard({
 
       {stage.at === "read" && (
         <p className="muted">
-          正在读第 {stage.from}–{stage.to} 页…
+          正在读第 {stage.now} 页（共 {stage.from}–{stage.to}）…
         </p>
       )}
 
@@ -154,7 +171,14 @@ export function TocWizard({
               <p className="muted">一致相差 {stage.offset.offset} 页</p>
             </>
           ) : (
-            <p className="muted">没能对上页码（正文里找不到这些标题，多半是扫描版）。请自己填。</p>
+            <>
+              {/* 扫描版没有文本层，「去正文里找这个标题」这条路走不通，只能人填。
+                  所以设计是**能验就验、验不了就填**，不是二选一。 */}
+              <p className="muted">
+                没能自己对上——正文里找不到这些标题（扫描版没有文本层）。翻到目录里印着
+                「第 1 页」的那一页，看它实际是第几页，两者相差多少就填多少。
+              </p>
+            </>
           )}
 
           <div className="row" style={{ marginTop: 10 }}>

@@ -10,6 +10,7 @@ import { ClipsPane } from "./ClipsPane";
 import { readOutline } from "./outline";
 import { TocWizard } from "./TocWizard";
 import type { Section } from "../../src/clip/outline";
+import type { ModelClient } from "../../src/model/model-client";
 import { ChatPanel } from "./ChatPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { RetentionNotice } from "./RetentionNotice";
@@ -31,12 +32,15 @@ export function App({
   settings,
   conversation,
   progress,
+  tocModel,
 }: {
   ws: Workspace;
   host: PdfHost;
   settings: Settings;
   conversation: Conversation;
   progress: Progress;
+  /** 认扫描版目录页用的模型。现建而不是钉死一个——改完设置要立刻生效。 */
+  tocModel: () => ModelClient;
 }) {
   const state = useSyncExternalStore(
     useCallback((listener: () => void) => ws.subscribe(listener), [ws]),
@@ -266,6 +270,7 @@ export function App({
               {pane === "clips" && tocOpen && host.document ? (
                 <TocWizard
                   document={host.document}
+                  model={tocModel()}
                   page={page}
                   onCancel={() => setTocOpen(false)}
                   onDone={(next) => {
