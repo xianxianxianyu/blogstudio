@@ -8,8 +8,6 @@ import type { ReadableStream } from "node:stream/web";
 import sirv from "sirv";
 import { createClipStore } from "../clip/clip-store";
 import { createBookshelf } from "../bookshelf/bookshelf";
-import { createModelDownloader } from "../model/model-download";
-import { DEFAULT_EMBEDDING_MODEL } from "../model/model-files";
 import { deserialize, serializeClip } from "../clip/clip-wire";
 import { createLocalEngine } from "../model/local-engine";
 import { EMBEDDING_SPEC, RECOGNITION_SPEC, llamaEngineDeps } from "../model/llama-server";
@@ -72,7 +70,6 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
 
   const shelf = createBookshelf(options.libraryRoot);
   const store = createClipStore(options.libraryRoot);
-  const downloader = createModelDownloader(options.modelsRoot);
 
 
   // 懒建：没人问文档时不该把 300 MB 加载进来。
@@ -185,17 +182,6 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
       },
     },
 
-    {
-      prefix: `${ROUTES.models}/__status`,
-      handler: (request, response) =>
-        respond(response, async () =>
-          json(
-            request.method === "POST"
-              ? downloader.start(DEFAULT_EMBEDDING_MODEL)
-              : await downloader.check(DEFAULT_EMBEDDING_MODEL),
-          ),
-        ),
-    },
 
     {
       // 权重按静态文件服务。**不能用 dev: true**——那个选项专门关掉缓存头，于是每次

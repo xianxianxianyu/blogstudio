@@ -2,7 +2,7 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { fieldSource } from "../../src/config/config";
 import type { Capability, EndpointConfig } from "../../src/config/config";
 import type { Settings } from "../../src/app/settings";
-import { LocalEngineSection, LocalModel } from "./LocalModel";
+import { LocalEngineSection } from "./LocalModel";
 
 /** 只列真正在用的三个。chat / claim 等接上了再加，先摆出来只会让人以为它们已经生效。 */
 const CAPABILITIES: { key: Capability; label: string; hint: string }[] = [
@@ -54,8 +54,6 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
         改动立刻保存，下次打开还在。
         {note && <b className={note.bad ? "err" : undefined}> {note.text}</b>}
       </p>
-
-      <LocalModel />
 
       <LocalEngineSection
         enabled={config.localRecognition}
