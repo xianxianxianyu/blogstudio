@@ -179,13 +179,14 @@ describe("Chat — 只基于贴入内容作答", () => {
       {
         role: "user",
         parts: [
-          // 问题里没有一个能命中这篇论文的词。
+          // **问题和摘录都不能命中这篇论文**——摘录现在也进检索查询（「问这段」要它
+          // 找同主题的邻近段落），所以只让问题落空是不够的，那样检索照样会命中。
           { kind: "text", text: "为什么要除以根号 dk？" },
           {
             kind: "clip",
             snapshot: {
               clipId: "c7",
-              sourceText: "We scale the dot products by 1/sqrt(d_k).",
+              sourceText: "牛肉面的汤底要用筒骨慢炖六小时。",
               page: 4,
             },
           },
@@ -562,5 +563,62 @@ describe("喂给模型几块原文", () => {
 
     expect(answer.grounding).toBe("none");
     expect(seen[0]).toBe("你好");
+  });
+});
+
+describe("贴进来的摘录参与检索", () => {
+  const pasted = (text: string, page = 3) => ({
+    role: "user" as const,
+    parts: [
+      { kind: "clip" as const, snapshot: { clipId: "c1", sourceText: text, page } },
+      { kind: "text" as const, text: "这一段主要讲了什么" },
+    ],
+  });
+
+  it("贴了摘录才检索得到——不贴就是一句什么都不指的话", async () => {
+    // 受控对照：同一句「这一段主要讲了什么」，唯一的差别是有没有贴摘录。
+    // 它在索引里没有任何主题词，所以单独问必然落空；而这正是「问这段」此前的处境。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const model = createFakeModelClient({ completeText: "好" });
+    const chat = createChat({ document, docId: "d1", model });
+
+    const alone = await chat.ask([
+      { role: "user", parts: [{ kind: "text", text: "这一段主要讲了什么" }] },
+    ]);
+    const withClip = await chat.ask([
+      pasted("We trained our models on one machine with 8 NVIDIA P100 GPUs. Each training step took about 0.4 seconds."),
+    ]);
+
+    expect(alone.citations.filter((c) => c.kind === "chunk")).toEqual([]);
+    expect(withClip.citations.filter((c) => c.kind === "chunk").length).toBeGreaterThan(0);
+  });
+
+  it("检索到的块若已经贴在问题里，就不再重复喂一遍", async () => {
+    // 贴进来的摘录本来就在 prompt 里。检索又把它自己那段捞回来的话，三块材料里
+    // 有一块是白占的——而正确答案可能就在被挤掉的那块里。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const seen: string[] = [];
+    const model = createFakeModelClient({ completeText: "好" });
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: {
+        complete: model.complete.bind(model),
+        streamComplete: (request) => {
+          seen.push(request.messages.map((m) => String(m.content)).join("\n"));
+          return model.streamComplete(request);
+        },
+      },
+    });
+
+    const answer = await chat.ask([
+      pasted("We trained our models on one machine with 8 NVIDIA P100 GPUs", 7),
+    ]);
+
+    const chunks = answer.citations.filter((c) => c.kind === "chunk");
+    for (const chunk of chunks) {
+      expect(chunk.snippet).not.toContain("8 NVIDIA P100 GPUs");
+    }
+    expect(seen[0]).toContain("8 NVIDIA P100 GPUs"); // 摘录本身仍在
   });
 });

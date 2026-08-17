@@ -129,12 +129,27 @@ function collectImages(turns: Turn[]): Screenshot[] {
   );
 }
 
+/**
+ * 拿什么去检索。
+ *
+ * **贴进来的摘录也算查询的一部分。** 此前这里只取 `kind === "text"`，于是读者点
+ * 「问这段」再问「这一段主要讲了什么」时，送去检索的就是那七个字——它在索引里什么都
+ * 不指，找回来的要么是碰巧分数高的无关段落，要么因尖峰不够而 abstain，而 grounding
+ * 还会说「依据是检索到的原文」。
+ *
+ * 不截断：一段摘录去检索恰恰能找到**同主题的邻近段落**，那正是「问这段」要的；
+ * 而一次框选的文字量远不到撑爆查询的程度。
+ */
 function queryOf(turns: Turn[]): string {
   const last = turns.at(-1);
   return (
     last?.parts
-      .filter((part): part is { kind: "text"; text: string } => part.kind === "text")
-      .map((part) => part.text)
+      .map((part) => {
+        if (part.kind === "text") return part.text;
+        if (part.kind === "clip") return part.snapshot.sourceText;
+        return null; // 图进不了文本查询
+      })
+      .filter((piece): piece is string => piece !== null)
       .join(" ") ?? ""
   );
 }
@@ -167,7 +182,15 @@ export function createChat(deps: ChatDeps): Chat {
     async ask(turns: Turn[], options?: AskOptions): Promise<Answer> {
       const images = collectImages(turns);
 
-      const hits = await searchChunks(await ensureIndex(), queryOf(turns), TOP_K, deps.embedder);
+      const pastedText = collectSnapshots(turns).map((snapshot) => snapshot.sourceText);
+      const hits = (
+        await searchChunks(await ensureIndex(), queryOf(turns), TOP_K, deps.embedder)
+      ).filter(
+        // 贴进来的摘录本来就在 prompt 里。检索又把它自己那段捞回来的话，三块材料里
+        // 有一块是白占的——而正确答案可能就在被挤掉的那块里。摘录进查询之后这几乎
+        // 必然发生：最像它的东西就是它自己。
+        (hit) => !pastedText.some((text) => hit.text.includes(text) || text.includes(hit.text)),
+      );
 
       // **检索到的原文并进最后一条 user 消息，不发 system 角色。**
       //
