@@ -132,6 +132,12 @@ function collectImages(turns: Turn[]): Screenshot[] {
 /**
  * 拿什么去检索。
  *
+ * **带上上一个问题。** 退化的追问（「那它呢」「那要多久」）单独去检索什么都不指——
+ * 实测它们正确地 abstain 了，而读者要的答案明明就在上一问指的那一段。
+ *
+ * 只带最近一个：eval 里 fu-01…fu-06 那种「还保留着主题词」的追问本来就命中，
+ * 多带历史只会稀释它们。
+ *
  * **贴进来的摘录也算查询的一部分。** 此前这里只取 `kind === "text"`，于是读者点
  * 「问这段」再问「这一段主要讲了什么」时，送去检索的就是那七个字——它在索引里什么都
  * 不指，找回来的要么是碰巧分数高的无关段落，要么因尖峰不够而 abstain，而 grounding
@@ -140,18 +146,25 @@ function collectImages(turns: Turn[]): Screenshot[] {
  * 不截断：一段摘录去检索恰恰能找到**同主题的邻近段落**，那正是「问这段」要的；
  * 而一次框选的文字量远不到撑爆查询的程度。
  */
-function queryOf(turns: Turn[]): string {
-  const last = turns.at(-1);
-  return (
-    last?.parts
-      .map((part) => {
-        if (part.kind === "text") return part.text;
-        if (part.kind === "clip") return part.snapshot.sourceText;
-        return null; // 图进不了文本查询
-      })
-      .filter((piece): piece is string => piece !== null)
-      .join(" ") ?? ""
-  );
+export function retrievalQuery(turns: Turn[]): string {
+  const asked = turns.filter((turn) => turn.role === "user").map(textOf);
+  // 只带最近那一个问题，不把整段历史倒进去——那等于让三轮之前的话题继续影响这一次
+  // 检索，而读者早就聊到别处了。
+  //
+  // **助手说了什么不进查询**：模型的回答可能长且发散，掺进去会把检索带偏；而它本来
+  // 就是从检索结果生成的，等于让上一轮的检索决定这一轮检索什么。
+  return asked.slice(-2).filter((text) => text !== "").join(" ");
+}
+
+function textOf(turn: Turn): string {
+  return turn.parts
+    .map((part) => {
+      if (part.kind === "text") return part.text;
+      if (part.kind === "clip") return part.snapshot.sourceText;
+      return null; // 图进不了文本查询
+    })
+    .filter((piece): piece is string => piece !== null)
+    .join(" ");
 }
 
 /**
@@ -204,7 +217,7 @@ export function createChat(deps: ChatDeps): Chat {
 
       const pastedText = collectSnapshots(turns).map((snapshot) => snapshot.sourceText);
       const hits = (
-        await searchChunks(await ensureIndex(), queryOf(turns), TOP_K, deps.embedder)
+        await searchChunks(await ensureIndex(), retrievalQuery(turns), TOP_K, deps.embedder)
       ).filter(
         // 贴进来的摘录本来就在 prompt 里，检索捞回同一段就是白占一个位置——而正确
         // 答案可能就在被挤掉的那块里。判据见 isSamePassage。

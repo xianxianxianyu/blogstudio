@@ -15,6 +15,15 @@
   要么什么都没有，所以它们只有在摘录进检索池时才可能召回。**它们不计入主 recall 与阈值曲线**
   ——`MIN_PEAK_MARGIN` 是在原来那 29 条上标定的，混进新题会让历史数字失去可比性。
   它们单独报一段：同一套题跑 `--clips` 与不跑，差值就是摘录索引的净收益。
+- `fu-*` 六条是**追问题**：`前一问 ‖ 追问`，用 `‖` 分隔。它们量的是「读者接着上一句往下
+  问」时检索还找不找得到——第二问单独看往往没有任何可检索的名词（「那反向的呢」）。
+  runner 会照生产的规则把两轮拼成查询（调 `retrievalQuery`，不自己再实现一遍），
+  所以量到的就是读者真实会遇到的行为。**同样不计入主 recall 与阈值曲线。**
+
+  其中 `fu-07`…`fu-09` 是**退化追问**——整句只剩指代（「那它呢」「再详细点」）。
+  前六条一开始是照「追问没有主题词」这个假设写的，实测 6/6 全中，因为它们其实都还
+  保留着主题词（「训练」「反向」「缩放」）。**假设被数据推翻了**，所以补这三条去找
+  真正的失败边界。
 - `na-*` 三条是**文档答不了**的问题，页码记 `—`。它们验的是不变量⑤：没有依据必须返回
   `grounding: 'none'`，不许硬凑一段原文当出处。
 
@@ -52,6 +61,15 @@
 | cl-04 | zh | 那张模型结构图里，左右两侧各画的是什么，中间靠什么连起来？ | arXiv:1706.03762 (Transformer) | 3 | Figure 1: The Transformer - model architecture. | **摘录题**：图的内容只在图里，文本层只有图题 |
 | cl-05 | zh | 那张对比不同层类型的表里，比较了哪几个指标？ | arXiv:1706.03762 (Transformer) | 6 | Table 1: Maximum path lengths, per-layer complexity and minimum number of sequential operations | **摘录题**：表格内容 |
 | cl-06 | zh | 残差网络那张结构对比图里，从上到下堆的是什么样的卷积块？ | arXiv:1512.03385 (ResNet) | 4 | Figure 3. Example network architectures for ImageNet. | **摘录题**：图的内容 |
+| fu-01 | zh | 基础版模型是在什么硬件上训练的？ ‖ 那训练了多久？ | arXiv:1706.03762 (Transformer) | 7 | We trained our models on one machine with 8 NVIDIA P100 GPUs ... The big models were trained for 300,000 steps (3.5 days). | **追问题**：第二问「那训练了多久」单独看没有任何主题词 |
+| fu-02 | zh | 多头注意力一共并行几个头？ ‖ 每个头的维度是多少？ | arXiv:1706.03762 (Transformer) | 5 | In this work we employ h = 8 parallel attention layers, or heads. For each of these we use dk = dv = dmodel /h = 64. | **追问题**：第二问只有「维度」，主题词在上一轮 |
+| fu-03 | zh | 注意力打分时为什么要先按维度开根号缩放？ ‖ 不缩放会怎样？ | arXiv:1706.03762 (Transformer) | 4 | We suspect that for large values of dk, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients | **追问题**：第二问「不缩放会怎样」没有可检索的名词 |
+| fu-04 | zh | 编码器由多少个相同的层堆叠而成？ ‖ 每层里面有哪两个子层？ | arXiv:1706.03762 (Transformer) | 3 | The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers. | **追问题**：第二问的「每层」指代上一轮 |
+| fu-05 | zh | 前向加噪过程是怎么定义的？ ‖ 那反向的呢？ | arXiv:2006.11239 (DDPM) | 2 | The joint distribution p_theta(x_0:T) is called the reverse process, and it is defined as a Markov chain with learned Gaussian transitions | **追问题**：第二问「那反向的呢」四个字，全靠上一轮 |
+| fu-06 | zh | 作者把堆叠层要拟合的目标改写成了什么？ ‖ 这样做为什么更容易优化？ | arXiv:1512.03385 (ResNet) | 3 | We hypothesize that it is easier to optimize the residual mapping than to optimize the original, unreferenced mapping | **追问题**：第二问的「这样做」指代上一轮 |
+| fu-07 | zh | 基础版模型是在什么硬件上训练的？ ‖ 那要多久？ | arXiv:1706.03762 (Transformer) | 7 | The big models were trained for 300,000 steps (3.5 days). | **退化追问**：整句只剩「多久」，没有任何可检索的名词 |
+| fu-08 | zh | 多头注意力一共并行几个头？ ‖ 那它呢？ | arXiv:1706.03762 (Transformer) | 5 | In this work we employ h = 8 parallel attention layers, or heads. | **退化追问**：整句只有指代 |
+| fu-09 | zh | 编码器由多少个相同的层堆叠而成？ ‖ 再详细点 | arXiv:1706.03762 (Transformer) | 3 | The encoder is composed of a stack of N = 6 identical layers. Each layer has two sub-layers. | **退化追问**：整句不含任何实词 |
 | na-01 | zh | 这个模型在语音识别任务上的词错误率是多少？ | arXiv:1706.03762 (Transformer) | — | — | 文档答不了。全文无 `speech` / `word error`；结论只把 audio 列为未来工作，是设计好的近似诱饵 |
 | na-02 | zh | 这些网络在语义分割数据集上的平均交并比是多少？ | arXiv:1512.03385 (ResNet) | — | — | 文档答不了。全文只把 COCO segmentation 作为比赛名次提了一句，无任何分割指标；`IoU` 仅作检测阈值出现（`mAP @ IoU = 0.5`），是设计好的近似诱饵 |
 | na-03 | en | What FID does the model achieve on class-conditional ImageNet 128×128 generation? | arXiv:2006.11239 (DDPM) | — | — | 文档答不了。全文 0 次提及 ImageNet；但满页都是 FID 表格，最易诱发假出处 |

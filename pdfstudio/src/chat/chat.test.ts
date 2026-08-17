@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createChat, isAlreadyPasted } from "./chat";
+import { createChat, isAlreadyPasted, retrievalQuery } from "./chat";
 import type { Clip } from "../clip/clip";
 import { openFixturePdf } from "../../test/fixtures";
 import { createFakeModelClient } from "../../test/fake-model-client";
@@ -642,5 +642,44 @@ describe("哪些块已经在 prompt 里了", () => {
 
   it("没贴任何东西时什么都不删", () => {
     expect(isAlreadyPasted(chunk, [])).toBe(false);
+  });
+});
+
+describe("追问带上一问", () => {
+  const ask = (text: string) => ({ role: "user" as const, parts: [{ kind: "text" as const, text }] });
+  const reply = (text: string) => ({ role: "assistant" as const, parts: [{ kind: "text" as const, text }] });
+
+  it("退化的追问要带上上一个问题", () => {
+    // 「那它呢」单独去检索什么都不指，实测正确地 abstain 了——但读者要的答案明明就在
+    // 上一问指的那一段。
+    const query = retrievalQuery([ask("多头注意力一共并行几个头？"), reply("八个。"), ask("那它呢？")]);
+
+    expect(query).toContain("多头注意力");
+    expect(query).toContain("那它呢");
+  });
+
+  it("只带最近那一个问题，不把整段历史都倒进去", () => {
+    // 倒进去等于让三轮之前的话题继续影响这一次检索——读者早就聊到别处了。
+    const query = retrievalQuery([
+      ask("残差网络解决了什么问题？"),
+      reply("退化问题。"),
+      ask("多头注意力一共并行几个头？"),
+      reply("八个。"),
+      ask("那它呢？"),
+    ]);
+
+    expect(query).not.toContain("残差网络");
+  });
+
+  it("助手说了什么不进查询", () => {
+    // 模型的回答可能长且发散，掺进查询会把检索带偏——而它本来就是从检索出来的东西
+    // 生成的，等于让上一轮的检索结果决定这一轮检索什么。
+    const query = retrievalQuery([ask("编码器有几层？"), reply("六层，每层两个子层。"), ask("那它呢？")]);
+
+    expect(query).not.toContain("六层");
+  });
+
+  it("第一问不受影响", () => {
+    expect(retrievalQuery([ask("编码器有几层？")])).toBe("编码器有几层？");
   });
 });

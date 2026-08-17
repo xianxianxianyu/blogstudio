@@ -18,6 +18,7 @@ import type { Clip } from "../../src/clip/clip";
 import type { Chunk } from "../../src/chat/retrieval";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
 import { createLlamaEmbedder } from "../../src/model/llama-embedder";
+import { retrievalQuery } from "../../src/chat/chat";
 
 const HERE = import.meta.dirname;
 
@@ -41,7 +42,7 @@ async function readQuestions(): Promise<Question[]> {
     const cells = line.split("|").map((cell) => cell.trim());
     if (cells.length < 8) continue;
     const [, id, lang, question, source, page] = cells;
-    if (!/^(zh|en|na|cl)-\d\d$/.test(id)) continue;
+    if (!/^(zh|en|na|cl|fu)-\d\d$/.test(id)) continue;
 
     const arxiv = source.match(/arXiv:([\d.]+)/);
     if (!arxiv) continue;
@@ -82,6 +83,23 @@ function rate(outcomes: Outcome[], k: number): string {
   if (outcomes.length === 0) return "  —  ";
   const hits = outcomes.filter((outcome) => hitAt(outcome, k)).length;
   return `${((hits / outcomes.length) * 100).toFixed(1).padStart(5)}%`;
+}
+
+/**
+ * 这一条题拿什么去检索。
+ *
+ * 追问题写成 `前一问 ‖ 追问`，在这里还原成两轮对话，**再交给生产的那条规则**
+ * （`retrievalQuery`）去拼——不自己实现一遍。eval 与生产在参数上对不上的亏已经吃过
+ * 一次：生产喂 top-1 而这里量 recall@3，于是汇报的数字模型根本看不到。
+ */
+function queryFor(question: Question): string {
+  if (!question.question.includes("‖")) return question.question;
+  const [first, follow] = question.question.split("‖").map((part) => part.trim());
+  return retrievalQuery([
+    { role: "user", parts: [{ kind: "text", text: first }] },
+    { role: "assistant", parts: [{ kind: "text", text: "（上一轮的回答）" }] },
+    { role: "user", parts: [{ kind: "text", text: follow }] },
+  ]);
 }
 
 async function main(): Promise<void> {
@@ -128,13 +146,14 @@ async function main(): Promise<void> {
 
     if (embedder) {
       // 一次打分、多个阈值：扫描时不重跑 embedding。
-      const chunks = await searchChunks(index, question.question, Math.max(...KS), embedder);
-      const scored = await scoreChunks(index, question.question, embedder);
+      const query = queryFor(question);
+      const chunks = await searchChunks(index, query, Math.max(...KS), embedder);
+      const scored = await scoreChunks(index, query, embedder);
       // 门槛设成 -Infinity 拿到未过滤但**同样经过 RRF 融合**的排序——
       // 曲线与生产路径口径一致，标定出的数才能直接填回去。
       const ungated = await searchChunks(
         index,
-        question.question,
+        query,
         Math.max(...KS),
         embedder,
         -Infinity,
@@ -147,7 +166,7 @@ async function main(): Promise<void> {
         rankedPages: ungated.map((chunk) => chunk.page),
       });
     } else {
-      const chunks = await searchChunks(index, question.question, Math.max(...KS));
+      const chunks = await searchChunks(index, queryFor(question), Math.max(...KS));
       outcomes.push({
         question,
         pages: chunks.map((chunk) => chunk.page),
@@ -161,7 +180,10 @@ async function main(): Promise<void> {
   // 摘录题单独算。混进主 recall 会让 MIN_PEAK_MARGIN 的标定曲线跟历史数字失去可比性
   // ——那条门槛是在原来 29 条上标出来的。
   const clipQuestions = outcomes.filter((outcome) => outcome.question.id.startsWith("cl-"));
-  const main = outcomes.filter((outcome) => !outcome.question.id.startsWith("cl-"));
+  const followUps = outcomes.filter((outcome) => outcome.question.id.startsWith("fu-"));
+  const main = outcomes.filter(
+    (outcome) => !outcome.question.id.startsWith("cl-") && !outcome.question.id.startsWith("fu-"),
+  );
 
   // 「答不了」的题也带 lang，但它们没有正确页，混进 recall 的分母会把成绩冲淡。
   const answerable = main.filter((outcome) => outcome.question.page !== null);
@@ -175,6 +197,7 @@ async function main(): Promise<void> {
   const offTopic = na.filter((outcome) => OFF_TOPIC.includes(outcome.question.id));
 
   reportClipQuestions(clipQuestions, useClips);
+  reportFollowUps(followUps);
   console.log(`语料 ${indexes.size} 篇，问题 ${questions.length} 条（zh ${zh.length} / en ${en.length} / 答不了 ${na.length}）\n`);
 
   console.log("           recall@1  recall@3");
@@ -269,6 +292,29 @@ function reportClipQuestions(outcomes: Outcome[], useClips: boolean): void {
   console.log(
     `摘录题 recall@3：${((hit.length / outcomes.length) * 100).toFixed(1)}% ` +
       `(${hit.length}/${outcomes.length})  ${useClips ? "摘录在池" : "摘录不在池"}`,
+  );
+  for (const outcome of outcomes) {
+    const ok = hit.includes(outcome);
+    const from = outcome.pages.length === 0 ? "什么都没检索到" : `检索到 p.${outcome.pages.slice(0, 3).join("/")}`;
+    console.log(`  ${outcome.question.id}  ${ok ? "✓" : "✗"} 期待 p.${outcome.question.page}，${from}`);
+  }
+  console.log("");
+}
+
+/**
+ * 追问题单独报。
+ *
+ * 它们量的是「读者接着上一句往下问」时检索还找不找得到——第二问单独看往往没有任何
+ * 可检索的名词（「那反向的呢」四个字）。查询由 `retrievalQuery` 拼，**用的就是生产的
+ * 那条规则**，不是它的复制品：eval 与生产在参数上对不上的亏已经吃过一次（生产喂
+ * top-1 而这里量 recall@3）。
+ */
+function reportFollowUps(outcomes: Outcome[]): void {
+  if (outcomes.length === 0) return;
+  const hit = outcomes.filter((outcome) => outcome.pages.slice(0, 3).includes(outcome.question.page!));
+
+  console.log(
+    `追问题 recall@3：${((hit.length / outcomes.length) * 100).toFixed(1)}% (${hit.length}/${outcomes.length})`,
   );
   for (const outcome of outcomes) {
     const ok = hit.includes(outcome);
