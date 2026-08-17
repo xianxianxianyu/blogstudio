@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createChat } from "./chat";
+import { createChat, isAlreadyPasted } from "./chat";
 import type { Clip } from "../clip/clip";
 import { openFixturePdf } from "../../test/fixtures";
 import { createFakeModelClient } from "../../test/fake-model-client";
@@ -615,10 +615,32 @@ describe("贴进来的摘录参与检索", () => {
       pasted("We trained our models on one machine with 8 NVIDIA P100 GPUs", 7),
     ]);
 
-    const chunks = answer.citations.filter((c) => c.kind === "chunk");
-    for (const chunk of chunks) {
-      expect(chunk.snippet).not.toContain("8 NVIDIA P100 GPUs");
-    }
-    expect(seen[0]).toContain("8 NVIDIA P100 GPUs"); // 摘录本身仍在
+    // 贴的是一整块的内容，所以检索捞回同一块时应当被剔掉；摘录本身仍在 prompt 里。
+    expect(answer.citations.filter((c) => c.kind === "clip")).toHaveLength(1);
+    expect(seen[0]).toContain("8 NVIDIA P100 GPUs");
+  });
+});
+
+describe("哪些块已经在 prompt 里了", () => {
+  const chunk = "We trained our models on one machine with 8 NVIDIA P100 GPUs.";
+
+  it("块整个落在贴入内容里 ⟹ 是重复", () => {
+    // 读者框了一整页，检索又从那页捞回一块——它一个字的新信息都不带。
+    expect(isAlreadyPasted(chunk, [`前面一句。${chunk} 后面一句。`])).toBe(true);
+  });
+
+  it("**摘录在块里 ⟹ 不是重复**——那个块还有大半是新内容", () => {
+    // 方向错过一次：两个方向都算重复的话，框一句话就会把所有含这句话的块清掉，
+    // 而那恰恰是最相关的上下文。
+    expect(isAlreadyPasted(`${chunk} 这一段还有五百多字的上下文……`, [chunk])).toBe(false);
+  });
+
+  it("空白不同不影响判定", () => {
+    // 检索块来自 pdf.js 文本层，摘录来自框选后的拼接，两边的换行和空格不会严丝合缝。
+    expect(isAlreadyPasted("We  trained\nour models", ["We trained our models on one machine"])).toBe(true);
+  });
+
+  it("没贴任何东西时什么都不删", () => {
+    expect(isAlreadyPasted(chunk, [])).toBe(false);
   });
 });

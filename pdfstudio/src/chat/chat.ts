@@ -167,6 +167,26 @@ function queryOf(turns: Turn[]): string {
  */
 const TOP_K = 3;
 
+/**
+ * 这一块是不是已经整个在 prompt 里了（读者贴进来的摘录里）。
+ *
+ * **方向是单向的，这一点错过一次。** 起初两个方向都算重复——只要块与摘录有包含关系
+ * 就丢。但一条摘录通常是一两句话，而一个块是 600 字符：摘录在块里的时候，**那个块还有
+ * 五百多字符是新内容**，丢掉它等于把最相关的上下文清了。框一个小标题时更极端：所有
+ * 提到它的块全没。
+ *
+ * 只有反过来才是真重复——块整个落在贴入内容里，它一个字的新信息都不带。
+ *
+ * 比较前归一化空白：检索块来自 pdf.js 的文本层，摘录来自框选后的拼接，两边的换行和
+ * 空格不会严丝合缝，而那不该影响「是不是同一段」。
+ */
+const flatten = (text: string) => text.replace(/\s+/g, " ").trim();
+
+export function isAlreadyPasted(chunkText: string, pastedTexts: string[]): boolean {
+  const chunk = flatten(chunkText);
+  return chunk.length > 0 && pastedTexts.some((text) => flatten(text).includes(chunk));
+}
+
 export function createChat(deps: ChatDeps): Chat {
   // 懒加载 + 只建一次（不变量 ④）。索引绑在这个实例上，天然不可能串到别的文档。
   let index: Promise<Chunk[]> | null = null;
@@ -186,10 +206,9 @@ export function createChat(deps: ChatDeps): Chat {
       const hits = (
         await searchChunks(await ensureIndex(), queryOf(turns), TOP_K, deps.embedder)
       ).filter(
-        // 贴进来的摘录本来就在 prompt 里。检索又把它自己那段捞回来的话，三块材料里
-        // 有一块是白占的——而正确答案可能就在被挤掉的那块里。摘录进查询之后这几乎
-        // 必然发生：最像它的东西就是它自己。
-        (hit) => !pastedText.some((text) => hit.text.includes(text) || text.includes(hit.text)),
+        // 贴进来的摘录本来就在 prompt 里，检索捞回同一段就是白占一个位置——而正确
+        // 答案可能就在被挤掉的那块里。判据见 isSamePassage。
+        (hit) => !isAlreadyPasted(hit.text, pastedText),
       );
 
       // **检索到的原文并进最后一条 user 消息，不发 system 角色。**
