@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Clip } from "../../src/clip/clip";
 import type { Workspace } from "../../src/app/workspace";
 import { TAG_COLORS, type Tag, type TagColor } from "../../src/tag/tag";
+import { groupClipsBySection, type Section } from "../../src/clip/outline";
 import { ClipPanel } from "./ClipPanel";
 
 /**
@@ -14,6 +15,7 @@ export function ClipsPane({
   ws,
   clips,
   tags,
+  sections,
   selected,
   onSelect,
   onJump,
@@ -21,6 +23,8 @@ export function ClipsPane({
   ws: Workspace;
   clips: Clip[];
   tags: Tag[];
+  /** PDF 的目录，拍平后按阅读顺序。没有目录就是空数组——三分之一的论文如此。 */
+  sections: Section[];
   selected: string | null;
   onSelect: (clipId: string | null) => void;
   onJump: (page: number) => void;
@@ -29,7 +33,9 @@ export function ClipsPane({
   const [only, setOnly] = useState<TagColor | null>(null);
 
   const inScope = only === null ? clips : clips.filter((clip) => clip.tagId === only);
-  const ordered = [...inScope].sort((a, b) => a.region.page - b.region.page);
+  // **先筛后分组**：筛掉之后空掉的小节不该还留着标题。
+  const groups = groupClipsBySection(inScope, sections);
+  const ordered = groups.flatMap((group) => group.clips);
   const current = clips.find((clip) => clip.id === selected) ?? null;
 
   // 选中一条就整栏切到详情，和「书架 → 阅读」是同一个模式。此前详情接在列表下方，
@@ -88,7 +94,23 @@ export function ClipsPane({
 
       {ordered.length === 0 && <p className="faint">这一类还没有摘录。</p>}
 
-      {ordered.map((clip) => (
+      {groups.map((group) => (
+        <section key={group.section === null ? "#" : `${group.section.page}-${group.section.title}`}>
+          {/* 目录是摘录的上一级容器。没有目录时只有一个组、也没有标题——那就是加这个
+              功能之前的样子，不该凭空多出一行「（目录之前）」。 */}
+          {group.section !== null && (
+            <h4 className="section-head">
+              {group.section.path.length > 0 && (
+                <span className="faint crumbs">{group.section.path.join(" › ")}</span>
+              )}
+              {group.section.title}
+            </h4>
+          )}
+          {group.section === null && sections.length > 0 && (
+            <h4 className="section-head">开头</h4>
+          )}
+
+          {group.clips.map((clip) => (
         <button
           key={clip.id}
           className={[
@@ -116,6 +138,8 @@ export function ClipsPane({
             {clip.translation ?? clip.sourceText ?? clip.content?.multimodal ?? "（纯图）"}
           </div>
         </button>
+          ))}
+        </section>
       ))}
     </div>
   );

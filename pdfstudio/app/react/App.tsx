@@ -7,6 +7,8 @@ import type { PdfHost } from "./pdf-host";
 import { ShelfPage } from "./ShelfPage";
 import { Reader, type Busy } from "./Reader";
 import { ClipsPane } from "./ClipsPane";
+import { readOutline } from "./outline";
+import type { Section } from "../../src/clip/outline";
 import { ChatPanel } from "./ChatPanel";
 import { SettingsPanel } from "./SettingsPanel";
 import { RetentionNotice } from "./RetentionNotice";
@@ -54,6 +56,11 @@ export function App({
    * 换算，被 CSS 缩放过照样对；文字层在同一个 `.frame` 里，一起缩放，也不会错位。
    */
   const [pinch, setPinch] = useState(1);
+  /**
+   * 这本书的目录，摘录按它归组。**三分之一的论文没有目录**（实测 ResNet 就没有），
+   * 那时它是空数组，摘录栏退回按页排——那是正常路径，不是出错。
+   */
+  const [sections, setSections] = useState<Section[]>([]);
   const stage = useRef<HTMLDivElement>(null);
   // 手势里要读当前 scale，但那个监听只挂一次，闭包会钉住旧值。同步进 ref 而不是
   // 在渲染期直接写（渲染期写 ref 会被 react-hooks/refs 拦下，理由也确实成立）。
@@ -111,7 +118,24 @@ export function App({
     setSelected(null);
     setMenuAt(null);
     setError(null);
+    // 上一本的目录留着的话，摘录会挂在另一本书的小节标题下面，而且不报错。
+    setSections([]);
   }
+
+  // 取目录。放 effect 里而不是跟着 openDoc 走：书也可能是导入时自动打开的，
+  // 两条入口各写一份迟早漏一条。
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const document = host.document;
+      if (!document || state.docId === null) return;
+      const outline = await readOutline(document);
+      if (!cancelled) setSections(outline);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [host, state.docId]);
 
   const openDoc = async (id: string) => {
     await ws.openDoc(id);
@@ -241,6 +265,7 @@ export function App({
                   <ClipsPane
                     ws={ws}
                     tags={state.tags}
+                    sections={sections}
                     clips={state.clips}
                     selected={clip?.id ?? null}
                     onSelect={setSelected}

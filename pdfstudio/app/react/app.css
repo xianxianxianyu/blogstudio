@@ -190,6 +190,16 @@ canvas { display: block; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-radiu
 /* 列表里的小圆点：只是认色，不可点，所以比调色盘上的小一圈。 */
 .swatch.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 5px; vertical-align: middle; }
 
+/* 目录标题：摘录的上一级容器。祖先路径用小字放在上面一行，不跟标题挤在一起——
+   Attention 的目录有三层，「Model Architecture › Attention › Scaled Dot-Product
+   Attention」挤成一行在 400px 的栏里会折成三行。 */
+.section-head {
+  font-size: 13px; font-weight: 600; margin: 14px 0 6px;
+  padding-bottom: 4px; border-bottom: 1px solid var(--line);
+}
+.section-head:first-child { margin-top: 0; }
+.section-head .crumbs { display: block; font-weight: 400; font-size: 11px; margin-bottom: 1px; }
+
 /* ── 摘录 ───────────────────────────────────────────────────── */
 
 .clip-row {
