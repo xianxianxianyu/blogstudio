@@ -46,9 +46,25 @@ export async function scoreChunks(
  * 不这么做的后果是实的：不变量⑤ 要求「没有可靠依据必须 grounding: 'none'」，
  * 而绝对阈值下三条答不了的题全部被硬凑出一段原文当出处——那是在编造引用。
  */
-const MIN_PEAK_MARGIN = 0.1;
+const MIN_PEAK_MARGIN = 0.15;
 
 /*
+ * **这个常数与推理后端绑死。** 换后端会整体平移分数分布，门槛当场失效——实测从
+ * onnxruntime 换到 llama.cpp 时，中文 margin 中位数从 0.135 抬到 0.236，原来的 0.10
+ * 把 abstention 从 2/2 打到 0/2。**没有这套 eval，发出去的就是一个「从不说不知道」的
+ * 问答。** 换后端必须重跑 `npm run eval:retrieval -- --embed --clips` 重标。
+ *
+ * 0.15 由 llama.cpp（embeddinggemma-300M-Q8_0.gguf）标定：
+ *
+ *   margin  zh@1   zh@3   en@3   abstention
+ *   0.12   45.0%  85.0% 100.0%   1/2
+ *   0.15   45.0%  85.0% 100.0%   2/2   ← 拿满 abstention 的最低档
+ *   0.20   40.0%  75.0% 100.0%   2/2   ← 被 0.15 支配
+ *
+ * 换过来是净赚：zh@1 40.0% → 45.0%，跨语言净损失 Δ@3 33.3 → 16.7 个百分点，
+ * 其余持平。
+ *
+ * 以下是 onnxruntime 时期的标定，留作对照：
  * 0.10 由 `npm run eval:retrieval -- --embed` 标定。曲线与生产路径**同口径**——
  * 排序同样经 RRF 融合，只有门槛在变（此前曲线排的是纯向量，标出来的数填回生产路径
  * 其实对不上）：

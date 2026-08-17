@@ -17,6 +17,7 @@ import { buildIndex, searchChunks, scoreChunks, peakMargin } from "../../src/cha
 import type { Clip } from "../../src/clip/clip";
 import type { Chunk } from "../../src/chat/retrieval";
 import { createTransformersEmbedder } from "../../src/model/transformers-embedder";
+import { createLlamaEmbedder } from "../../src/model/llama-embedder";
 
 const HERE = import.meta.dirname;
 
@@ -92,12 +93,18 @@ async function main(): Promise<void> {
   const clipsByPaper: Record<string, Clip[]> = useClips
     ? (JSON.parse(await readFile(path.join(import.meta.dirname, "clips.json"), "utf8")) as Record<string, Clip[]>)
     : {};
-  const embedder = useEmbedder ? createTransformersEmbedder() : undefined;
+  // PDFSTUDIO_EMBED_URL 指向一个 llama-server 的 /v1，就换成它算向量。
+  // 换推理后端必须重新量：Q8_0 GGUF 与 q8 ONNX 是不同的量化方案，不能假设等价。
+  const embedder = !useEmbedder
+    ? undefined
+    : process.env.PDFSTUDIO_EMBED_URL
+      ? createLlamaEmbedder(process.env.PDFSTUDIO_EMBED_URL)
+      : createTransformersEmbedder();
 
   const questions = await readQuestions();
   const indexes = new Map<string, Chunk[]>();
 
-  if (useEmbedder) console.log("检索：本地 embedding（首次运行要下载权重，请稍候）");
+  if (useEmbedder) console.log(`检索：本地 embedding（${process.env.PDFSTUDIO_EMBED_URL ? "llama.cpp" : "onnxruntime"}）`);
   else console.log("检索：关键词基线");
   console.log(
     useClips
