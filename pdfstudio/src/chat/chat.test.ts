@@ -446,3 +446,58 @@ describe("流式出口", () => {
     expect(answer.text.length).toBeLessThan("一二三四".length);
   });
 });
+
+describe("检索到的原文怎么送给模型", () => {
+  it("不发 system 角色——有的端点根本不收", async () => {
+    // 实测：读者配的 Responses 格式端点直接拒绝——
+    // 「System messages are not allowed in the prompt or messages fields」。
+    // 而「支不支持 system 角色」是端点的能力差异，不该由领域假定。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const seen: { role: string; content: string }[][] = [];
+    const model = createFakeModelClient({ completeText: "好" });
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: {
+        complete: model.complete.bind(model),
+        streamComplete: (request) => {
+          seen.push(request.messages.map((m) => ({ role: m.role, content: String(m.content) })));
+          return model.streamComplete(request);
+        },
+      },
+    });
+
+    await chat.ask([{ role: "user", parts: [{ kind: "text", text: "encoder 是怎么堆的" }] }]);
+
+    expect(seen[0].some((message) => message.role === "system")).toBe(false);
+  });
+
+  it("检索到的原文仍然要送到模型手上", async () => {
+    // 上一条只说了「别用 system」。这一条保证原文没被顺手丢掉——不然 grounding 说
+    // 「依据是文档原文」，而模型其实什么都没看到。
+    //
+    // 用英文问句：这条测试没接 embedder，关键词那一路抽不出中文词元（已知，
+    // 见 .scratch/pdfstudio-chat/issues/01），中文问句会检索不到而测偏。
+    const document = await openFixturePdf("1706.03762.pdf");
+    const seen: string[] = [];
+    const model = createFakeModelClient({ completeText: "好" });
+    const chat = createChat({
+      document,
+      docId: "d1",
+      model: {
+        complete: model.complete.bind(model),
+        streamComplete: (request) => {
+          seen.push(request.messages.map((m) => String(m.content)).join("\n"));
+          return model.streamComplete(request);
+        },
+      },
+    });
+
+    const answer = await chat.ask([
+      { role: "user", parts: [{ kind: "text", text: "hardware used for training" }] },
+    ]);
+
+    expect(answer.grounding).toBe("retrieved");
+    expect(seen[0]).toContain(answer.citations[0].snippet!.slice(0, 40));
+  });
+});

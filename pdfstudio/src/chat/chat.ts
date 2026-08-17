@@ -156,12 +156,21 @@ export function createChat(deps: ChatDeps): Chat {
 
       const [hit] = await searchChunks(await ensureIndex(), queryOf(turns), 1, deps.embedder);
 
+      // **检索到的原文并进最后一条 user 消息，不发 system 角色。**
+      //
+      // 「支不支持 system」是端点的能力差异，不该由领域假定：读者配的 Responses 格式
+      // 端点直接拒绝——「System messages are not allowed in the prompt or messages
+      // fields」，整个问答就此不可用，而识别那条路因为只发 user 消息毫发无伤。
+      //
+      // 并进**最后一条**而不是插在最前：那是读者刚问的那句，材料紧挨着问题，
+      // 也不会被前面几轮对话推远。
       const messages = turns.map(toMessage);
-      if (hit) {
-        messages.unshift({
-          role: "system",
-          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${hit.text}`,
-        });
+      const last = messages.at(-1);
+      if (hit && last) {
+        messages[messages.length - 1] = {
+          ...last,
+          content: `以下是从文档中检索到的原文，回答只能基于它：\n\n${hit.text}\n\n问题：${String(last.content)}`,
+        };
       }
 
       let text = "";
