@@ -2,7 +2,9 @@
 
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
-This repo is **multi-context**: `CONTEXT-MAP.md` at the root points to `pdfstudio/CONTEXT.md` (PDF Studio) and the Blog Studio design docs (`docs/workflow.md` — no `CONTEXT.md` yet). Context-specific ADRs live in `pdfstudio/docs/adr/`.
+This repo is **multi-context**: `CONTEXT-MAP.md` at the root points to `pdfstudio/CONTEXT.md` (PDF Studio), `contextstudio/CONTEXT.md` (Context Studio) and the Blog Studio design docs (`docs/workflow.md` — no `CONTEXT.md` yet). Context-specific ADRs live in `pdfstudio/docs/adr/` and `contextstudio/docs/adr/`.
+
+`CONTEXT-MAP.md` also carries a **cross-context homonym table** — words that mean different things in different contexts (`tag` / `label` / `topic`, `原文` / `evidence`). When a term appears there, use it as that table rules, not as the nearest context happens to use it.
 
 ## Before exploring, read these
 

@@ -11,6 +11,7 @@ version history.
 - The spec is `.scratch/<feature-slug>/spec.md`
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01` — never a single combined tickets file
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
+- An optional `Skill:` line records which skill the ticket should be worked with, chosen by **what kind of uncertainty the ticket holds** — not by which stage of the work it belongs to. A ticket whose rules are all settled is `/tdd`; one whose shape is unknown is `/prototype`; one whose vocabulary or boundary is unresolved is `/domain-modeling`. When a ticket stacks several kinds of uncertainty, list them in order and resolve one at a time.
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
 
 ## When a skill says "publish to the issue tracker"
