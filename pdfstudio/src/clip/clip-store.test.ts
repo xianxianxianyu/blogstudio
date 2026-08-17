@@ -101,6 +101,33 @@ describe("ClipStore — 抠出的图与整块截图不是同一张", () => {
   });
 });
 
+describe("文本流选区的精确形状落盘（ADR-0016 第二步）", () => {
+  it("逐行矩形存进 frontmatter，读回来还在", async () => {
+    const clips = await store();
+    const lines = [
+      { x: 200, y: 700, width: 86, height: 9 },
+      { x: 54, y: 689, width: 232, height: 9 },
+    ];
+
+    await clips.save("paper-1706", { ...CLIP, region: { ...REGION, lines } });
+    const [loaded] = await clips.listByDoc("paper-1706");
+
+    // 丢了它就只剩外接矩形，而外接矩形会把首尾两行没选中的地方也涂上——
+    // 重开这本书时高亮悄悄变胖，没有任何报错。
+    expect(loaded.region.lines).toEqual(lines);
+  });
+
+  it("矩形框选的摘录读回来没有这个字段，而不是空数组", async () => {
+    const clips = await store();
+
+    await clips.save("paper-1706", CLIP);
+    const [loaded] = await clips.listByDoc("paper-1706");
+
+    // 空数组会被渲染端当成「精确形状是零行」，于是一条高亮都不画。
+    expect(loaded.region.lines).toBeUndefined();
+  });
+});
+
 describe("保留轴落盘（ADR-0012）", () => {
   it("重要标记存进 frontmatter，读回来还在", async () => {
     // **标记的真相必须是文件，不是数据库。** ADR-0011 定了数据库是可重建的缓存；

@@ -82,6 +82,9 @@ function editDistance(a: string, b: string): number {
 /**
  * 同一区域：页码相同且矩形四个数都相同。
  * 定案是「合并进已有标签，不新建第二个摘录」——同一区域两个标签会让锚点回跳有歧义。
+ *
+ * **不比 `region.lines`**：那是同一块地方的更精确画法，不是另一个地方。比了的话，
+ * 在同一段上先框选、后划词就会得到两个重叠的标签，而回跳该跳哪个说不清。
  */
 export function sameRegion(a: Region, b: Region): boolean {
   return (

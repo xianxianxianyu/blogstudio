@@ -26,6 +26,14 @@ export interface Region {
   page: number;
   rect: Rect;
   pixels: Screenshot;
+  /**
+   * 文本流选区的**精确形状**，一行一个矩形（ADR-0016 第二步）。矩形框选不产出它。
+   *
+   * `rect` 仍是外接矩形，语义不变——`sameRegion` 去重、标签命中、重新识别都还看它。
+   * 但从第 1 行中间起、第 3 行中间止的选区，外接矩形会把三行全部盖满：照它画高亮，
+   * 首尾两行会涂到根本没选中的地方。**画的和选的必须是同一块。**
+   */
+  lines?: Rect[];
 }
 
 export type Route = "text" | "vision";

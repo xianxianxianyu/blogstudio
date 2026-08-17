@@ -220,10 +220,13 @@ export function Reader({
           state.clips
             .filter((clip) => clip.region.page === page)
             .flatMap((clip) => {
-              const highlight = clip.content?.route === "text";
-              const rects = highlight
-                ? highlightBoxes(clip.region.rect, textItems)
-                : [clip.region.rect];
+              // 有 lines 就用 lines：文本流选区不是矩形，拿外接矩形裁行会把首尾两行
+              // 没选中的地方也涂上（ADR-0016 第二步）。矩形框选没有 lines，仍按老路
+              // 从文字项现算。
+              const exact = clip.region.lines;
+              const highlight = exact !== undefined || clip.content?.route === "text";
+              const rects =
+                exact ?? (highlight ? highlightBoxes(clip.region.rect, textItems) : [clip.region.rect]);
               const shape = highlight ? "mark line" : "mark";
 
               return rects.map((rect, index) => {
