@@ -197,6 +197,20 @@ canvas { display: block; box-shadow: 0 2px 14px rgba(0, 0, 0, .12); border-radiu
    三层各描一条线的话一屏六七条，反而看不出谁包着谁。 */
 .outline-part { padding-left: calc(var(--depth) * 14px); }
 
+/* 可改的目录标题：平时跟不可改的一模一样，动作藏在悬停里——**读**是主路径，
+   改是偶尔（同 ClipPanel「默认是文本不是输入框」的理由）。 */
+.section-head.editable { display: flex; align-items: baseline; gap: 4px; }
+.section-head.editable .ghost { opacity: 0; }
+.section-head.editable:hover .ghost { opacity: 1; }
+.ghost {
+  background: none; border: none; padding: 1px 5px; border-radius: 5px;
+  font-size: 11px; font-weight: 400; color: var(--muted); transition: opacity .12s, background .12s;
+}
+.ghost:hover { background: var(--paper); color: var(--ink); }
+.ghost:disabled { opacity: .3 !important; cursor: default; }
+.section-edit { display: flex; align-items: center; gap: 4px; margin: 16px 0 4px; }
+.section-edit input { font: inherit; font-size: 13px; padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; min-width: 0; }
+
 .section-head {
   margin: 22px 0 6px;
   font-weight: 600;

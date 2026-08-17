@@ -9,6 +9,7 @@ import sirv from "sirv";
 import { createClipStore } from "../clip/clip-store";
 import { createBookshelf } from "../bookshelf/bookshelf";
 import { createTagStore } from "../tag/tag-store";
+import { createOutlineStore } from "../outline/outline-store";
 import { deserialize, serializeClip } from "../clip/clip-wire";
 import { createLocalEngine } from "../model/local-engine";
 import { EMBEDDING_SPEC, RECOGNITION_SPEC, llamaEngineDeps } from "../model/llama-server";
@@ -66,6 +67,7 @@ export const ROUTES = {
   docs: "/__docs",
   index: "/__index",
   tags: "/__tags",
+  outline: "/__outline",
   models: "/__models",
   pdfjs: "/__pdfjs",
   embed: "/__embed",
@@ -84,6 +86,7 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
   const shelf = createBookshelf(options.libraryRoot);
   const store = createClipStore(options.libraryRoot);
   const tags = createTagStore(options.libraryRoot);
+  const outlines = createOutlineStore(options.libraryRoot);
 
 
   // 懒建：没人问文档时不该把 300 MB 加载进来。
@@ -166,6 +169,26 @@ export function createLocalApi(options: LocalApiOptions): Route[] {
             return json({});
           }
           return json(await tags.load());
+        });
+      },
+    },
+
+    {
+      // 生成的目录，落在这本书自己的文件夹里（同摘录，删书就跟着没）。
+      prefix: ROUTES.outline,
+      handler: (request, response) => {
+        const [docId] = segments(request);
+        respond(response, async () => {
+          if (!docId) throw new Error("缺少 docId");
+          if (request.method === "POST") {
+            await outlines.save(docId, JSON.parse(await readBody(request)));
+            return json({});
+          }
+          if (request.method === "DELETE") {
+            await outlines.remove(docId);
+            return json({});
+          }
+          return json(await outlines.load(docId));
         });
       },
     },

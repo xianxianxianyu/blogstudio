@@ -3,6 +3,7 @@ import { clipTitle, type Clip } from "../../src/clip/clip";
 import type { Workspace } from "../../src/app/workspace";
 import { TAG_COLORS, type Tag, type TagColor } from "../../src/tag/tag";
 import { groupClipsBySection, type Section } from "../../src/clip/outline";
+import { SectionHead } from "./SectionHead";
 import { ClipPanel } from "./ClipPanel";
 
 /**
@@ -16,6 +17,9 @@ export function ClipsPane({
   clips,
   tags,
   sections,
+  generated,
+  onGenerate,
+  onEditSections,
   selected,
   onSelect,
   onJump,
@@ -23,8 +27,12 @@ export function ClipsPane({
   ws: Workspace;
   clips: Clip[];
   tags: Tag[];
-  /** PDF 的目录，拍平后按阅读顺序。没有目录就是空数组——三分之一的论文如此。 */
+  /** 用来分组的目录：生成的优先，没有才用 PDF 自带的。 */
   sections: Section[];
+  /** 这一份是不是**生成的**。只有生成的才可改——自带的是文件里的事实，改了存不回去。 */
+  generated: boolean;
+  onGenerate: () => void;
+  onEditSections: (next: Section[]) => void;
   selected: string | null;
   onSelect: (clipId: string | null) => void;
   onJump: (page: number) => void;
@@ -79,8 +87,29 @@ export function ClipsPane({
    */
   const used = TAG_COLORS.filter((id) => clips.some((clip) => clip.tagId === id));
 
+  const replaceSection = (target: Section, next: Section | null) =>
+    onEditSections(
+      sections.flatMap((section) => (section === target ? (next === null ? [] : [next]) : [section])),
+    );
+
   return (
     <div className="pane">
+      {/* 入口放在这儿而不是设置里：目录是**这本书的数据**，而且「没有目录」正是在这一栏
+          被感觉到的——它现在退回了按页排。 */}
+      {sections.length === 0 && (
+        <div className="row filter">
+          <span className="faint grow">这本书没有目录，按页排的</span>
+          <button className="btn" onClick={onGenerate}>
+            生成目录
+          </button>
+        </div>
+      )}
+      {generated && (
+        <p className="faint" style={{ marginBottom: 8 }}>
+          目录是自动识别的，可能有错——点标题右边的 ✎ 改，点页码跳过去核对。
+        </p>
+      )}
+
       {used.length > 0 && (
         <div className="row filter">
           {used.map((id) => (
@@ -117,7 +146,17 @@ export function ClipsPane({
           data-depth={Math.min(group.section?.level ?? 0, 2)}
           style={{ "--depth": Math.min(group.section?.level ?? 0, 2) } as React.CSSProperties}
         >
-          <h4 className="section-head">{group.section?.title ?? "开头"}</h4>
+          {group.section === null ? (
+            <h4 className="section-head">开头</h4>
+          ) : (
+            <SectionHead
+              section={group.section}
+              editable={generated}
+              onJump={() => onJump(group.section!.page)}
+              onChange={(next) => replaceSection(group.section!, next)}
+              onRemove={() => replaceSection(group.section!, null)}
+            />
+          )}
 
           {group.clips.map((clip) => (
         <button

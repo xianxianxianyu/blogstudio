@@ -7,6 +7,8 @@ import type { ClipStore } from "../clip/clip-store";
 import type { RecognizeOptions, Recognizer, Region } from "../recognizer/recognizer";
 import { normalizeTags, renameTag as rename, type Tag, type TagColor } from "../tag/tag";
 import type { TagStore } from "../tag/tag-store";
+import type { OutlineStore } from "../outline/outline-store";
+import type { Section } from "../clip/outline";
 import type { Chat } from "../chat/chat";
 import type { RetentionConfig } from "../config/config";
 
@@ -23,6 +25,8 @@ export interface WorkspaceDeps {
   store: ClipStore;
   /** 标签表。省略就只有内存里那五个默认值，改名不落盘。 */
   tags?: TagStore;
+  /** 生成的目录。省略就只用 PDF 自带的那份。 */
+  outlines?: OutlineStore;
   /**
    * 视图在这里建 pdf.js 文档，交回依赖都接好了的 `Recognizer` 与 `Chat`。
    *
@@ -54,6 +58,14 @@ export interface WorkspaceState {
   clips: Clip[];
   /** 五个标签，全局共用（颜色即分类）。 */
   tags: Tag[];
+  /**
+   * 这本书**生成的**目录。`null` = 还没生成过（与「生成了一份空的」不是一回事，
+   * 摘录栏靠这个区别决定要不要显示「生成目录」那个入口）。
+   *
+   * 它与 PDF 自带的目录谁优先由视图决定，而定案是**这一份优先**：读者会去生成，正是
+   * 因为自带的没有或不好用；自带的后来冒出来不该把手工修过的覆盖掉。
+   */
+  outline: Section[] | null;
   /**
    * 上一次用过的颜色，新划的摘录默认带上它。
    *
@@ -99,6 +111,10 @@ export interface Workspace {
   setTitle(clipId: string, text: string): Promise<Result>;
   /** 改标签名。只写 tags.md，摘录文件一个字节不动——摘录只存 id。 */
   renameTag(tagId: TagColor, name: string): Promise<Result>;
+  /** 写下这本书生成的目录（生成完、或读者改完一条之后）。 */
+  saveOutline(sections: Section[]): Promise<Result>;
+  /** 丢掉生成的目录，回到用 PDF 自带的那份（没有就按页排）。 */
+  clearOutline(): Promise<Result>;
   viewClip(clipId: string): Promise<Result>;
   markImportant(clipId: string): Promise<Result>;
   editNote(clipId: string, text: string): Promise<Result>;
@@ -116,12 +132,13 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
 
   let tags: Tag[] = normalizeTags([]);
   let defaultTagId: TagColor | null = null;
-  let snapshot: WorkspaceState = { docs, docId, clips: clips.clips, tags, defaultTagId };
+  let outline: Section[] | null = null;
+  let snapshot: WorkspaceState = { docs, docId, clips: clips.clips, tags, defaultTagId, outline };
   const listeners = new Set<() => void>();
 
   /** 每个改状态的地方都要调它——漏掉一处，界面就会停在旧数据上而不报错。 */
   function publish(): void {
-    snapshot = { docs, docId, clips: clips.clips, tags, defaultTagId };
+    snapshot = { docs, docId, clips: clips.clips, tags, defaultTagId, outline };
     for (const listener of listeners) listener();
   }
 
@@ -206,6 +223,8 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       // 回收之后才读：先读的话拿到的是内存里还带着内容的旧样子，标签会画成「实的」，
       // 而磁盘上已经是墓碑了。
       clips = { clips: await deps.store.listByDoc(id), contexts: [] };
+      // 跟摘录一起读：上一本的目录留着的话，摘录会挂在另一本书的小节标题下且不报错。
+      outline = (await deps.outlines?.load(id)) ?? null;
       publish();
     },
 
@@ -222,6 +241,7 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
       recognizer = null;
       chat = null;
       clips = { clips: [], contexts: [] };
+      outline = null;
       publish();
     },
 
@@ -255,6 +275,28 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
 
     setTitle(clipId: string, text: string): Promise<Result> {
       return commit({ type: "set-title", id: clipId, text }, clipId);
+    },
+
+    async saveOutline(sections: Section[]): Promise<Result> {
+      try {
+        await deps.outlines?.save(requireDoc(), sections);
+      } catch (error) {
+        return { ok: false, reason: "保存目录失败", error };
+      }
+      outline = sections;
+      publish();
+      return OK;
+    },
+
+    async clearOutline(): Promise<Result> {
+      try {
+        await deps.outlines?.remove(requireDoc());
+      } catch (error) {
+        return { ok: false, reason: "删除目录失败", error };
+      }
+      outline = null;
+      publish();
+      return OK;
     },
 
     async renameTag(tagId: TagColor, name: string): Promise<Result> {

@@ -8,6 +8,7 @@ import { ShelfPage } from "./ShelfPage";
 import { Reader, type Busy } from "./Reader";
 import { ClipsPane } from "./ClipsPane";
 import { readOutline } from "./outline";
+import { TocWizard } from "./TocWizard";
 import type { Section } from "../../src/clip/outline";
 import { ChatPanel } from "./ChatPanel";
 import { SettingsPanel } from "./SettingsPanel";
@@ -60,7 +61,8 @@ export function App({
    * 这本书的目录，摘录按它归组。**三分之一的论文没有目录**（实测 ResNet 就没有），
    * 那时它是空数组，摘录栏退回按页排——那是正常路径，不是出错。
    */
-  const [sections, setSections] = useState<Section[]>([]);
+  const [embedded, setEmbedded] = useState<Section[]>([]);
+  const [tocOpen, setTocOpen] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
   // 手势里要读当前 scale，但那个监听只挂一次，闭包会钉住旧值。同步进 ref 而不是
   // 在渲染期直接写（渲染期写 ref 会被 react-hooks/refs 拦下，理由也确实成立）。
@@ -119,7 +121,8 @@ export function App({
     setMenuAt(null);
     setError(null);
     // 上一本的目录留着的话，摘录会挂在另一本书的小节标题下面，而且不报错。
-    setSections([]);
+    setEmbedded([]);
+    setTocOpen(false);
   }
 
   // 取目录。放 effect 里而不是跟着 openDoc 走：书也可能是导入时自动打开的，
@@ -130,7 +133,7 @@ export function App({
       const document = host.document;
       if (!document || state.docId === null) return;
       const outline = await readOutline(document);
-      if (!cancelled) setSections(outline);
+      if (!cancelled) setEmbedded(outline);
     })();
     return () => {
       cancelled = true;
@@ -141,6 +144,12 @@ export function App({
     await ws.openDoc(id);
     setReading(true);
   };
+
+  /**
+   * 用哪份目录：**生成的优先**。读者会去生成，正是因为自带的没有或不好用；自带的后来
+   * 冒出来不该把手工修过的覆盖掉。
+   */
+  const sections = state.outline ?? embedded;
 
   const doc = state.docs.find((candidate) => candidate.id === state.docId);
   const clip = state.clips.find((candidate) => candidate.id === selected) ?? null;
@@ -252,7 +261,19 @@ export function App({
                 </button>
               </div>
 
-              {pane === "clips" ? (
+              {/* 向导占住整栏（不是弹窗）：选目录页时必须同时看得见左边的 PDF。
+                  播完种就退场，之后目录就是一份可以一直改的东西。 */}
+              {pane === "clips" && tocOpen && host.document ? (
+                <TocWizard
+                  document={host.document}
+                  page={page}
+                  onCancel={() => setTocOpen(false)}
+                  onDone={(next) => {
+                    void ws.saveOutline(next);
+                    setTocOpen(false);
+                  }}
+                />
+              ) : pane === "clips" ? (
                 <>
                   {(busy !== null || error !== null) && (
                     <div style={{ padding: "12px 14px 0" }}>
@@ -266,6 +287,9 @@ export function App({
                     ws={ws}
                     tags={state.tags}
                     sections={sections}
+                    generated={state.outline !== null}
+                    onGenerate={() => setTocOpen(true)}
+                    onEditSections={(next) => void ws.saveOutline(next)}
                     clips={state.clips}
                     selected={clip?.id ?? null}
                     onSelect={setSelected}
