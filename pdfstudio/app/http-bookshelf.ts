@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import type { Bookshelf, Doc, ImportRequest } from "../src/bookshelf/bookshelf";
 
 /**
@@ -16,7 +17,7 @@ export function createHttpBookshelf(route: string): Bookshelf {
   return {
     async import({ filename, bytes }: ImportRequest): Promise<Doc> {
       const response = await expectOk(
-        await fetch(route, {
+        await apiFetch(route, {
           method: "POST",
           // 文件名可能有中文，头里不能直接放非 ASCII。
           headers: { "x-filename": encodeURIComponent(filename) },
@@ -27,22 +28,22 @@ export function createHttpBookshelf(route: string): Bookshelf {
     },
 
     async list(): Promise<Doc[]> {
-      return (await (await expectOk(await fetch(route))).json()) as Doc[];
+      return (await (await expectOk(await apiFetch(route))).json()) as Doc[];
     },
 
     async read(docId: string): Promise<Uint8Array> {
-      const response = await expectOk(await fetch(`${route}/${docId}/pdf`));
+      const response = await expectOk(await apiFetch(`${route}/${docId}/pdf`));
       return new Uint8Array(await response.arrayBuffer());
     },
 
     async rename(docId: string, title: string): Promise<void> {
       await expectOk(
-        await fetch(`${route}/${docId}/title`, { method: "POST", body: title }),
+        await apiFetch(`${route}/${docId}/title`, { method: "POST", body: title }),
       );
     },
 
     async remove(docId: string): Promise<void> {
-      await expectOk(await fetch(`${route}/${docId}`, { method: "DELETE" }));
+      await expectOk(await apiFetch(`${route}/${docId}`, { method: "DELETE" }));
     },
   };
 }

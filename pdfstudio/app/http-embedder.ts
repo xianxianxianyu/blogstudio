@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import type { Embedder } from "../src/model/embedder";
 import type { Progress } from "../src/app/progress";
 
@@ -14,7 +15,7 @@ import type { Progress } from "../src/app/progress";
  */
 export function createHttpEmbedder(route: string, progress: Progress): Embedder {
   async function post(body: unknown): Promise<Float32Array[]> {
-    const response = await fetch(route, {
+    const response = await apiFetch(route, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),

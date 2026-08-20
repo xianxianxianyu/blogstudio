@@ -55,8 +55,19 @@ export default defineConfig({
        * 不会被打包（ADR-0005：真实 key 绝不进源码或构建产物）。
        */
       configureServer(server) {
-        for (const route of createLocalApi(paths())) {
+        const api = createLocalApi({ ...paths(), token: "" });
+        for (const route of api.routes) {
           server.middlewares.use(route.prefix, route.handler);
+        }
+        // dev 下也要停：Ctrl-C 之后留下的 llama-server 一个占 3 GB，而开发时重启的
+        // 次数远比正常用多。`httpServer` 的 close 覆盖 vite 自己的关闭，SIGINT 覆盖
+        // Ctrl-C——后者不补的话进程直接就没了，close 根本不触发。
+        server.httpServer?.on("close", () => api.shutdown());
+        for (const signal of ["SIGINT", "SIGTERM"] as const) {
+          process.once(signal, () => {
+            api.shutdown();
+            process.exit(0);
+          });
         }
       },
     },

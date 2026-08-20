@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { createLocalApi } from "../src/server/local-api";
@@ -44,15 +45,51 @@ function dataPaths() {
  * 绑 0.0.0.0 会让同一网络里的任何人读到读者的摘录、甚至读到配置里的 apiKey
  * （ADR-0005）。固定端口则会在开着两个实例时撞车。
  */
-function startApi(): Promise<string> {
+/** 连上本机 API 需要的两样东西：地址和写保护的令牌。**一起给**，漏一个就是 403。 */
+function startApi(): Promise<{ api: string; token: string }> {
   const paths = dataPaths();
+  /**
+   * 写保护的令牌，**每次启动新生成**（`src/server/guard.ts`）。
+   *
+   * 跟着地址一起从查询串进页面：注入路径已经在那儿了，而且它在页面脚本开始执行
+   * **之前**就位——`executeJavaScript` 那条路会有竞态，适配器可能已经发出第一批请求。
+   *
+   * 网页拿不到它：它只活在主进程和我们自己那个 `file://` 页面的 URL 里。
+   */
+  const token = randomUUID();
   note(`数据目录 ${app.getPath("userData")}`);
   // 向量必须跑在 utilityProcess 里：onnxruntime-node 在主进程上加载并推理会直接
   // EXC_BREAKPOINT（实测崩溃点在 CrBrowserMain）。
   // 向量由本机 API 自己拉起 llama-server（与识别共用同一个二进制），主进程不碰
   // 任何原生推理库——onnxruntime-node 在 Electron 的进程里跑不起来，那条路已退役。
-  const routes = createLocalApi(paths);
+  const { routes, shutdown } = createLocalApi({ ...paths, token });
   note("本机 API 已构造");
+
+  // **退出时停掉本地引擎。** 不停的话它们被系统收养，一个占 3 GB 继续跑着；实测重启
+  // 五次留下四个孤儿、14 GB、机器卡死。`before-quit` 而不是 `window-all-closed`：
+  // 后者在 ⌘Q 那条路上不一定先触发。
+  //
+  // 这条只管正常退出。被强杀或者崩溃时它跑不到——那种情况靠下次启动收尸
+  // （`engine-registry.ts`），两条都要有。
+  let stopped = false;
+  const stopEngines = (why: string) => {
+    if (stopped) return;
+    stopped = true;
+    note(`${why}，停掉本地引擎`);
+    shutdown();
+  };
+
+  app.on("before-quit", () => stopEngines("退出"));
+  // **`before-quit` 只走 ⌘Q / 关窗那条路，SIGTERM 下根本不触发**（实测：pkill 之后
+  // 4 GB 的 llama-server 照样留着）。开发时的重启、以及系统关机，走的都是信号这条。
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.once(signal, () => {
+      stopEngines(signal);
+      app.quit();
+      // Electron 在信号下不保证走完退出流程，兜一手；引擎已经停了，直接走也安全。
+      setTimeout(() => process.exit(0), 500).unref();
+    });
+  }
 
   const server = createServer((request, response) => {
     const url = request.url ?? "/";
@@ -75,7 +112,7 @@ function startApi(): Promise<string> {
 
   return new Promise((resolve) => {
     server.listen(0, "127.0.0.1", () => {
-      resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`);
+      resolve({ api: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, token });
     });
   });
 }
@@ -95,7 +132,7 @@ function note(line: string): void {
 
 async function createWindow(): Promise<void> {
   note("createWindow 开始");
-  const api = await startApi();
+  const { api, token } = await startApi();
   note(`本机 API ${api}`);
 
   const window = new BrowserWindow({
@@ -107,6 +144,20 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false,
       contextIsolation: true,
     },
+  });
+
+
+  /**
+   * 把渲染进程的报错转发到主进程日志。
+   *
+   * 渲染进程一挂就是**白屏**，而主进程日志里什么都没有——只能靠猜是哪一行。这条
+   * 加上之后，那类问题第一时间就能看见。
+   */
+  window.webContents.on("console-message", (_event, level, message, line, source) => {
+    if (level >= 2) note(`渲染进程 ${source}:${line} ${message}`);
+  });
+  window.webContents.on("render-process-gone", (_event, details) => {
+    note(`渲染进程没了：${details.reason}`);
   });
 
   // 外链走系统浏览器，别在应用窗口里打开——那会把应用变成一个没有地址栏的浏览器。
@@ -121,10 +172,10 @@ async function createWindow(): Promise<void> {
   const devServer = process.env.PDFSTUDIO_DEV_SERVER;
   if (devServer) {
     // 开发时指向 vite，享受热更新；本机 API 仍由这个进程提供，与打包形态同一份实现。
-    await window.loadURL(`${devServer}/?api=${encodeURIComponent(api)}`);
+    await window.loadURL(`${devServer}/?api=${encodeURIComponent(api)}&token=${token}`);
   } else {
     await window.loadFile(path.join(import.meta.dirname, "renderer/index.html"), {
-      search: `api=${encodeURIComponent(api)}`,
+      search: `api=${encodeURIComponent(api)}&token=${token}`,
     });
   }
 }

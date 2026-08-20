@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import { parseConfig } from "../src/config/config";
 import type { AppConfig } from "../src/config/config";
 
@@ -11,7 +12,7 @@ import type { AppConfig } from "../src/config/config";
 export function createHttpConfigStore(route: string) {
   return {
     async load(): Promise<AppConfig> {
-      const response = await fetch(route);
+      const response = await apiFetch(route);
       if (!response.ok) throw new Error(`读配置失败：HTTP ${response.status}`);
       return parseConfig((await response.json()) as unknown);
     },
@@ -19,7 +20,7 @@ export function createHttpConfigStore(route: string) {
     async save(config: AppConfig): Promise<void> {
       // 总是写分组形式：读进来时认扁平写法是为了兼容既有文件，写出去统一成一种形状，
       // 免得同一份配置在两种形态之间来回漂。
-      const response = await fetch(route, {
+      const response = await apiFetch(route, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: `${JSON.stringify(config, null, 2)}\n`,

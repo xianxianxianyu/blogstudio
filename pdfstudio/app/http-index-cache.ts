@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import type { Chunk } from "../src/chat/retrieval";
 import type { IndexCache } from "../src/chat/retrieval";
 
@@ -12,7 +13,7 @@ export function createHttpIndexCache(route: string, docId: string, model: string
 
   return {
     async load(): Promise<Chunk[] | null> {
-      const response = await fetch(url);
+      const response = await apiFetch(url);
       if (!response.ok) return null;
       const cached = (await response.json()) as { model?: string; chunks?: WireChunk[] } | null;
       // **换了模型就作废**：不同模型的向量根本不在同一个空间里，混用不会报错，
@@ -26,7 +27,7 @@ export function createHttpIndexCache(route: string, docId: string, model: string
     },
 
     async save(chunks: Chunk[]): Promise<void> {
-      await fetch(url, {
+      await apiFetch(url, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

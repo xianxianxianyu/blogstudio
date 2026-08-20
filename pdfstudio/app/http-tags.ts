@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import { normalizeTags, type Tag } from "../src/tag/tag";
 import type { TagStore } from "../src/tag/tag-store";
 
@@ -10,14 +11,14 @@ import type { TagStore } from "../src/tag/tag-store";
 export function createHttpTagStore(route: string): TagStore {
   return {
     async load(): Promise<Tag[]> {
-      const stored = await fetch(route)
+      const stored = await apiFetch(route)
         .then((response) => (response.ok ? (response.json() as Promise<Tag[]>) : []))
         .catch(() => [] as Tag[]);
       return normalizeTags(stored);
     },
 
     async save(tags: Tag[]): Promise<void> {
-      const response = await fetch(route, {
+      const response = await apiFetch(route, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(normalizeTags(tags)),

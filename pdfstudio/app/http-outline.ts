@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import type { Section } from "../src/clip/outline";
 import type { OutlineStore } from "../src/outline/outline-store";
 
@@ -12,13 +13,13 @@ export function createHttpOutlineStore(route: string): OutlineStore {
 
   return {
     async load(docId: string): Promise<Section[] | null> {
-      return fetch(url(docId))
+      return apiFetch(url(docId))
         .then((response) => (response.ok ? (response.json() as Promise<Section[] | null>) : null))
         .catch(() => null);
     },
 
     async save(docId: string, sections: Section[]): Promise<void> {
-      const response = await fetch(url(docId), {
+      const response = await apiFetch(url(docId), {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(sections),
@@ -27,7 +28,7 @@ export function createHttpOutlineStore(route: string): OutlineStore {
     },
 
     async remove(docId: string): Promise<void> {
-      await fetch(url(docId), { method: "DELETE" });
+      await apiFetch(url(docId), { method: "DELETE" });
     },
   };
 }

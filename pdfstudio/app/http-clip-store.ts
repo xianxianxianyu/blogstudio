@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-base";
 import type { Clip } from "../src/clip/clip";
 import type { ClipStore } from "../src/clip/clip-store";
 import { deserialize, serializeClip } from "../src/clip/clip-wire";
@@ -23,7 +24,7 @@ export function createHttpClipStore(route: string): ClipStore {
   return {
     async save(docId: string, clip: Clip): Promise<void> {
       await expectOk(
-        await fetch(`${route}/${encodeURIComponent(docId)}`, {
+        await apiFetch(`${route}/${encodeURIComponent(docId)}`, {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: serializeClip(clip),
@@ -32,13 +33,13 @@ export function createHttpClipStore(route: string): ClipStore {
     },
 
     async listByDoc(docId: string): Promise<Clip[]> {
-      const response = await expectOk(await fetch(`${route}/${encodeURIComponent(docId)}`));
+      const response = await expectOk(await apiFetch(`${route}/${encodeURIComponent(docId)}`));
       return deserialize<Clip[]>(await response.text());
     },
 
     async delete(docId: string, clipId: string): Promise<void> {
       await expectOk(
-        await fetch(`${route}/${encodeURIComponent(docId)}/${encodeURIComponent(clipId)}`, {
+        await apiFetch(`${route}/${encodeURIComponent(docId)}/${encodeURIComponent(clipId)}`, {
           method: "DELETE",
         }),
       );
