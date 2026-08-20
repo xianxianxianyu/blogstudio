@@ -20,8 +20,29 @@ export interface Section {
   y: number | null;
   /** 层级，0 是顶层。 */
   level: number;
-  /** 祖先标题，从顶层到父级。给界面显示路径用。 */
-  path: string[];
+}
+
+/**
+ * 在第 `index` 条后面插一条空的。`-1` = 插在最前面。
+ *
+ * **手加的条目是必需的**：模型漏掉一条时，规则能发现的只有「带编号的漏条」——漏掉
+ * 一个「练习」、或者标题认错，任何规则都看不出来。所以最终的出口必须是读者自己能加。
+ *
+ * 新条目**没有标题**：空标题就是「还没成形」，界面据此直接进编辑态，而失焦时仍为空
+ * 就撤销。编一个「新条目」当占位符的话，读者一旦忘了改，目录里就永远躺着一行谎话。
+ */
+export function addSection(sections: Section[], index: number): Section[] {
+  const anchor = sections[index] as Section | undefined;
+  const draft: Section = {
+    title: "",
+    // 跟着锚点走：同一节里加一条，多半是同页同级的兄弟。插在最前面时取第一条的页码。
+    page: anchor?.page ?? sections[0]?.page ?? 1,
+    // y 只有从 PDF 自带目录解出来时才有。手加的只知道页码，编一个 y 会让归组拿它
+    // 跟摘录的上沿去比——那个比较的依据是假的。
+    y: null,
+    level: anchor?.level ?? 0,
+  };
+  return [...sections.slice(0, index + 1), draft, ...sections.slice(index + 1)];
 }
 
 export interface ClipGroup {
@@ -42,13 +63,6 @@ const topOf = (clip: Clip) => clip.region.rect.y + clip.region.rect.height;
 function precedes(section: Section, page: number, y: number): boolean {
   if (section.page !== page) return section.page < page;
   return section.y === null || section.y >= y;
-}
-
-/** a 是不是 b 的祖先：b 的路径以 a 的「路径 + 自己」开头。 */
-function isAncestor(a: ClipGroup, b: ClipGroup): boolean {
-  if (a.section === null || b.section === null) return false;
-  const prefix = [...a.section.path, a.section.title];
-  return prefix.length < b.section.path.length + 1 && prefix.every((title, i) => b.section!.path[i] === title);
 }
 
 export function groupClipsBySection(clips: Clip[], sections: Section[]): ClipGroup[] {
@@ -82,12 +96,61 @@ export function groupClipsBySection(clips: Clip[], sections: Section[]): ClipGro
     groups.find((group) => group.section === section)!.clips.push(clip);
   }
 
-  // 空的小节不出现：22 项目录配 3 条摘录，画出 19 个空标题只会让这一栏没法看。
+  // **空的小节照样出现**（ADR-0018）。此前这里只留有摘录的组（加祖先），理由是
+  // 「22 项目录配 3 条摘录，画出 19 个空标题只会让这一栏没法看」。那条推理对 15 页的
+  // 论文成立，对 654 页的书是反的：早期一条摘录都没有，于是**整本书没有目录**——
+  // 而几百页的书里目录是唯一的导航手段，恰恰是这个功能存在的理由。
   //
-  // **但祖先要留**：这一栏读起来像一份 markdown 文档，而 3.2.3 底下有摘录、3 和 3.2
-  // 自己没有的时候，只画出 3.2.3 就成了一个没有上文的孤零零三级标题。
-  const kept = groups.filter((group) => group.clips.length > 0);
+  // 密度问题交给折叠，不交给隐藏：**隐藏丢掉的是存在性**（你不知道第 12 章在那儿），
+  // 折叠丢掉的只是细节。
+  //
+  // 唯一还会被滤掉的是「（目录之前）」那一组——它不是书的结构，只是摘录落在第一个
+  // 小节之前时的收容所，没有那样的摘录就不该占一行。
   return groups
-    .filter((group) => group.clips.length > 0 || kept.some((other) => isAncestor(group, other)))
+    .filter((group) => group.section !== null || group.clips.length > 0)
     .map((group) => ({ ...group, clips: group.clips.sort(byPosition) }));
+}
+
+/**
+ * 整份目录一起挪 N 页。
+ *
+ * **为什么必须有**：印刷页码与物理页码的偏移只在生成那一刻用一次，之后就烤进每一条的
+ * `page` 里了。而「事后才发现差一页」恰恰是最常见的情况——填偏移时要么看错、要么
+ * 那本书的前言页数刚好差一。没有这个动作，读者只剩两条路：重跑一遍几分钟的识别，
+ * 或者手改三百条。
+ *
+ * **一条越界就整份不动**，不做局部截断。截断会把相对关系毁掉，而在一份「三项全对率
+ * 只有一半」的目录里，相对关系是它唯一还可信的东西。
+ */
+export function shiftSections(sections: Section[], delta: number): Section[] {
+  if (delta === 0) return sections;
+  if (sections.some((section) => section.page + delta < 1)) return sections;
+  return sections.map((section) => ({ ...section, page: section.page + delta }));
+}
+
+/**
+ * 在指定的**物理页**加一条书签。
+ *
+ * 与 `addSection` 的区别是**谁决定页码**：那个跟着锚点走（在目录里点「加一条」），
+ * 这个页码是给定的——读者正站在那一页上右键。**站在那一页上，页码就是对的**，
+ * 不用猜、也不用事后翻回来核对，而那正是「在目录里加一条」最别扭的地方。
+ *
+ * 层级继承**它所在的那一节**：在 1.2 底下加，加出来的就是 1.2 的同级。这是个猜测，
+ * 但它是廉价且可改的猜测（`←` `→` 一点就变），而且比一律顶层更常对。
+ */
+export function bookmark(sections: Section[], page: number, title: string): Section[] {
+  // 排在同页已有条目的**后面**：右键这一下发生在读者已经看过的内容之后。
+  let index = sections.findIndex((section) => section.page > page);
+  if (index === -1) index = sections.length;
+
+  const before = sections[index - 1] as Section | undefined;
+  const draft: Section = {
+    // 选区常常带着换行和缩进（PDF 的文本层按行给），压成一个空格再收边。
+    title: title.replace(/\s+/g, " ").trim(),
+    page,
+    // 右键只知道页码，不知道页内位置。编一个 y 会让归组拿这个假数字跟摘录的上沿去比。
+    y: null,
+    level: before?.level ?? 0,
+  };
+  return [...sections.slice(0, index), draft, ...sections.slice(index)];
 }

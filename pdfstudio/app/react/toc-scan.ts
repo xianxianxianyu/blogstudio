@@ -2,6 +2,9 @@ import type { PDFDocumentProxy } from "pdfjs-dist";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import { inReadingOrder, toLines, type Line } from "../../src/pdf/lines";
 import { inferOffset, looksLikeToc, parseToc, type Offset, type TocEntry } from "../../src/outline/toc";
+import { columnSplits } from "../../src/outline/columns";
+import type { Screenshot } from "../../src/recognizer/recognizer";
+import { retrying } from "../../src/outline/retry";
 
 
 /**
@@ -73,7 +76,11 @@ export async function readTocPages(
   for (let page = from; page <= to; page++) {
     onPage?.(page);
     const lines = await pageLines(document, page);
-    entries.push(...(lines.length > 0 ? parseToc([lines]) : await recognize(page)));
+    // 一页抖一下不该让整轮作废——前面认好的页会跟着一起丢，而读者只能从头再来。
+    // 端点这类失败实测就是偶发的（同一张图失败一次、紧接着连打六次全过）。
+    entries.push(
+      ...(lines.length > 0 ? parseToc([lines]) : await retrying(() => recognize(page))),
+    );
   }
   return entries;
 }
@@ -141,32 +148,154 @@ export async function inferPageOffset(
  */
 const MAX_EDGE = 2000;
 
+/**
+ * 按栏 OCR 时用的分辨率。
+ *
+ * **这个数曾经被调到 1200，那是个错误，代价写在这里。** 当时量的是：长边 2000 →
+ * 图 token 1251、单栏 16.4s；长边 1130 → 612 token、10.0s，而且输出「逐字相同、
+ * 甚至更全」。
+ *
+ * 错在**测量用的图不是应用会产生的图**：那批样本是 pdftoppm 渲的，应用走的是
+ * pdf.js。两个光栅化器的抗锯齿不一样，而 1200 在这本书上正好压在悬崖边——同一页
+ * 同一切点，pdftoppm 的图 34 行全对，pdf.js 的图只有 31 行**并且开始幻觉**：
+ *
+ *     实际：  1.7 小结 …… 20 / 练习 …… 20 / 第2章 系统模型 …… 22 / 2.1 简介 …… 22
+ *     认成：  1.7 小结 ..... 20
+ *             1.7.1 系统模型 ..... 22.1 简介 ..... 22.2 物理模型 ..... 23
+ *
+ * 四行塞成一行，编号顺着上一行往下编。**这比漏一行糟糕得多，因为产出看起来是
+ * 结构化的**——`parseToc` 会照单全收，读者也看不出哪里不对。垮掉的恰好是那一栏里
+ * 最靠左、字号最特殊的两行（外凸的「练习」、粗体的「第2章」）。
+ *
+ * 所以宁可慢：prefill 大约翻倍（单栏 ~10s → ~16s），换回不会静默编造的输出。
+ *
+ * **代价仍在**：这是绝对像素，不是每行像素。开本更小的书每个字更小，同样可能不够认。
+ * 真遇到了要按估计的行高来定，而不是继续调这个数字——调大是所有书一起变慢。
+ */
+const OCR_MAX_EDGE = 2000;
+
 export async function renderPage(
   document: PDFDocumentProxy,
   page: number,
-): Promise<{ mime: "image/png"; bytes: Uint8Array; width: number; height: number }> {
+): Promise<Screenshot> {
+  const { canvas } = await renderCanvas(document, page);
+  const shot = await toScreenshot(canvas);
+  release(canvas);
+  return shot;
+}
+
+/**
+ * 整页渲染一次，**按栏切开**，每一栏单独交给 OCR。
+ *
+ * 双栏目录直接整页认，出来的是一行左栏一行右栏的**交错**（云端本地都一样，实测；
+ * 在提示词里写「先整列左栏再整列右栏」不管用）。而乱序的目录比没有目录更糟——
+ * 它看着是对的。
+ *
+ * 分栏在图上做，不靠模型：`columnSplits` 是纯函数、有测试，而多一次模型调用既慢又
+ * 多一处会错的地方。实测这本书切在页宽 51.5% 处，栏缝 55px。
+ */
+export async function readTocPageByColumns(
+  document: PDFDocumentProxy,
+  page: number,
+  ocr: (pixels: Screenshot) => Promise<string>,
+): Promise<Line[]> {
+  const { canvas, context } = await renderCanvas(document, page, OCR_MAX_EDGE);
+  const splits = columnSplits(inkPerColumn(context, canvas.width, canvas.height));
+
+  // 切点两侧各是一栏。没有切点就是单栏，整页一次认完。
+  const bounds = [0, ...splits, canvas.width];
+  const strips: Screenshot[] = [];
+  for (let i = 0; i < bounds.length - 1; i++) {
+    strips.push(await toScreenshot(canvas, bounds[i], bounds[i + 1] - bounds[i]));
+  }
+  release(canvas);
+
+  const lines: Line[] = [];
+  for (const [index, strip] of strips.entries()) {
+    const text = await ocr(strip);
+    // 临时诊断：把每一栏的原始 OCR 打出来。识别不准时，「模型没吐出来」和「我们解析
+    // 时弄丢了」是完全不同的两件事，而从最终目录上分不出来——实测这两种都发生过。
+    console.warn(
+      `[toc] p${page} 第${index + 1}栏 ${strip.width}x${strip.height} → ${text.split("\n").filter((l) => l.trim()).length} 行\n${text}`,
+    );
+    lines.push(...asLines(text, lines.length));
+  }
+  return lines;
+}
+
+/**
+ * 每一列有多少墨。二值化阈值取 128——扫描件本来就是 1bit，中间值几乎不存在。
+ *
+ * 隔行采样：目录页两千多行像素，逐行扫一遍纯属浪费，而栏缝是**贯穿整页**的，
+ * 采样四分之一足够看出来。
+ */
+function inkPerColumn(context: CanvasRenderingContext2D, width: number, height: number): number[] {
+  const { data } = context.getImageData(0, 0, width, height);
+  const density = new Array<number>(width).fill(0);
+  for (let y = 0; y < height; y += 4) {
+    const row = y * width * 4;
+    for (let x = 0; x < width; x++) if (data[row + x * 4] < 128) density[x]++;
+  }
+  return density;
+}
+
+/**
+ * OCR 出来的纯文本变成 `Line`。
+ *
+ * **没有坐标**，所以 x 一律为 0——`parseToc` 会因此判定「这本书的目录没有缩进」并
+ * 退回按编号定层级。中文技术书的 `第1章` / `1.1` / `1.1.1` 正好吃这套（有 fixture
+ * 钉着：`src/outline/toc-ocr.test.ts`）。
+ *
+ * y 递减是为了让**跨栏拼接后顺序仍然正确**：左栏整列排在右栏整列前面。
+ */
+function asLines(text: string, offset: number): Line[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    // x0 全为 0：OCR 没有坐标，`levelsByIndent` 会因此判定「没有缩进」而退回按编号。
+    .map((line, i) => ({ text: line, x0: 0, x1: 1, y: 1e6 - (offset + i) * 20 }));
+}
+
+async function renderCanvas(document: PDFDocumentProxy, page: number, maxEdge = MAX_EDGE) {
   const loaded = await document.getPage(page);
   const base = loaded.getViewport({ scale: 1 });
   const viewport = loaded.getViewport({
-    scale: Math.min(1, MAX_EDGE / Math.max(base.width, base.height)),
+    scale: Math.min(1, maxEdge / Math.max(base.width, base.height)),
   });
 
   const canvas = window.document.createElement("canvas");
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
+  // `willReadFrequently`：要逐像素读回来算墨迹剖面，不给这个提示 Chromium 会把画布
+  // 留在 GPU 上，每次 getImageData 都是一次同步回读。
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("拿不到画布上下文");
   await loaded.render({ canvas, viewport }).promise;
+  return { canvas, context };
+}
 
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+/** 整幅或其中一条竖条，转成 PNG。 */
+async function toScreenshot(canvas: HTMLCanvasElement, x = 0, width = canvas.width): Promise<Screenshot> {
+  let source = canvas;
+  if (x !== 0 || width !== canvas.width) {
+    const strip = window.document.createElement("canvas");
+    strip.width = width;
+    strip.height = canvas.height;
+    strip.getContext("2d")!.drawImage(canvas, -x, 0);
+    source = strip;
+  }
+
+  const blob = await new Promise<Blob | null>((resolve) => source.toBlob(resolve, "image/png"));
+  const size = { width: source.width, height: source.height };
+  if (source !== canvas) release(source);
   if (!blob) throw new Error("这一页渲染不出来");
-  // 画完就把画布缩到 0：不释放的话几页目录就是上百 MB，而它已经没用了。
-  canvas.width = canvas.height = 0;
+  return { mime: "image/png", bytes: new Uint8Array(await blob.arrayBuffer()), ...size };
+}
 
-  return {
-    mime: "image/png",
-    bytes: new Uint8Array(await blob.arrayBuffer()),
-    width: canvas.width || Math.ceil(viewport.width),
-    height: Math.ceil(viewport.height),
-  };
+/** 画完就把画布缩到 0：不释放的话几页目录就是上百 MB，而它已经没用了。 */
+function release(canvas: HTMLCanvasElement) {
+  canvas.width = canvas.height = 0;
 }
 
 /** 这一页有没有文本层。没有就是扫描版，只能走模型。 */

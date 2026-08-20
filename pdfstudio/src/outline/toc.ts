@@ -30,6 +30,12 @@ export interface TocEntry {
  */
 const TOC_LINE = /^(.*?)[\s.·・…‥⋯_\-—]{1,}(\d{1,4})\s*$/;
 
+/**
+ * 标题里残留的「引导符 + 页码」。至少三个引导符才算——真正的点线引导符是长长一串，
+ * 而 `3.4.4` `802.11` 这种编号里的点是单个的，不会误伤。
+ */
+const RUN_ON = /[\s.·・…‥⋯_\-—]{3,}\d/;
+
 /** 引导符与两端空白，标题里不该留着。 */
 const TRAILING_LEADERS = /[\s.·・…‥⋯_\-—]+$/;
 
@@ -40,6 +46,12 @@ function entryOf(line: Line): { title: string; printedPage: number } | null {
   const title = match[1].replace(TRAILING_LEADERS, "").trim();
   // 纯数字或空标题不是条目——页眉页脚、孤零零的页码会长这样。
   if (title === "" || /^[\d.\s]+$/.test(title)) return null;
+  // **标题里还留着一组「引导符 + 页码」= 这一行揉进了好几条。** 分辨率不够时模型会
+  // 把相邻几行合成一行、并顺着上一行的编号往下编（实测：`1.7.1 系统模型 ..... 22.1
+  // 简介 ..... 22.2 物理模型 ..... 23`，实际是四条，其中还有一条是「第2章」）。
+  // 照单全收的话，产出是一个编号连贯、页码递增、完全错误的目录，而且看不出来——
+  // **缺一条是看得见的空档，编一条是看不见的错误**，所以宁可丢掉。
+  if (RUN_ON.test(title)) return null;
 
   return { title, printedPage: Number(match[2]) };
 }
@@ -106,9 +118,54 @@ function levelByNumbering(title: string): number | null {
  *
  * 顺序即阅读顺序——行本身已经由 `inReadingOrder` 排过（双栏目录确实存在）。
  */
+/**
+ * 把折行的条目拼回去。
+ *
+ * 印刷目录里长条目会折成两行，而**页码印在第二行**：
+ *
+ *     4.4.1  IP 组播——组播通信的
+ *            实现 ……………… 98
+ *
+ * `entryOf` 只认「以页码结尾」的行，于是带真标题和编号的第一行被整条丢掉，剩下一个
+ * 两个字的尾巴（`实现`）。而尾巴没有编号 ⟹ 层级判成 0 ⟹ 它又会把**下一条**的层级
+ * 在 `toSections` 里夹坏。审 395 条真实目录：18 条尾巴 + 8 条被带歪 = 26 处，占 6.6%，
+ * 是这份目录里最大的一类错误。
+ *
+ * **判据是互补性**，这也是它不会误伤的原因：折行的两半各缺对方那一半。
+ *
+ *   前一行：有编号、没页码      后一行：有页码、没编号
+ *
+ * 于是页眉和书名（`目录` / `Distributed Systems…`）不合前半条件——它们没编号；
+ * 而 `前言` 后面跟着的 `第1章 … 1` 不合后半条件——它有编号。两类假阳性都挡住了。
+ */
+function mergeWrapped(lines: Line[]): Line[] {
+  const merged: Line[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i];
+    const next = i + 1 < lines.length ? lines[i + 1] : null;
+    const tail = next && entryOf(next);
+
+    if (
+      next &&
+      tail &&
+      entryOf(head) === null &&
+      levelByNumbering(head.text.trim()) !== null &&
+      levelByNumbering(tail.title) === null
+    ) {
+      // 拼出来的行**沿用上半截的 x0**：层级来自缩进时，续行缩得更深，用下半截会多出
+      // 一个不存在的档位，把整份目录的层级判定带偏。
+      merged.push({ ...head, text: `${head.text.trim()}${next.text.trim()}` });
+      i++;
+      continue;
+    }
+    merged.push(head);
+  }
+  return merged;
+}
+
 export function parseToc(pages: Line[][]): TocEntry[] {
   const found = pages
-    .flat()
+    .flatMap((page) => mergeWrapped(page))
     .map((line) => ({ line, entry: entryOf(line) }))
     .filter((item): item is { line: Line; entry: { title: string; printedPage: number } } =>
       item.entry !== null,
@@ -177,18 +234,14 @@ export function inferOffset(
  * 没有摘录的祖先标题。层级跳级（0 → 2）时按实际栈深归一，否则 path 会缺一层。
  */
 export function toSections(entries: TocEntry[], offset: number): Section[] {
-  const stack: string[] = [];
-  return entries.map((entry) => {
-    const level = Math.min(entry.level, stack.length);
-    stack.length = level;
-    const section: Section = {
-      title: entry.title,
-      page: entry.printedPage + offset,
-      y: null,
-      level,
-      path: [...stack],
-    };
-    stack.push(entry.title);
-    return section;
-  });
+  // **不夹层级。** 这里原先维护一个祖先栈，顺手做 `Math.min(entry.level, stack.length)`
+  // ——那个栈只为了填 `Section.path`（一个只被写、从来没被读的字段），而那次夹取正是
+  // 把 `4.4.2` 从 L2 夹成 L1 的原因：前面一条折行碎片被判成 L0，栈就只剩一层。
+  // 层级跳级由渲染那边负责（`outline-rows.ts` 有测试钉着），不在这里悄悄改数据。
+  return entries.map((entry) => ({
+    title: entry.title,
+    page: entry.printedPage + offset,
+    y: null,
+    level: entry.level,
+  }));
 }

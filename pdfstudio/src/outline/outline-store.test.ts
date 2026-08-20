@@ -6,9 +6,9 @@ import { createOutlineStore } from "./outline-store";
 import type { Section } from "../clip/outline";
 
 const SECTIONS: Section[] = [
-  { title: "第一章 计算机系统漫游", page: 9, y: null, level: 0, path: [] },
-  { title: "1.1 信息就是位 + 上下文", page: 11, y: null, level: 1, path: ["第一章 计算机系统漫游"] },
-  { title: "第二章 信息的表示和处理", page: 37, y: null, level: 0, path: [] },
+  { title: "第一章 计算机系统漫游", page: 9, y: null, level: 0 },
+  { title: "1.1 信息就是位 + 上下文", page: 11, y: null, level: 1 },
+  { title: "第二章 信息的表示和处理", page: 37, y: null, level: 0 },
 ];
 
 const store = async () => {
@@ -61,5 +61,18 @@ describe("生成的目录落盘", () => {
     await outlines.remove("d1");
 
     expect(await outlines.load("d1")).toBeNull();
+  });
+});
+
+describe("目录落盘不依赖别人先建好目录", () => {
+  it("这本书的文件夹不在了也存得住", async () => {
+    // `<root>/<docId>` 是导书时建的。它中途没了的话，保存目录会 ENOENT，
+    // 而读者刚认完一份几百条的目录——那一下丢掉的东西要重跑一遍识别才能拿回来。
+    const root = await mkdtemp(path.join(tmpdir(), "outline-"));
+    const outlines = createOutlineStore(root);
+
+    await outlines.save("never-created", SECTIONS);
+
+    expect(await outlines.load("never-created")).toEqual(SECTIONS);
   });
 });

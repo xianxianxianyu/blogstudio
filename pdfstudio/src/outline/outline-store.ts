@@ -1,4 +1,4 @@
-import { readFile, writeFile, rm } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Section } from "../clip/outline";
 
@@ -55,6 +55,10 @@ export function createOutlineStore(root: string): OutlineStore {
     },
 
     async save(docId: string, sections: Section[]): Promise<void> {
+      // 理由同 `tag-store`：**store 自己保证目录在**，不依赖导书那一步或启动那一句。
+      // 这本书的文件夹中途没了的话，保存会 ENOENT——而读者可能刚认完一份几百条的
+      // 目录，那一下丢掉的东西要重跑一遍识别才拿得回来。
+      await mkdir(path.dirname(file(docId)), { recursive: true });
       await writeFile(file(docId), render(sections), "utf8");
     },
 

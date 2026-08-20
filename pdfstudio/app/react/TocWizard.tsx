@@ -4,7 +4,9 @@ import { toSections, type Offset, type TocEntry } from "../../src/outline/toc";
 import { recognizeTocPage } from "../../src/outline/toc-recognize";
 import type { ModelClient } from "../../src/model/model-client";
 import type { Section } from "../../src/clip/outline";
-import { inferPageOffset, readTocPages, renderPage, suggestTocPages } from "./toc-scan";
+import { inferPageOffset, readTocPageByColumns, readTocPages, renderPage, suggestTocPages } from "./toc-scan";
+import { parseToc } from "../../src/outline/toc";
+import { errorChain } from "../../src/app/error-chain";
 
 /**
  * 从书自己印的目录页生成目录。
@@ -25,6 +27,7 @@ type Stage =
 export function TocWizard({
   document,
   model,
+  localOcr,
   page,
   onDone,
   onCancel,
@@ -35,6 +38,11 @@ export function TocWizard({
    * 没有意义了。有文本层的页面根本不会走到这里。
    */
   model: ModelClient | null;
+  /**
+   * 本地 OCR。**扫描版优先走它**——云端对「整页目录转结构」这个任务实测不可靠
+   * （同一张图同一提示词，一批 3/3 成功、另一批 3/3 在 16 秒被网关掐断）。
+   */
+  localOcr: () => Promise<ModelClient | null>;
   /** 当前翻到第几页——「我自己选」时读者是**翻书**指定的，不是填数字。 */
   page: number;
   onDone: (sections: Section[]) => void;
@@ -67,6 +75,20 @@ export function TocWizard({
         from,
         to,
         async (target) => {
+          // 本地这一档：整页按栏切开分别 OCR，出来的纯文本走 `parseToc` 的正则那一路。
+          // **按栏切是必需的**，不是优化——双栏目录整页认出来的是一行左一行右的交错，
+          // 而乱序的目录比没有目录更糟：它看着是对的。
+          const ocr = await localOcr();
+          if (ocr) {
+            const lines = await readTocPageByColumns(document, target, async (pixels) => {
+              const { text } = await ocr.complete({
+                messages: [{ role: "user", content: "OCR:" }],
+                images: [pixels],
+              });
+              return text;
+            });
+            return parseToc([lines]);
+          }
           if (!model) throw new Error("这是扫描版，认目录要用识别模型，先在设置里配一个。");
           return recognizeTocPage(model, await renderPage(document, target));
         },
@@ -80,10 +102,31 @@ export function TocWizard({
       const offset = await inferPageOffset(document, entries, to);
       setStage({ at: "confirm", from, to, entries, offset });
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "识别目录失败");
+      // **整条链，不是最外层那句。**「模型调用失败」这五个字对排查毫无帮助，真正的
+      // 原因（HTTP 状态、连接被重置）只活在 `cause` 里——这一条挡过一次目录识别。
+      setError(errorChain(cause) || "识别目录失败");
       setStage({ at: "pick", suggested: null, scanning: false });
     }
   }
+
+  /**
+   * 按读者填的「第 1 页在第几页」，算出第一条目录会落到哪一物理页。
+   *
+   * 偏移 = 那一页 − 1；第一条落在 `printedPage + 偏移`。**负偏移不给过**——目录里的
+   * 条目跑到书的开头之前是不可能的，那只说明填错了。
+   */
+  const firstOne = stage.at === "confirm" ? stage.entries[0] : null;
+  const typed = Number(manual.trim());
+  const last = stage.at === "confirm" ? Math.max(...stage.entries.map((e) => e.printedPage)) : 0;
+  const firstAt =
+    firstOne &&
+    /^\d+$/.test(manual.trim()) &&
+    typed >= 1 &&
+    // 最后一条也得落在书里。填成 500 的话末章会跑到第 1099 页——书只有 654 页，
+    // 而这种填错**不会有任何东西报错**，只会让整本书的跳转从此全是错的。
+    last + typed - 1 <= document.numPages
+      ? firstOne.printedPage + typed - 1
+      : null;
 
   return (
     <div className="pane">
@@ -94,7 +137,8 @@ export function TocWizard({
         </button>
       </div>
 
-      {error !== null && <p className="err">{error}</p>}
+      {/* `pre` 而不是 `p`：错误链是多行的（`↳` 一层层往下），挤成一行就白留了。 */}
+      {error !== null && <pre className="err">{error}</pre>}
 
       {stage.at === "pick" && (
         <>
@@ -103,7 +147,7 @@ export function TocWizard({
             <p className="muted">正在找…</p>
           ) : stage.suggested ? (
             <p className="muted">
-              看着像目录的是**第 {stage.suggested.from}–{stage.suggested.to} 页**。
+              看着像目录的是<strong>第 {stage.suggested.from}–{stage.suggested.to} 页</strong>。
             </p>
           ) : (
             <p className="muted">没自动找到。翻到目录那一页，然后按下面的按钮。</p>
@@ -173,10 +217,17 @@ export function TocWizard({
           ) : (
             <>
               {/* 扫描版没有文本层，「去正文里找这个标题」这条路走不通，只能人填。
-                  所以设计是**能验就验、验不了就填**，不是二选一。 */}
+                  所以设计是**能验就验、验不了就填**，不是二选一。
+
+                  **问的是页码本身，不是差值。** 原先写的是「两者相差多少就填多少」，
+                  读者翻到那一页、顶栏写着 17，就填了 17——而我们要的是 16，于是整本书
+                  的跳转全歪一页，且没有任何东西会报错。读者此刻就站在那一页上，
+                  减法是我们凭空造出来的一个会错的地方。 */}
               <p className="muted">
-                没能自己对上——正文里找不到这些标题（扫描版没有文本层）。翻到目录里印着
-                「第 1 页」的那一页，看它实际是第几页，两者相差多少就填多少。
+                没能自己对上——扫描版没有文本层，正文里找不到这些标题。
+              </p>
+              <p className="muted">
+                翻到书里<strong>印着「第 1 页」</strong>的那一页，看顶栏显示第几页，填进来。
               </p>
             </>
           )}
@@ -190,20 +241,37 @@ export function TocWizard({
                 对，就这样
               </button>
             )}
-            <input
-              style={{ width: 90 }}
-              placeholder="差几页"
-              value={manual}
-              onChange={(event) => setManual(event.target.value)}
-            />
-            <button
-              className="btn"
-              disabled={!/^\d+$/.test(manual.trim())}
-              onClick={() => onDone(toSections(stage.entries, Number(manual.trim())))}
-            >
-              用这个数
+            {/* 一键填当前页：读者本来就是翻到那一页去看的，让他再手打一遍那个数字
+                纯属多一道会打错的手续。 */}
+            <button className="btn" onClick={() => setManual(String(page))}>
+              就是现在这页（第 {page} 页）
             </button>
+            <label className="row" style={{ gap: 6 }}>
+              <span className="faint">「第 1 页」是第</span>
+              <input
+                style={{ width: 62 }}
+                placeholder="17"
+                value={manual}
+                onChange={(event) => setManual(event.target.value)}
+              />
+              <span className="faint">页</span>
+            </label>
           </div>
+
+          {/* **摆出后果，而不是让人确认一个数字。** 填错了整本书的跳转会整体歪掉，
+              而歪掉这件事本身是看不见的——除非现在就把「第一条会跳到哪儿」写出来。 */}
+          {firstAt !== null && (
+            <p className="muted" style={{ marginTop: 8 }}>
+              这样的话《{stage.entries[0].title}》会跳到<strong>第 {firstAt} 页</strong>。
+              <button
+                className="btn primary"
+                style={{ marginLeft: 10 }}
+                onClick={() => onDone(toSections(stage.entries, firstAt - stage.entries[0].printedPage))}
+              >
+                就用这个
+              </button>
+            </p>
+          )}
         </>
       )}
     </div>
