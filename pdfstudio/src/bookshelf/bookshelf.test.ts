@@ -33,6 +33,7 @@ const clip = (id: string, docPage = 1): Clip => ({
   note: null,
   label: "dot",
   important: false,
+  anchorStatus: "anchored",
     tagId: null,
     title: null,
   lastViewedAt: IMPORTED_AT,

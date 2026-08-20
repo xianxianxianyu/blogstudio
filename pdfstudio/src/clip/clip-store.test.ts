@@ -38,6 +38,7 @@ const CLIP: Clip = {
   note: "这段是全文的论点起点",
   label: "dot",
   important: false,
+  anchorStatus: "anchored",
   tagId: null,
   title: null,
   lastViewedAt: 1_700_000_000_000,

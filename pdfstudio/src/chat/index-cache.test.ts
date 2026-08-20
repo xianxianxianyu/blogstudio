@@ -20,6 +20,7 @@ function noteClip(id: string, note: string): Clip {
     note,
     label: "dot",
     important: true,
+    anchorStatus: "anchored",
     tagId: null,
     title: null,
     lastViewedAt: 0,

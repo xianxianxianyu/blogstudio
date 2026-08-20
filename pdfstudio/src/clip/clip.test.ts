@@ -417,3 +417,80 @@ describe("保留轴：重要标记（ADR-0012）", () => {
     expect(again.clips[0].important).toBe(true);
   });
 });
+
+describe("锚定轴：找不找得回去（档 0）", () => {
+  /**
+   * **第三根轴。** 与 `state`（发布：capturing→ready→promoted）和 `important`（保留）
+   * 正交，回答的是「这条摘录还找不找得回原处」。
+   *
+   * PDF 上它恒为 `anchored`——锚点是「页码 + 矩形」，是文件里的客观事实，失败等于 bug。
+   * 网页上**失败是正常路径**：锚点不是坐标，是一次检索（`docs/research-web-anchoring.md`）。
+   * 现在的 `Anchor` 不能直接扩展到网页，不是字段不够，是**它没有「可能找不到」
+   * 这个概念**——先把这个概念建出来，别的才有地方放。
+   */
+
+  it("PDF 框选出来的摘录一出生就是 anchored", () => {
+    const state = reduce(EMPTY, { type: "capture", id: "c1", region: REGION, at: 0, tagId: null });
+
+    expect(state.clips[0].anchorStatus).toBe("anchored");
+  });
+
+  it("锚定状态可以改，四个值都到得了", () => {
+    let state = readyClip("原文");
+    for (const status of ["pending", "fuzzy", "orphan", "anchored"] as const) {
+      state = reduce(state, { type: "reanchor", id: "c1", status });
+      expect(state.clips[0].anchorStatus).toBe(status);
+    }
+  });
+
+  it("**已入库的也能变成 orphan**——页面改了不问我们的意见", () => {
+    const promoted = reduce(readyClip("原文"), {
+      type: "promote",
+      id: "c1",
+      contextId: "ctx1",
+      source: SOURCE,
+    });
+
+    expect(can(promoted, { type: "reanchor", id: "c1", status: "orphan" }).ok).toBe(true);
+  });
+
+  it("改锚定状态不动别的两根轴", () => {
+    const before = reduce(readyClip("原文"), { type: "toggle-important", id: "c1" });
+    const after = reduce(before, { type: "reanchor", id: "c1", status: "orphan" });
+
+    expect(after.clips[0].state).toBe(before.clips[0].state);
+    expect(after.clips[0].important).toBe(true);
+    expect(after.clips[0].sourceText).toBe("原文");
+  });
+
+  describe("回不去的摘录不许回收", () => {
+    /**
+     * `decay` 会把 content、sourceText、translation **全部抹掉**（ADR-0012 的墓碑）。
+     * 那在 PDF 上是安全的：文件还在磁盘上，随时能重框一次。
+     *
+     * **锚不回去的时候不安全**：存下来的这份就是仅存的副本。而且对网页摘录更狠——
+     * `sourceText` 就是 `exact`，**它本身就是锚点**，抹掉之后这条摘录永远再也锚不回去。
+     */
+    it("orphan 不回收", () => {
+      const orphaned = reduce(readyClip("原文"), { type: "reanchor", id: "c1", status: "orphan" });
+
+      expect(can(orphaned, { type: "decay", id: "c1" }).ok).toBe(false);
+    });
+
+    it("fuzzy 也不回收——它还没被确认，抹掉引文就再也确认不了了", () => {
+      const fuzzy = reduce(readyClip("原文"), { type: "reanchor", id: "c1", status: "fuzzy" });
+
+      expect(can(fuzzy, { type: "decay", id: "c1" }).ok).toBe(false);
+    });
+
+    it("pending 不回收——还没试过锚定，谈不上「回得去」", () => {
+      const pending = reduce(readyClip("原文"), { type: "reanchor", id: "c1", status: "pending" });
+
+      expect(can(pending, { type: "decay", id: "c1" }).ok).toBe(false);
+    });
+
+    it("anchored 的照旧回收——这条不能把整个 ADR-0012 关掉", () => {
+      expect(can(readyClip("原文"), { type: "decay", id: "c1" }).ok).toBe(true);
+    });
+  });
+});

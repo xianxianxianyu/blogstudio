@@ -87,6 +87,7 @@ async function main(): Promise<void> {
         note: null,
         label: "dot",
         important: true,
+        anchorStatus: "anchored",
         tagId: null,
         title: null,
         lastViewedAt: 0,

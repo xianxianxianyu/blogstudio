@@ -8,6 +8,22 @@ export type { Context };
 
 export type ClipState = "capturing" | "recognizing" | "ready" | "promoted";
 
+/**
+ * 这条摘录还找不找得回原处。**第三根轴**，与 `state`（发布）和 `important`（保留）正交。
+ *
+ * PDF 上它恒为 `anchored`：锚点是「页码 + 矩形」，是文件里的客观事实，失败等于 bug。
+ * **网页上失败是正常路径**——锚点不是一个坐标，是一次检索（`docs/research-web-anchoring.md`
+ * §5.1）。现在的 `Anchor` 扩展不到网页，不是字段不够，是它**没有「可能找不到」这个概念**。
+ *
+ * - `anchored` 找到了，逐字对上
+ * - `fuzzy`    模糊命中但分数不够，要人确认（这一档是我们比 Hypothesis 多出来的：
+ *              它没有阈值，有候选就采纳；而我们的摘录会进知识图、切块做 embedding，
+ *              **一条静默错锚会污染下游一整条链路，且没人会去核对**）
+ * - `orphan`   找不到了
+ * - `pending`  还没试过
+ */
+export type AnchorStatus = "anchored" | "fuzzy" | "orphan" | "pending";
+
 /** 标签形态：圆点 ⇄ 小窗。 */
 export type Label = "dot" | "panel";
 
@@ -28,6 +44,8 @@ export interface Clip {
    * promoted，合并成一根轴的话一张关键架构图必被回收。
    */
   important: boolean;
+  /** 还找不找得回原处（第三根轴）。**必填**——漏一个调用点就是 TS 报错，不是默默当 anchored。 */
+  anchorStatus: AnchorStatus;
   /**
    * 分类（颜色即标签）。名字住在书架根的 `tags.md` 里，这里只存 id——改名不该重写
    * 几百个摘录文件。
@@ -81,6 +99,7 @@ export type Action =
   | { type: "set-tag"; id: string; tagId: TagColor | null }
   | { type: "set-title"; id: string; text: string }
   | { type: "view"; id: string; at: number }
+  | { type: "reanchor"; id: string; status: AnchorStatus }
   | { type: "decay"; id: string }
   | { type: "recapture"; id: string; region: Region }
   | { type: "delete"; id: string };
@@ -206,6 +225,14 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
     // 原文、译文、截图都能按锚点重新识别一次拿回来，**笔记不能**：它是读者自己写的，
     // 删了就永远没了。不自动删除无法再生的用户内容。
     if (clip.note !== null) return denied("写过笔记的摘录不回收，笔记没法重新生成。");
+    // **「按锚点重新拿回来」这句话有前提：锚点还找得到。**
+    //
+    // 上一条的整个论证建立在「随时能重框一次」上，而那只在 PDF 上成立——文件还在磁盘上。
+    // 锚不回去的时候，存下来的这份就是**仅存的副本**。对网页摘录更狠：`sourceText`
+    // 就是 `exact`，**它本身就是锚点**，抹掉之后这条永远再也锚不回去。
+    if (clip.anchorStatus !== "anchored") {
+      return denied("这条摘录已经找不回原处了，存下来的就是仅存的副本，不能回收。");
+    }
     if (clip.state !== "ready") return denied("只有识别完成的摘录才谈得上衰减。");
     return ALLOWED;
   },
@@ -221,6 +248,9 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
    * 代价写在 ADR-0020 里：摘录 7 天后衰减成墓碑，那之后空 evidence 只能靠翻回原页
    * 找回来——扫描件还得重新 OCR。所以界面要在入库前就地提供「认一下」，而不是这里挡。
    */
+  /** 任何时候都能改：页面变没变不问我们的意见，已入库的照样会变成 orphan。 */
+  reanchor: () => ALLOWED,
+
   promote: (clip) => {
     if (clip.state === "promoted") return denied("已入库，无需重复。");
     if (clip.state === "recognizing") return denied("正在识别，等它落定再入库。");
@@ -293,6 +323,9 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
             note: null,
             label: "dot",
             important: false,
+            // PDF 上锚点是文件里的客观事实，一出生就是找得到的。网页那条路进来时
+            // 应该是 `pending`——那时 `Region` 会带上自己的类型，这里再分流。
+            anchorStatus: "anchored",
             tagId: action.tagId ?? null,
             title: null,
             lastViewedAt: action.at,
@@ -335,6 +368,9 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
     // 而标签的独特价值恰恰全在这些随手划过的摘录上——「这儿我来过」。
     case "decay":
       return patchClip(state, action.id, { content: null, sourceText: null, translation: null });
+
+    case "reanchor":
+      return patchClip(state, action.id, { anchorStatus: action.status });
 
     case "set-tag":
       return patchClip(state, action.id, { tagId: action.tagId });

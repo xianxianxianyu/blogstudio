@@ -16,6 +16,7 @@ function clip(over: Partial<Clip> & Pick<Clip, "content">): Clip {
     note: null,
     label: "dot",
     important: false,
+    anchorStatus: "anchored",
     tagId: null,
     title: null,
     lastViewedAt: 0,

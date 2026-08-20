@@ -17,6 +17,7 @@ function clip(id: string, page: number, top: number): Clip {
     note: null,
     label: "dot",
     important: false,
+    anchorStatus: "anchored",
     tagId: null,
     title: null,
     lastViewedAt: 0,
