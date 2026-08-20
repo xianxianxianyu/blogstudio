@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { chmod, mkdir, rename, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
@@ -7,6 +7,7 @@ import { pipeline } from "node:stream/promises";
 import type { ReadableStream } from "node:stream/web";
 import { errorChain } from "../app/error-chain";
 import type { EngineAsset, EngineDeps, RunningProcess } from "./local-engine";
+import type { EngineRegistry } from "./engine-registry";
 
 /**
  * 用 llama.cpp 跑本地模型：下权重、拉起 `llama-server`、健康检查。
@@ -26,6 +27,17 @@ export interface LlamaSpec {
   weights: EngineAsset[];
   /** `--model` 之外的参数。 */
   args: string[];
+  /**
+   * 下完之后本地量化成这一档。省略 = 用原样。
+   *
+   * 官方只发了 BF16，而 BF16 是 Apple Silicon 上最差的格式：decode 受内存带宽限制，
+   * 权重多大就有多慢。实测 M1 上 BF16 63 tok/s、Q8_0 90.5 tok/s（+44%），单栏 OCR
+   * 20.6s → 16.4s，常驻内存 1999 → 1573 MB，磁盘 892 → 473 MB，输出逐字无退化。
+   *
+   * **只量化语言塔，不动 mmproj**：视觉投影那一半没量过，而它出问题的表现是「图看不见」
+   * ——一个跟「缺文件」毫无关系的错。省下来的那点内存不值这个风险。
+   */
+  quantize?: "Q8_0";
 }
 
 export const RECOGNITION_SPEC: LlamaSpec = {
@@ -44,7 +56,23 @@ export const RECOGNITION_SPEC: LlamaSpec = {
       bytes: 840,
     },
   ],
-  args: ["--mmproj", "{dir}/mmproj.gguf"],
+  quantize: "Q8_0",
+  args: [
+    "--mmproj",
+    "{dir}/mmproj.gguf",
+    /**
+     * **上下文必须写死，不能用默认。**
+     *
+     * 不传的话 llama.cpp 按 `n_ctx_train` 开到 131072，KV cache 直接吃掉 2 GB——
+     * 而它一个 token 都用不上。实测：默认 4046 MB，16384 档 2185 MB，8192 档 2032 MB，
+     * 4096 档 1971 MB；权重本身就占 1.7 GB，所以 8192 已经贴着地板了。
+     *
+     * 8192 而不是 4096：实测整页扫描件 OCR 一共 2502 token（图 1230 + 输出 1272），
+     * 4096 留的余量太薄——版面更密的一页就会顶到上限，而顶到上限的表现是**默默截断**。
+     */
+    "--ctx-size",
+    "8192",
+  ],
 };
 
 export const EMBEDDING_SPEC: LlamaSpec = {
@@ -93,6 +121,11 @@ export function llamaEngineDeps(
   root: string,
   spec: LlamaSpec,
   onProgress?: (text: string | null) => void,
+  /**
+   * 账本。**记账要贴着进程的生死**——隔一层就会漏：拉起来了但没记上的那个，
+   * 正是下次启动收不了的那个孤儿。省略表示不记（测试和 dev server 用）。
+   */
+  registry?: EngineRegistry,
 ): EngineDeps {
   const shared = (name: string) => path.join(root, name);
   const own = (name: string) => path.join(root, spec.id, name);
@@ -129,6 +162,10 @@ export function llamaEngineDeps(
     },
 
     async spawn(): Promise<RunningProcess> {
+      // **放在这儿而不是下载那一步**：权重早就下好的机器 `has()` 直接返回 true，
+      // 挂在 fetch 上的话老用户永远升不了级。这里每次起都会走一遍，但有标记文件挡着，
+      // 已经量化过的直接跳过。
+      if (spec.quantize) await ensureQuantized(own("model.gguf"), spec.quantize, shared("bin/llama-quantize"), onProgress);
       const port = await freePort();
       const args = [
         "--model",
@@ -143,6 +180,13 @@ export function llamaEngineDeps(
         "1",
       ];
       const child = spawn(shared("bin/llama-server"), args, { stdio: ["ignore", "pipe", "pipe"] });
+      // **先记账再等健康。** 加载权重要几十秒，正是在这几十秒里被强杀最容易留下孤儿；
+      // 等就绪之后再记，那段窗口里的进程就没人认得了。
+      if (child.pid !== undefined) await registry?.remember({ id: spec.id, pid: child.pid, port });
+      // 它自己退了（崩溃、被外面杀掉）也要销账，否则账本会攒下一堆早就不存在的 pid。
+      child.on("exit", () => {
+        if (child.pid !== undefined) void registry?.forget(child.pid);
+      });
 
       try {
         await waitHealthy(`http://127.0.0.1:${port}/health`, child);
@@ -157,10 +201,43 @@ export function llamaEngineDeps(
           // SIGKILL 而不是 SIGTERM：llama-server 在加载模型时不响应 SIGTERM，留下的
           // 孤儿进程占着几 GB 内存，读者只会觉得电脑变慢却找不到原因。
           child.kill("SIGKILL");
+          // 销账走 exit 事件，不在这儿写——两处各写一份，迟早只改一处。
         },
       };
     },
   };
+}
+
+/**
+ * 就地量化，幂等。
+ *
+ * **失败不是致命的**：原件还在，引擎照样起得来，只是慢一点、占得多一点。所以先量到
+ * 临时文件、成了才改名——半个文件顶掉原件的话，下次 `has()` 会把它当成「已就绪」，
+ * 然后 llama-server 报一个跟「文件坏了」毫无关系的错。
+ */
+async function ensureQuantized(
+  file: string,
+  type: "Q8_0",
+  tool: string,
+  onProgress?: (text: string | null) => void,
+): Promise<void> {
+  // 标记文件而不是看大小：大小判据在换模型、换量化档之后就是错的，而且错得没有声音。
+  const marker = `${file}.${type}`;
+  if (await stat(marker).then(() => true).catch(() => false)) return;
+  if (!(await stat(file).then((info) => info.size > 0).catch(() => false))) return;
+
+  const staging = `${file}.${type}.part`;
+  try {
+    onProgress?.("正在量化本地识别模型（只需一次）…");
+    await run(tool, [file, staging, type]);
+    await rename(staging, file);
+    await writeFile(marker, type, "utf8");
+  } catch {
+    // 量化不成就用原样跑。这条路上没有「必须成功」的理由。
+    await rm(staging, { force: true });
+  } finally {
+    onProgress?.(null);
+  }
 }
 
 async function unpackLlama(root: string): Promise<void> {
