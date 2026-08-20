@@ -4,7 +4,6 @@ import {
   closeSettings,
   openDocOnDesk,
   openDraftOnDesk,
-  openOnDesk,
   openPageOnDesk,
   openSettings,
   rootOf,
