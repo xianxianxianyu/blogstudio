@@ -1,27 +1,60 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ComponentProps,
+} from "react";
 import type { Workspace } from "../../src/app/workspace";
 import type { Settings } from "../../src/app/settings";
 import type { Conversation } from "../../src/app/conversation";
 import type { Progress } from "../../src/app/progress";
 import type { PdfHost } from "./pdf-host";
 import { ShelfPage } from "./ShelfPage";
-import { Reader, type Busy } from "./Reader";
+import { ContextStudioPage } from "./ContextStudioPage";
+import { PageView, type Busy } from "./PageView";
 import { ClipsPane } from "./ClipsPane";
 import { readOutline } from "./outline";
 import { TocWizard } from "./TocWizard";
-import type { Section } from "../../src/clip/outline";
+import { bookmark, shiftSections, type Section } from "../../src/clip/outline";
+import { fitScale } from "../../src/app/fit";
+import {
+  closeOnDesk,
+  closeSettings,
+  isReading,
+  isWriting,
+  openDocOnDesk,
+  openDraftOnDesk,
+  openSettings,
+  rememberOnDesk,
+  type Active,
+  type DeskItem,
+} from "../../src/app/desk";
+import { Shell } from "./Shell";
+import { WebPane } from "./WebPane";
 import type { ModelClient } from "../../src/model/model-client";
+import { errorChain } from "../../src/app/error-chain";
 import { ChatPanel } from "./ChatPanel";
-import { SettingsPanel } from "./SettingsPanel";
-import { RetentionNotice } from "./RetentionNotice";
+import { SettingsPage } from "./SettingsPage";
+import type { SettingsPage as SettingsPageId } from "../../src/app/settings-map";
 import { SelectionMenu } from "./SelectionMenu";
+import { PageMenu } from "./PageMenu";
+import { PageJump } from "./PageJump";
+import { WriterPage } from "./WriterPage";
+import { DraftPage } from "./DraftPage";
+import type { Writer } from "../../../blogstudio/src/writing";
+import type { WritingTalk } from "../../../blogstudio/src/conversation";
+import type { Context } from "../../../contextstudio/src/context";
 
 /**
  * 两层：**书架页**（有哪些书）与**阅读页**（读这一本）。
  *
- * 此前它们挤在同一屏——书架塞在阅读页的侧栏里，换一本书要先进入某本书，层级是反的；
- * 设置又与「阅读 / 问文档」平级，可它是全局的。现在书架是外层，阅读是内层，设置是
- * 盖在两者之上的覆盖层。
+ * 此前它们挤在同一屏——书架塞在阅读页的侧栏里，换一本书要先进入某本书，层级是反的。
+ * 现在书架是外层，阅读是内层。
+ *
+ * **设置与它们平级**，不是盖在上面的一层（ADR-0005 决策 3）。它此前是个 `<dialog>`
+ * 覆盖层，那让它在结构上比别的都特殊，而它并不特殊——它有自己的子页和自己的来路。
  *
  * 组件仍然只是 `ws.state` 的投影：**规则、顺序、落盘都不在这里**（ADR-0013）。
  * 这次重排一行应用层代码都没动，那正是当初抽 Workspace 的回报。
@@ -33,26 +66,75 @@ export function App({
   conversation,
   progress,
   tocModel,
+  localTocOcr,
+  contextStudio,
+  writer,
+  talk,
+  contexts,
 }: {
   ws: Workspace;
   host: PdfHost;
   settings: Settings;
   conversation: Conversation;
   progress: Progress;
+  /** 知识库。与书架并列的第二个顶层页面，见 `ContextStudioPage`。 */
+  contextStudio: ComponentProps<typeof ContextStudioPage>["studio"];
   /** 认扫描版目录页用的模型。现建而不是钉死一个——改完设置要立刻生效。 */
   tocModel: () => ModelClient;
+  /** 本地 OCR，扫描版目录优先走它（云端对这个任务实测不可靠）。没有就返回 null。 */
+  localTocOcr: () => Promise<ModelClient | null>;
+  /** 写这一侧的应用层：稿子架、正在写的那一篇、什么时候落盘（ADR-0004）。 */
+  writer: Writer;
+  /** 写的时候右边那栏的对话状态。与 `conversation`（问文档）各管各的一场。 */
+  talk: WritingTalk;
+  /**
+   * 知识库现在有哪些 context。写这一侧要它：确定性检查拿正文里的 `[ctx:id]` 对着它核，
+   * 右栏的空库提示也用它的条数。
+   */
+  contexts: () => Promise<Context[]>;
 }) {
   const state = useSyncExternalStore(
     useCallback((listener: () => void) => ws.subscribe(listener), [ws]),
     () => ws.state,
   );
-  const [reading, setReading] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  /**
+   * 写这一侧的状态。**外壳要它只为了两件事**：案头上那一项叫什么，以及切走时把稿子
+   * 存住。正文不在里面（它按键就变，见 `blogstudio/src/writing.ts`）。
+   */
+  const writing = useSyncExternalStore(
+    useCallback((listener: () => void) => writer.subscribe(listener), [writer]),
+    () => writer.state,
+  );
+  /**
+   * 现在活着的是哪一样：三个根之一，还是某一本书 / 某一篇稿子。**都平级，没有模式这一层。**
+   *
+   * 此前是 `side` ＋ `reading` 两个布尔量表示这三种状态——四个组合里有一个是无意义的，
+   * 而用不上的组合迟早会被写进某个条件判断。
+   */
+  const [active, setActive] = useState<Active>({ kind: "shelf" });
+  /** 案头：手边开着哪些书。不落盘——「此刻手边有什么」，与筛选、折叠同一口径。 */
+  const [desk, setDesk] = useState<DeskItem[]>([]);
+  /**
+   * 设置停在哪一子页。**开没开在 `active` 里**（`{ kind: "settings"; from }`），
+   * 这里只记「停在哪一页」——退出去再进来还在刚才那一页，那是设置页该有的记性。
+   */
+  const [settingsPage, setSettingsPage] = useState<SettingsPageId>("model");
   const [selected, setSelected] = useState<string | null>(null);
   const [pane, setPane] = useState<"clips" | "chat">("clips");
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
-  const [scale, setScale] = useState(1.5);
+  /**
+   * 渲染倍率。**默认「适应宽度」**——`fit` 是让这一页正好铺满左栏的那个倍率，
+   * 而 `scale` 一开始就等于它。
+   *
+   * 为什么不写死一个 1.5：页宽差得太远。这本 654 页的扫描书是 1586pt 宽，一篇论文
+   * 612pt——同一个 1.5 对前者是「一屏只看得见半页」，对后者是「刚好」。
+   */
+  const [scale, setScale] = useState<number | null>(null);
+  const [fit, setFit] = useState<number | null>(null);
+  /** 还跟着窗口走吗。手动缩放过就不跟了，否则改完窗口大小会把读者的倍率冲掉。 */
+  const [fitting, setFitting] = useState(true);
+  const [pageWidth, setPageWidth] = useState<number | null>(null);
   /**
    * 捏合过程中的临时倍率。**手势中只做 CSS 缩放，松手才真的重渲染。**
    *
@@ -67,13 +149,23 @@ export function App({
    */
   const [embedded, setEmbedded] = useState<Section[]>([]);
   const [tocOpen, setTocOpen] = useState(false);
-  const stage = useRef<HTMLDivElement>(null);
+  /**
+   * `.stage` 那个 DOM 节点。**用回调 ref 存进 state，不用 `useRef`。**
+   *
+   * 切到 Context 那一侧再回来，阅读页是**新的 DOM 节点**。`useRef` 不会通知任何人，
+   * 于是 ResizeObserver 和捏合的 wheel 监听都还挂在那个已经脱离文档的旧节点上——
+   * 前者报 0 宽度、算出负倍率把画布搞塌，后者干脆彻底失灵。放进 state 之后，
+   * 节点一换，依赖它的 effect 就重新挂。
+   */
+  const [stage, setStage] = useState<HTMLDivElement | null>(null);
   // 手势里要读当前 scale，但那个监听只挂一次，闭包会钉住旧值。同步进 ref 而不是
   // 在渲染期直接写（渲染期写 ref 会被 react-hooks/refs 拦下，理由也确实成立）。
   const scaleNow = useRef(scale);
+  const fitNow = useRef(fit);
   useEffect(() => {
     scaleNow.current = scale;
-  }, [scale]);
+    fitNow.current = fit;
+  }, [scale, fit]);
 
   /**
    * 双指捏合缩放。
@@ -84,34 +176,63 @@ export function App({
    * 且只在 console 里警告，所以这里手动挂原生监听。
    */
   useEffect(() => {
-    const element = stage.current;
-    if (!element) return;
+    if (!stage) return;
     let settle: ReturnType<typeof setTimeout> | undefined;
     let factor = 1;
 
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey) return; // 普通滚动照旧翻页面
+      const now = scaleNow.current;
+      const base = fitNow.current;
+      // 还没算出适宽（PDF 刚打开）时不缩放：那一刻的上下限没有基准。
+      if (now === null || base === null) return;
       event.preventDefault();
-      const clamped = Math.min(4, Math.max(0.5, scaleNow.current * factor * Math.exp(-event.deltaY / 120)));
-      factor = clamped / scaleNow.current;
+      // 上下限跟按钮同一套：都相对适宽，半屏到五倍。
+      const clamped = Math.min(base * 5, Math.max(base * 0.5, now * factor * Math.exp(-event.deltaY / 120)));
+      factor = clamped / now;
       setPinch(factor);
 
       clearTimeout(settle);
       settle = setTimeout(() => {
         // 松手了才落成真的 scale：这一下才重渲染 PDF。
-        setScale(Number((scaleNow.current * factor).toFixed(2)));
+        setFitting(false);
+        setScale(Number((now * factor).toFixed(3)));
         factor = 1;
         setPinch(1);
       }, 140);
     };
 
-    element.addEventListener("wheel", onWheel, { passive: false });
+    stage.addEventListener("wheel", onWheel, { passive: false });
     return () => {
-      element.removeEventListener("wheel", onWheel);
+      stage.removeEventListener("wheel", onWheel);
       clearTimeout(settle);
     };
-  }, []);
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  }, [stage]);
+  // 适宽倍率：左栏可用宽度 ÷ 页宽。
+  useEffect(() => {
+    if (!stage || pageWidth === null) return;
+    const measure = () => {
+      const next = fitScale(stage.clientWidth, pageWidth);
+      // 算不出来就什么都不做，**不写一个凑合的数**——负倍率会把画布搞塌，
+      // 而且顶栏还照样显示 100%，坏得一点声音都没有。
+      if (next === null) return;
+      setFit(next);
+      // 只在「还跟着」时改倍率——手动缩放过就别再动它。
+      setFitting((following) => {
+        if (following) setScale(next);
+        return following;
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [stage, pageWidth]);
+
+  /** 选区在视口坐标里的矩形。工具条绕开它找空位，不是盖在上面。 */
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  /** 页面上右键的位置与当时选中的文字。加书签用（`PageMenu`）。 */
+  const [context, setContext] = useState<{ x: number; y: number; selection: string } | null>(null);
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -145,8 +266,48 @@ export function App({
   }, [host, state.docId]);
 
   const openDoc = async (id: string) => {
-    await ws.openDoc(id);
-    setReading(true);
+    // 打不开要说出来。此前这里没有 catch：失败时既不进阅读页也不报错，读者只看到
+    // 「点了没反应」——而最常见的原因（本地识别引擎还在加载）恰恰是等一会儿就好的。
+    try {
+      await ws.openDoc(id);
+      // 开成了就把上一次的报错撤掉。**同一本书重开时 `docId` 不变**，靠换书那条重置
+      // 路走不到这儿——「引擎还没就绪」等一会儿再点就好了，报错却会一直挂在栏里。
+      setError(null);
+      setActive({ kind: "doc", id });
+      // 进案头。已经在上面的不重复也不挪位置——挪了的话读者眼里的顺序会自己跳。
+      setDesk((was) => openDocOnDesk(was, id));
+      // 切回来时回到原处（ADR-0003 决策 2 的 C）。
+      const remembered = desk.find((one) => one.kind === "doc" && one.id === id);
+      if (remembered?.kind === "doc") {
+        setPage(remembered.page);
+        setPane(remembered.pane);
+      }
+    } catch (error) {
+      setError(errorChain(error) || "打不开这本书");
+    }
+  };
+
+  /**
+   * 打开一篇稿子。
+   *
+   * 与开一本书是同一个形状：先真的把它加载起来，成了才进案头、才让它活。顺序反过来的话，
+   * 加载失败会留下一个点开是空白的条目。
+   */
+  const openDraft = async (id: string) => {
+    try {
+      // `writer.open` 会先把手上那篇存住——丢的是刚写的字，不能靠「多半来得及」。
+      await writer.open(id);
+      // **一篇稿子一场对话**：不换的话，上一篇的问答会作为上下文一起发出去。
+      talk.attach(id);
+      setActive({ kind: "draft", id });
+      setDesk((was) => openDraftOnDesk(was, id));
+    } catch (cause) {
+      // 多半是这篇在别处被删了。回稿子架并重读一遍——列表里少了那一行，
+      // 本身就是最清楚的解释，不需要再弹一个框。
+      console.warn("打不开这篇稿子", cause);
+      setActive({ kind: "writer" });
+      void writer.refresh();
+    }
   };
 
   /**
@@ -155,17 +316,156 @@ export function App({
    */
   const sections = state.outline ?? embedded;
 
+  /**
+   * 缩放的档位与上下限**都相对适宽**。绝对倍率没法用：0.5 对这本扫描书差不多正好铺满，
+   * 对一篇论文却是小得看不清。下限半屏、上限五倍，够看清最小的角标。
+   */
+  const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5];
+  const percent = fit !== null && scale !== null ? Math.round((scale / fit) * 100) : 100;
+  const zoom = (direction: 1 | -1) => {
+    if (fit === null) return;
+    const now = (scale ?? fit) / fit;
+    const next =
+      direction === 1
+        ? (ZOOM_STEPS.find((step) => step > now + 1e-3) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1])
+        : ([...ZOOM_STEPS].reverse().find((step) => step < now - 1e-3) ?? ZOOM_STEPS[0]);
+    setFitting(false);
+    setScale(Number((next * fit).toFixed(3)));
+  };
+
+  /**
+   * 离开当前这一本时把位置记进案头，切回来回到原处（ADR-0003 决策 2 的 C）。
+   *
+   * **只在离开那一刻记，不连续记**：翻一页就写一次 state 是没必要的级联渲染
+   * （lint 的 `set-state-in-effect` 也正是拦这个），而位置只有在切走时才有人要。
+   */
+  const leave = () => {
+    if (isReading(active, state.docId)) {
+      setDesk((was) => rememberOnDesk(was, state.docId!, { page, pane }));
+    }
+    // 走开之前先把稿子存住。稿子那侧不记「回到哪」——光标和滚动位置在编辑器自己手里，
+    // 外壳插手只会把它顶掉。
+    if (active.kind === "draft") void writer.flush();
+  };
+
+  /**
+   * 打开设置之前站在哪一样上。设置没开时就是当前这一样。
+   *
+   * 设置页里有一块是**手上这一本书**的（目录），它得认这个，不能认 `state.docId`
+   * ——书在设置打开之后仍然加载着，但人可能是从书架点进来的。
+   */
+  const beneath = active.kind === "settings" ? active.from : active;
+
   const doc = state.docs.find((candidate) => candidate.id === state.docId);
   const clip = state.clips.find((candidate) => candidate.id === selected) ?? null;
 
   return (
     <>
-      {!reading || state.docId === null ? (
-        <ShelfPage ws={ws} state={state} onOpen={openDoc} onSettings={() => setShowSettings(true)} />
+      <Shell
+        active={active}
+        onRoot={(kind) => {
+          leave();
+          setActive({ kind });
+        }}
+        desk={desk}
+        titleOf={(item) =>
+          item.kind === "doc"
+            ? (state.docs.find((one) => one.id === item.id)?.title ?? "（这本书没了）")
+            : // 正开着的那篇用它的实时名字：改了标题，案头那一行要跟着变。
+              (writing.openId === item.id
+                ? writing.title
+                : writing.drafts.find((one) => one.id === item.id)?.title) ?? "（这篇稿子没了）"
+        }
+        onPick={(item) => {
+          // 已经开着的那一项点了就是「回到它」，不重开——重开要再读一遍 PDF / 换一场对话。
+          if (item.kind === "doc" && item.id === state.docId) {
+            setActive({ kind: "doc", id: item.id });
+            return;
+          }
+          if (item.kind === "draft" && item.id === writing.openId) {
+            setActive({ kind: "draft", id: item.id });
+            return;
+          }
+          leave();
+          void (item.kind === "doc" ? openDoc(item.id) : openDraft(item.id));
+        }}
+        onClose={(item) => {
+          leave();
+          const next = closeOnDesk(desk, item.kind, item.id, active);
+          setDesk(next.desk);
+          setActive(next.active);
+          // 接班的那一项还没加载就去加载它。回根的话什么都不用做。
+          if (next.active.kind === "doc" && next.active.id !== state.docId) void openDoc(next.active.id);
+          if (next.active.kind === "draft" && next.active.id !== writing.openId) {
+            void openDraft(next.active.id);
+          }
+        }}
+        onSettings={() => {
+          // **先 `leave()`。** 从书上走开要把页码记进案头，从稿子上走开要先落盘
+          // ——去设置和去别的根是同一件事，漏掉这一下，正在写的字要等下一次防抖。
+          leave();
+          setActive(openSettings(active));
+        }}
+      >
+      {active.kind === "settings" ? (
+        <SettingsPage
+          page={settingsPage}
+          onPage={setSettingsPage}
+          settings={settings}
+          ws={ws}
+          outline={{
+            // **只有「设置是从某本书上打开的」时才画目录那一块。** 判据是来路，不是
+            // `state.docId`——书可能还加载着，而人是从书架点进设置的，那时「重新生成」
+            // 会把他送去一本他并没有在读的书。
+            book: isReading(beneath, state.docId) ? (doc?.title ?? null) : null,
+            count: sections.length,
+            generated: state.outline !== null,
+            // 重新生成要把读者送回阅读页——向导住在右栏，看得见左边的 PDF 才能选页。
+            onGenerate: () => {
+              setActive(closeSettings(active));
+              setPane("clips");
+              setTocOpen(true);
+            },
+            onShift: (delta) => void ws.saveOutline(shiftSections(sections, delta)),
+            onClear: () => void ws.clearOutline(),
+          }}
+        />
+      ) : active.kind === "page" ? (
+        // 应用内浏览器。**它不在 React 树里**——这里只画一个占位框，网页跑在一个
+        // OS 层的 `WebContentsView` 里，位置由那个框量出来推给主进程（见 WebPane）。
+        <WebPane
+          url={desk.find((one) => one.kind === "page" && one.id === active.id)?.kind === "page"
+            ? (desk.find((one) => one.kind === "page" && one.id === active.id) as { url: string }).url
+            : active.id}
+          onBlocked={() => undefined}
+        />
+      ) : active.kind === "context" ? (
+        // Context Studio 与书架**并列**，不在某本书里面：一条 context 可以来自任何一本书
+        // （`CONTEXT-MAP.md`）。挂在阅读页里的话，层级又反了一次。
+        <ContextStudioPage studio={contextStudio} onBack={() => setActive({ kind: "shelf" })} />
+      ) : active.kind === "writer" ? (
+        // 稿子架：Writer 这一侧的根，与书架同一层（ADR-0004）。
+        <WriterPage writer={writer} onOpen={(id) => void openDraft(id)} />
+      ) : isWriting(active, writing.openId) ? (
+        <DraftPage
+          writer={writer}
+          talk={talk}
+          progress={progress}
+          contexts={contexts}
+          onBack={() => {
+            leave();
+            setActive({ kind: "writer" });
+          }}
+        />
+      ) : !isReading(active, state.docId) || state.docId === null ? (
+        <ShelfPage ws={ws} state={state} onOpen={openDoc} />
       ) : (
-        <div className="reader">
+        <div className="book">
           <div className="topbar">
-            <button className="btn" onClick={() => setReading(false)}>
+            <button className="btn" onClick={() => {
+              leave();
+              setActive({ kind: "shelf" });
+            }}>
               ← 书架
             </button>
             <div className="title grow">{doc?.title ?? ""}</div>
@@ -174,46 +474,46 @@ export function App({
               <button className="btn" onClick={() => setPage((n) => Math.max(1, n - 1))}>
                 ←
               </button>
-              <span className="faint" style={{ minWidth: "5.5em", textAlign: "center" }}>
-                {page} / {pages}
-              </span>
+              {/* 点一下就能输页码。654 页的书要跳到第 300 页，只有箭头的话得点 297 下。 */}
+              <PageJump page={page} pages={pages} onJump={setPage} />
               <button className="btn" onClick={() => setPage((n) => Math.min(pages, n + 1))}>
                 →
               </button>
-              <button
-                className="btn"
-                title="缩小"
-                onClick={() => setScale((z) => Math.max(0.5, Number((z - 0.25).toFixed(2))))}
-              >
+              {/* **百分比以「适应宽度」为 100%**，不是以 PDF 的原始尺寸。读者关心的是
+                  「铺满 / 比铺满大一点」，而原始尺寸对扫描书和论文差了两倍多，
+                  同一个数字在两本书上意思完全不同。 */}
+              <button className="btn" title="缩小" onClick={() => zoom(-1)}>
                 −
               </button>
-              <span className="faint" style={{ minWidth: "3em", textAlign: "center" }}>
-                {Math.round(scale * 100)}%
-              </span>
               <button
                 className="btn"
-                title="放大"
-                onClick={() => setScale((z) => Math.min(4, Number((z + 0.25).toFixed(2))))}
+                title={fitting ? "正在适应宽度" : "回到适应宽度"}
+                onClick={() => {
+                  setFitting(true);
+                  if (fit !== null) setScale(fit);
+                }}
+                style={{ minWidth: "4.5em" }}
               >
+                {percent}%
+              </button>
+              <button className="btn" title="放大" onClick={() => zoom(1)}>
                 +
               </button>
             </div>
-
-            <button className="btn" onClick={() => setShowSettings(true)}>
-              设置
-            </button>
           </div>
 
           <div className="panes">
-            <div className="stage" ref={stage}>
-              <Reader
+            <div className="stage" ref={setStage}>
+              <PageView
                 ws={ws}
                 host={host}
                 state={state}
                 selected={selected}
                 page={page}
                 onPages={setPages}
-                scale={scale}
+                // 适宽还没算出来时先按 1 渲一次——正是那一次渲染报回页宽，适宽才有得算。
+                scale={scale ?? 1}
+                onPageWidth={setPageWidth}
                 pinch={pinch}
                 onSelect={(id, at) => {
                   setSelected(id);
@@ -227,7 +527,24 @@ export function App({
                 }}
                 onCapturing={setBusy}
                 onError={setError}
+                onContext={(at, selection) => setContext({ ...at, selection })}
               >
+                {/* 右键：在**这一页**加书签。站在这一页上，页码就是对的——
+                    不用猜，也不用事后翻回来核对。 */}
+                {context !== null && (
+                  <PageMenu
+                    at={context}
+                    page={page}
+                    selection={context.selection}
+                    onClose={() => setContext(null)}
+                    onAddBookmark={(title) => {
+                      void ws.saveOutline(bookmark(sections, page, title));
+                      // 切到摘录栏：刚加的那条要么已经有名字、要么是空的等着起名。
+                      setPane("clips");
+                    }}
+                  />
+                )}
+
                 {/* 松手就浮出来，翻译同时已经在跑——菜单不能挡在日常主路径上
                     （ADR-0016）。 */}
                 {clip !== null && menuAt !== null && (
@@ -252,7 +569,7 @@ export function App({
                     }}
                   />
                 )}
-              </Reader>
+              </PageView>
             </div>
 
             <div className="side">
@@ -271,6 +588,7 @@ export function App({
                 <TocWizard
                   document={host.document}
                   model={tocModel()}
+                  localOcr={localTocOcr}
                   page={page}
                   onCancel={() => setTocOpen(false)}
                   onDone={(next) => {
@@ -309,48 +627,8 @@ export function App({
           </div>
         </div>
       )}
+      </Shell>
 
-      <SettingsSheet open={showSettings} onClose={() => setShowSettings(false)}>
-        <RetentionNotice settings={settings} />
-        <SettingsPanel settings={settings} ws={ws} />
-      </SettingsSheet>
     </>
-  );
-}
-
-/**
- * 设置用原生 `<dialog>`，不是自己搭的遮罩层。
- *
- * Esc 关闭、焦点陷阱、背景遮罩、点外面关掉——全是浏览器白送的，自己搭要一条条补，
- * 而且多半会漏掉键盘那一半（lint 就是这么抓到的）。
- */
-function SettingsSheet({
-  open,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  onClose: () => void;
-  children: React.ReactNode;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const element = dialog.current;
-    if (!element) return;
-    if (open && !element.open) element.showModal();
-    if (!open && element.open) element.close();
-  }, [open]);
-
-  return (
-    <dialog ref={dialog} className="sheet" onClose={onClose}>
-      <header>
-        <h2 className="grow">设置</h2>
-        <button className="btn" onClick={onClose}>
-          关闭
-        </button>
-      </header>
-      {children}
-    </dialog>
   );
 }

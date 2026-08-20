@@ -16,18 +16,18 @@ export async function readOutline(document: PDFDocumentProxy): Promise<Section[]
 
   const sections: Section[] = [];
 
-  const walk = async (items: Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>, level: number, path: string[]) => {
+  const walk = async (items: Awaited<ReturnType<PDFDocumentProxy["getOutline"]>>, level: number) => {
     for (const item of items ?? []) {
       const title = item.title.trim();
       const at = await locate(document, item.dest);
       // dest 解不开的仍然收下，`y: null` 让它退化成按页归组——丢掉的话整段目录会缺一块，
       // 而缺的那块下面的摘录会静默归到上一节去。
-      if (at !== null) sections.push({ title, page: at.page, y: at.y, level, path });
-      if (item.items?.length) await walk(item.items, level + 1, [...path, title]);
+      if (at !== null) sections.push({ title, page: at.page, y: at.y, level });
+      if (item.items?.length) await walk(item.items, level + 1);
     }
   };
 
-  await walk(tree, 0, []);
+  await walk(tree, 0);
   return sections;
 }
 

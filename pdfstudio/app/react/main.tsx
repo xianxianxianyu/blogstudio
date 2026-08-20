@@ -14,15 +14,22 @@ import { createChat } from "../../src/chat/chat";
 import { createFixedPromptRecognitionClient } from "../../src/model/fixed-prompt-recognition";
 import { bindConversation, createConversation } from "../../src/app/conversation";
 import { createProgress } from "../../src/app/progress";
-import { apiUrl } from "../api-base";
+import { apiUrl, apiFetch } from "../api-base";
 import { createHttpEmbedder } from "../http-embedder";
 import { createHttpIndexCache } from "../http-index-cache";
 import { createModelClient } from "../../src/model/openai-compatible";
-import { parseConfig, resolveEndpoint } from "../../src/config/config";
+import type { ModelClient } from "../../src/model/model-client";
+import { parseConfig, resolveEndpoint, type Capability } from "../../src/config/config";
 import { createHttpClipStore } from "../http-clip-store";
 import { createHttpTagStore } from "../http-tags";
 import { createHttpOutlineStore } from "../http-outline";
 import { createHttpBookshelf } from "../http-bookshelf";
+import { createHttpContextStudio } from "../http-context-studio";
+import { createHttpDraftStore, createHttpRevisionStore } from "../http-drafts";
+import { createWriter } from "../../../blogstudio/src/writing";
+import { createRecaller } from "../../../blogstudio/src/recall";
+import { createWriterChat } from "../../../blogstudio/src/writer-chat";
+import { createWritingTalk } from "../../../blogstudio/src/conversation";
 import { createHttpConfigStore } from "../http-config";
 import { createSettings } from "../../src/app/settings";
 import { App } from "./App";
@@ -39,7 +46,7 @@ const settings = createSettings({
   // 自检就是拿这组端点真打一次最小的调用——「地址能不能连」和「这个 key 加这个模型名
   // 能不能用」是两回事，只有真打一次才分得清。
   probe: async (endpoint) => {
-    await createModelClient({ ...endpoint, baseURL: viaProxy(endpoint.baseURL) }).complete({
+    await createModelClient({ fetch: apiFetch, ...endpoint, baseURL: viaProxy(endpoint.baseURL) }).complete({
       messages: [{ role: "user", content: "ping" }],
     });
   },
@@ -64,7 +71,7 @@ function viaProxy(baseURL: string): string {
   return `${apiUrl("/__model")}/${encodeURIComponent(baseURL)}`;
 }
 
-function endpoint(capability: "recognition" | "translation" | "chat") {
+function endpoint(capability: Capability) {
   const resolved = resolveEndpoint(appConfig, capability);
   return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
@@ -85,13 +92,13 @@ const progress = createProgress();
 async function recognitionTier() {
   if (!settings.config.localRecognition) {
     return {
-      recognition: createModelClient(endpoint("recognition")),
+      recognition: createModelClient({ ...endpoint("recognition"), fetch: apiFetch }),
       // 翻译是独立配置的（ADR-0010）。漏掉它译文永远不出现，那个 bug 真的发生过一次。
-      translation: createModelClient(endpoint("translation")),
+      translation: createModelClient({ ...endpoint("translation"), fetch: apiFetch }),
     };
   }
 
-  const status = (await fetch(apiUrl("/__engine"), { method: "POST" }).then((r) => r.json())) as {
+  const status = (await apiFetch(apiUrl("/__engine"), { method: "POST" }).then((r) => r.json())) as {
     baseURL: string | null;
   };
   if (!status.baseURL) throw new Error("本地识别引擎还没就绪——去设置里看进度。");
@@ -99,7 +106,7 @@ async function recognitionTier() {
   return {
     // 专用识别模型看不懂我们的 JSON 契约，套一层把它翻译成 `OCR:`。
     recognition: createFixedPromptRecognitionClient(
-      createModelClient({ baseURL: viaProxy(status.baseURL), apiKey: "-", model: "paddleocr-vl" }),
+      createModelClient({ fetch: apiFetch, baseURL: viaProxy(status.baseURL), apiKey: "-", model: "paddleocr-vl" }),
     ),
     translation: null,
   };
@@ -123,7 +130,7 @@ const ws = createWorkspace({
     const chat = createChat({
       document,
       docId: doc.id,
-      model: createModelClient(endpoint("chat")),
+      model: createModelClient({ ...endpoint("chat"), fetch: apiFetch }),
       // 本地 embedding：不接的话中文问英文论文是**零召回**（关键词那一路抽不出中文词元）。
       // 权重是首次真正检索时才下载的，开一本书不会触发。
       embedder,
@@ -146,16 +153,70 @@ const ws = createWorkspace({
 });
 
 bindConversation(ws, conversation);
-await ws.refresh();
-if (ws.state.docs.length > 0) await ws.openDoc(ws.state.docs[0].id);
+
+/**
+ * 写这一侧（ADR-0004）。三样东西接在一起：稿子怎么存、怎么召回材料、怎么说话。
+ *
+ * 与 Book 那侧共用的只有两个**端口**：模型客户端与向量服务。领域上两边不认识对方
+ * ——Blog Studio 只从知识库读 `context` 那一个形状（`CONTEXT-MAP.md`）。
+ */
+const contextStudio = createHttpContextStudio(apiUrl("/__contexts"));
+const writer = createWriter({
+  store: createHttpDraftStore(apiUrl("/__drafts")),
+  revisions: createHttpRevisionStore(apiUrl("/__drafts")),
+  newId: () => crypto.randomUUID(),
+  now: () => Date.now(),
+});
+const talk = createWritingTalk({
+  chat: createWriterChat({
+    // 写作与问文档是两件事，各配各的端点（ADR-0010 的口径；能力清单见 config.ts）。
+    model: createModelClient({ ...endpoint("writing"), fetch: apiFetch }),
+    // 现取而不是钉一份快照：刚在 Context Studio 那边收了一批，这边就该召回得到。
+    materials: async () => (await contextStudio.view()).contexts,
+    // 用与问文档同一个向量服务：同一个模型、同一个空间，省掉第二份权重。
+    recaller: createRecaller({ embed: embedder }),
+  }),
+  // 每次发问现取正文——稿子一直在变，钉住快照就是在答上一版。
+  draft: () => writer.text(),
+});
 
 /**
  * 认扫描版目录页用的模型。**每次现建**而不是建好一个传进去：读者随时可能在设置里
  * 换端点，钉死一个实例就会让改完的配置不生效，而且不报错（`settings.subscribe` 那边
  * 已经为同样的理由踩过一次）。
  */
-const tocModel = () => createModelClient(endpoint("recognition"));
+const tocModel = () => createModelClient({ ...endpoint("recognition"), fetch: apiFetch });
 
+/**
+ * 认扫描版目录页用的**本地** OCR。
+ *
+ * 优先走本地，云端只当退路——不是为了省钱，是因为**云端那条路对这个任务不可靠**：
+ * 实测同一张图同一个提示词，一批 3/3 成功、另一批 3/3 在 16 秒被网关掐断，成败不是
+ * 我们输入的函数（纯文本请求一直正常）。本地引擎没有网关，每栏 22 秒稳定出结果。
+ *
+ * 这里要的是**裸的** ModelClient，不套 `createFixedPromptRecognitionClient`——那层把
+ * 输出包成 Recognizer 的 JSON 契约，而目录这条路要的就是 OCR 原文。
+ *
+ * 返回 null = 本地档没开或引擎还没就绪，调用方退回云端。
+ */
+async function localTocOcr(): Promise<ModelClient | null> {
+  if (!settings.config.localRecognition) return null;
+  const status = (await apiFetch(apiUrl("/__engine"), { method: "POST" }).then((r) => r.json())) as {
+    baseURL: string | null;
+  };
+  if (!status.baseURL) return null;
+  return createModelClient({ fetch: apiFetch, baseURL: viaProxy(status.baseURL), apiKey: "-", model: "paddleocr-vl" });
+}
+
+/**
+ * **先渲染，再上架、再开书。**
+ *
+ * 这三步原本是渲染之前的顶层 await，于是任何一步抛错都会让 React 根本没机会跑——
+ * 界面直接白屏，主进程日志里什么都没有。实际踩到的是：读者开着本地识别档，重启后引擎
+ * 要几十秒加载权重，这期间 `recognitionTier()` 抛「还没就绪」，整个应用就打不开了。
+ *
+ * 开机自动打开一本书是**锦上添花**，它失败最多是「停在书架上」，绝不该是「应用没了」。
+ */
 createRoot(document.querySelector("#root")!).render(
   <App
     ws={ws}
@@ -164,5 +225,20 @@ createRoot(document.querySelector("#root")!).render(
     conversation={conversation}
     progress={progress}
     tocModel={tocModel}
+    localTocOcr={localTocOcr}
+    contextStudio={contextStudio}
+    writer={writer}
+    talk={talk}
+    contexts={async () => (await contextStudio.view()).contexts}
   />,
 );
+
+void (async () => {
+  try {
+    await ws.refresh();
+    if (ws.state.docs.length > 0) await ws.openDoc(ws.state.docs[0].id);
+  } catch (error) {
+    // 停在书架上，读者自己点那本书时会拿到一条能看的错（见 App 的 openDoc）。
+    console.warn("开机自动打开失败", error);
+  }
+})();

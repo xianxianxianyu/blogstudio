@@ -36,19 +36,21 @@ interface Point {
   y: number;
 }
 
-export function Reader({
+export function PageView({
   ws,
   host,
   state,
   selected,
   page,
   onPages,
+  onPageWidth,
   onSelect,
   scale,
   pinch,
   children,
   onCapturing,
   onError,
+  onContext,
 }: {
   ws: Workspace;
   host: PdfHost;
@@ -57,7 +59,14 @@ export function Reader({
   page: number;
   /** 总页数交给外面显示——翻页控件在顶栏，它是「这本书」的控件，不是画布的一部分。 */
   onPages: (total: number) => void;
-  onSelect: (clipId: string | null, at?: { x: number; y: number }) => void;
+  /**
+   * 这一页在 scale 1 下有多宽（CSS 像素）。外面拿它算「适应宽度」的倍率。
+   *
+   * 由 PageView 报而不是外面自己算：页面尺寸只有打开 PDF 之后才知道，而**同一本书里
+   * 页宽也可能变**（插页、折页）。
+   */
+  onPageWidth?: (width: number) => void;
+  onSelect: (clipId: string | null, at?: { x: number; y: number; width: number; height: number }) => void;
   scale: number;
   /**
    * 捏合过程中的临时倍率，只做 CSS 缩放不重渲染（见 App 里的注释）。1 表示不在手势中。
@@ -66,8 +75,15 @@ export function Reader({
    * 不会在手势中途相互错位。
    */
   pinch: number;
-  /** 浮动菜单由外面渲染——它要动到对话与摘录，那些不归 Reader 管。 */
+  /** 浮动菜单由外面渲染——它要动到对话与摘录，那些不归 PageView 管。 */
   children?: React.ReactNode;
+  /**
+   * 在页面上右键。给的是**视口坐标**（菜单挂在那儿）与**选中的文字**（如果有）。
+   *
+   * 「在这一页加书签」必须从页面上发起，不能从目录栏——**站在这一页上，页码就是
+   * 对的**，不用猜、也不用事后翻过去核对。而选中的标题正好就是书签的名字。
+   */
+  onContext?: (at: { x: number; y: number }, selection: string) => void;
   /**
    * 正在忙什么。**不是一个 boolean**：文本流那条路根本不调识别模型（原文来自文本层、
    * 是免费的，ADR-0016），报「识别中」是在说一件没发生的事。
@@ -116,6 +132,7 @@ export function Reader({
       if (cancelled) return;
       setViewport(vp);
       onPages(document.numPages);
+      onPageWidth?.(rendered.getViewport({ scale: 1 }).width);
       const content = await rendered.getTextContent();
       if (cancelled) return;
       setTextItems(content.items.filter((item): item is TextItem => "str" in item));
@@ -143,7 +160,7 @@ export function Reader({
     return () => {
       cancelled = true;
     };
-  }, [host, state.docId, page, scale, onPages]);
+  }, [host, state.docId, page, scale, onPages, onPageWidth]);
 
   /**
    * 指针坐标（CSS 像素）→ canvas 内部像素，并取整。
@@ -168,11 +185,19 @@ export function Reader({
    * 用视口坐标而不是容器内坐标：菜单挂在 body 上（滚动容器会裁掉溢出的部分，
    * 页面右侧框选时会被右栏切掉一半）。canvas 的位置直接给出这一层换算。
    */
+  /**
+   * 选区在**视口坐标**里的矩形。工具条要绕开它去找空位（`menu-place.ts`），
+   * 所以给的是整个框，不只是一个点——只给点的话，工具条会盖在刚框的那块上。
+   */
   function menuAt(box: { x0: number; y0: number; x1: number; y1: number }) {
     const rect = canvas.current!.getBoundingClientRect();
+    const left = rect.left + css(Math.min(box.x0, box.x1), "x");
+    const top = rect.top + css(Math.min(box.y0, box.y1), "y");
     return {
-      x: rect.left + css(Math.min(box.x0, box.x1), "x"),
-      y: rect.top + css(Math.max(box.y0, box.y1), "y") + 6,
+      x: left,
+      y: top,
+      width: rect.left + css(Math.max(box.x0, box.x1), "x") - left,
+      height: rect.top + css(Math.max(box.y0, box.y1), "y") - top,
     };
   }
 
@@ -261,7 +286,9 @@ export function Reader({
 
     if (!selection || selection.isCollapsed || !anchorNode || !viewport || !pageBox) {
       const hit = clipAt(at(event));
-      if (hit) onSelect(hit, { x: event.clientX, y: event.clientY + 6 });
+      // 点已有的标签：没有「刚拖出来的框」，就退化成一个点。`placeMenu` 认这种情况
+      // ——零尺寸的选区照样给位置，只是没什么可绕开的。
+      if (hit) onSelect(hit, { x: event.clientX, y: event.clientY, width: 0, height: 0 });
       return;
     }
 
@@ -284,8 +311,6 @@ export function Reader({
     selection.removeAllRanges();
 
     onError(null);
-    // 这条路只等翻译。
-    onCapturing("translating");
     try {
       const box = toCanvasBox(viewport, region.bounds);
       const pixels = await crop(canvas.current!, box);
@@ -293,7 +318,10 @@ export function Reader({
         { page, rect: region.bounds, pixels, lines: region.lines },
         // 强制 text：这一路的原文来自文本层、是免费的（ADR-0016），不该再去调识别。
         // 覆盖度判据在细长的选区上本来也容易误判成 vision。
-        { route: "text", sourceText: region.text },
+        //
+        // **不翻译**（ADR-0019）：原文免费、译文是一次模型调用。要译文时读者在工具条
+        // 上要，松手这一刻不替他决定。
+        { route: "text", sourceText: region.text, translate: false },
       );
       if (result.ok) onSelect(result.clipId ?? null, menuAt(box));
       else onError(chain(result.error) || (result.reason ?? "识别失败"));
@@ -320,10 +348,11 @@ export function Reader({
     }
 
     onError(null);
-    onCapturing("recognizing");
     try {
       const pixels = await crop(canvas.current!, box);
-      const result = await ws.capture({ page, rect: toPageRect(viewport, box), pixels });
+      // **一个模型都不调**（ADR-0019）：图区框选二十秒起，而产出多半用不上。
+      // 摘录停在 `capturing`，工具条上点「认一下」才认。
+      const result = await ws.captureOnly({ page, rect: toPageRect(viewport, box), pixels });
       // 菜单挂在选区下沿，位置在这里算——只有这里知道刚才框到了哪儿。
       if (result.ok) onSelect(result.clipId ?? null, menuAt(box));
       else onError(chain(result.error) || (result.reason ?? "识别失败"));
@@ -340,7 +369,16 @@ export function Reader({
     <div
       className="frame"
       style={pinch === 1 ? undefined : { transform: `scale(${pinch})`, transformOrigin: "50% 0" }}
-      onPointerUp={(event) => void (start.current ? finish(at(event)) : finishSelection(event))}>
+      onPointerUp={(event) => void (start.current ? finish(at(event)) : finishSelection(event))}
+      onContextMenu={(event) => {
+        if (!onContext) return;
+        // 盖掉系统菜单：那上面全是「后退」「重新加载」之类跟读书无关的项。
+        event.preventDefault();
+        onContext(
+          { x: event.clientX, y: event.clientY },
+          window.getSelection()?.toString().trim() ?? "",
+        );
+      }}>
       {children}
         <canvas
           ref={canvas}

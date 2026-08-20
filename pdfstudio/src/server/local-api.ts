@@ -101,6 +101,7 @@ export const ROUTES = {
   embed: "/__embed",
   engine: "/__engine",
   contexts: "/__contexts",
+  sites: "/__sites",
   drafts: "/__drafts",
 } as const;
 
@@ -172,6 +173,28 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
             return json({ ...engineStatus(), phase: enginePhase });
           }
           return json({ ...engineStatus(), phase: enginePhase });
+        }),
+    },
+
+    {
+      /**
+       * 允许在应用内加载的站点（`web/allow.ts`）。
+       *
+       * **不做「任意网站」的默认开放**——Electron 里 Safe Browsing 与 Certificate
+       * Transparency 都是关的，官方自己说「要显示网站，浏览器是更安全的选择」。
+       * 所以这是一份读者显式加进来的白名单，落在书架根上（跟标签一份，它是读者的
+       * 习惯，不属于某一本书）。
+       */
+      prefix: ROUTES.sites,
+      handler: (request, response) =>
+        respond(response, async () => {
+          const file = path.join(options.libraryRoot, "sites.json");
+          if (request.method === "POST") {
+            await writeFile(file, await readBody(request), "utf8");
+            return json({});
+          }
+          // 没有这个文件是正常状态：还没加过任何站点。
+          return { type: JSON_TYPE, data: await readFile(file, "utf8").catch(() => "[]") };
         }),
     },
 

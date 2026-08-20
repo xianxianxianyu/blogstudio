@@ -178,7 +178,7 @@ describe("在设置里动案头", () => {
 describe("网页也进同一个案头", () => {
   const web = (id: string): DeskItem => ({ kind: "page", id, url: id, title: "" });
 
-  it("网页的根是 Reader 的书架，不是 Writer", () => {
+  it("网页的根是 Book 的书架，不是 Writer", () => {
     // `rootOf` 原来是个二选一的三元表达式（doc → shelf，其余 → writer）。
     // 加第三种时它会**默默把网页归到 Writer 名下**——案头上关掉最后一个网页，
     // 读者会莫名其妙掉进写作页。

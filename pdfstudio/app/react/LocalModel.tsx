@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { apiUrl } from "../api-base";
+import { apiUrl, apiFetch } from "../api-base";
 
 interface EngineStatus {
   running: boolean;
@@ -26,7 +26,7 @@ export function LocalEngineSection({
   useEffect(() => {
     let alive = true;
     const poll = async () => {
-      const next = (await fetch(apiUrl("/__engine")).then((r) => r.json())) as EngineStatus;
+      const next = (await apiFetch(apiUrl("/__engine")).then((r) => r.json())) as EngineStatus;
       if (!alive) return;
       setStatus(next);
       // 下载 1.7 GB 加载模型可能要十几分钟，期间一直轮询；就绪或没在做事就停。
@@ -61,7 +61,7 @@ export function LocalEngineSection({
         <button
           className="btn"
           onClick={() => {
-            void fetch(apiUrl("/__engine"), { method: "POST" })
+            void apiFetch(apiUrl("/__engine"), { method: "POST" })
               .then((r) => r.json())
               .then((next: EngineStatus) => setStatus(next));
           }}

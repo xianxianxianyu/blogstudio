@@ -1,4 +1,4 @@
-import { captureClip } from "../clip/capture-clip";
+import { captureClip, captureOnly, recognizeClip } from "../clip/capture-clip";
 import { collect } from "../clip/retention";
 import { can, reduce } from "../clip/clip";
 import type { Action, Clip, ClipsState } from "../clip/clip";
@@ -105,6 +105,15 @@ export interface Workspace {
   openDoc(docId: string): Promise<void>;
   removeDoc(docId: string): Promise<void>;
   capture(region: Region, options?: RecognizeOptions): Promise<Result>;
+  /**
+   * 只框选，不识别（ADR-0019）。摘录停在 `capturing`，随时可以 `recognizeClip`。
+   *
+   * 这是**松手之后的默认路径**：中文扫描书上每一框都是二十秒起的视觉调用，
+   * 而产出多半用不上。要不要认，由读者在工具条上决定。
+   */
+  captureOnly(region: Region): Promise<Result>;
+  /** 认一条已经框好、还停在 `capturing` 的摘录。 */
+  recognizeClip(clipId: string, options?: RecognizeOptions): Promise<Result>;
   /** 给一条摘录设分类；`null` 是清掉。顺带记住这个颜色，下一条默认用它。 */
   setTag(clipId: string, tagId: TagColor | null): Promise<Result>;
   /** 目录里显示的那一行。空串是退回从内容推导，不是设成空标题。 */
@@ -264,6 +273,35 @@ export function createWorkspace(deps: WorkspaceDeps): Workspace {
         : { ok: false, reason: "识别失败", error: outcome.error, clipId: outcome.clipId };
     },
 
+
+    async captureOnly(region: Region): Promise<Result> {
+      const outcome = await captureOnly(
+        { recognizer: recognizer!, store: deps.store, newId: deps.newId, now: deps.now },
+        clips,
+        requireDoc(),
+        region,
+        defaultTagId,
+      );
+      clips = outcome.state;
+      publish();
+      return outcome.ok ? { ...OK, clipId: outcome.clipId } : { ok: false, reason: "存不下这条摘录。", error: outcome.error };
+    },
+
+    async recognizeClip(clipId: string, options?: RecognizeOptions): Promise<Result> {
+      if (!recognizer) return { ok: false, reason: "还没有打开任何文档。" };
+      const outcome = await recognizeClip(
+        { recognizer, store: deps.store, newId: deps.newId, now: deps.now },
+        clips,
+        requireDoc(),
+        clipId,
+        options,
+      );
+      clips = outcome.state;
+      publish();
+      return outcome.ok
+        ? { ...OK, clipId: outcome.clipId }
+        : { ok: false, reason: "识别失败", error: outcome.error };
+    },
     async setTag(clipId: string, tagId: TagColor | null): Promise<Result> {
       const result = await commit({ type: "set-tag", id: clipId, tagId }, clipId);
       if (result.ok && tagId !== null) {

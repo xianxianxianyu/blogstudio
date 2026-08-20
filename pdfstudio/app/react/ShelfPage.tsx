@@ -11,12 +11,10 @@ export function ShelfPage({
   ws,
   state,
   onOpen,
-  onSettings,
 }: {
   ws: Workspace;
   state: WorkspaceState;
   onOpen: (docId: string) => Promise<void>;
-  onSettings: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -47,11 +45,10 @@ export function ShelfPage({
 
   return (
     <div className="shelf-page">
+      {/* 「Context Studio」和「设置」都搬去外壳的左栏了：它们是全局的，
+          不是书架这一页的东西（ADR-0003）。 */}
       <header>
         <h1 className="grow">书架</h1>
-        <button className="btn" onClick={onSettings}>
-          设置
-        </button>
       </header>
 
       <div className="books">
