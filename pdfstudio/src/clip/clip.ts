@@ -1,5 +1,5 @@
 import type { ClipContent, Region } from "../recognizer/recognizer";
-import type { Context } from "../knowledge/context";
+import type { Context, Source } from "../knowledge/context";
 import type { TagColor } from "../tag/tag";
 
 export type { Context };
@@ -63,7 +63,16 @@ export type Action =
   | { type: "recognize"; id: string }
   | { type: "recognize-failed"; id: string }
   | { type: "recognized"; id: string; content: ClipContent }
-  | { type: "promote"; id: string; contextId: string }
+  | {
+      type: "promote";
+      id: string;
+      contextId: string;
+      /**
+       * 出处。**由调用方给**——reducer 只认识摘录，不知道书叫什么名字，而
+       * 「不带文档名的页码等于没有出处」（`contextstudio/src/context.ts`）。
+       */
+      source: Source;
+    }
   | { type: "fix-source"; id: string; text: string }
   | { type: "add-note"; id: string; text: string }
   | { type: "edit-translation"; id: string; text: string }
@@ -201,11 +210,20 @@ const GUARDS: { [T in Exclude<Action["type"], "capture">]: Guard<T> } = {
     return ALLOWED;
   },
 
+  /**
+   * 入库只要求**一个能回跳的出处**，不要求 evidence（ADR-0020）。
+   *
+   * 此前这里挡两样：不是 `ready` 不许、`sourceText === null` 不许。ADR-0019 让松手
+   * 不再自动识别之后，**第一条变成了死路**——图区摘录停在 `capturing`，照旧挡的话
+   * 新主路径下一条都入不了库。第二条则是取舍变了：没有逐字引文的 context 仍然可回溯，
+   * `Source` 是结构化的（docId + 书名 + 页码）。
+   *
+   * 代价写在 ADR-0020 里：摘录 7 天后衰减成墓碑，那之后空 evidence 只能靠翻回原页
+   * 找回来——扫描件还得重新 OCR。所以界面要在入库前就地提供「认一下」，而不是这里挡。
+   */
   promote: (clip) => {
     if (clip.state === "promoted") return denied("已入库，无需重复。");
-    if (clip.state !== "ready") return denied("还没识别完成，不能入库。");
-    // sourceText === null ⟺ 纯图 ⟺ 入库 blocked。不看 route，也不设 kind。
-    if (clip.sourceText === null) return denied("纯图摘录没有原文，无法作为 evidence 入库。");
+    if (clip.state === "recognizing") return denied("正在识别，等它落定再入库。");
     return ALLOWED;
   },
 
@@ -357,8 +375,7 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
 
     case "promote": {
       const clip = state.clips.find((candidate) => candidate.id === action.id);
-      // can() 已经挡掉 sourceText === null，这里只是让类型收窄。
-      if (!clip || clip.sourceText === null) return state;
+      if (!clip) return state;
 
       const promoted = patchClip(state, action.id, { state: "promoted" });
       return {
@@ -368,13 +385,20 @@ export function reduce(state: ClipsState, action: Action): ClipsState {
           {
             id: action.contextId,
             sourceClipId: clip.id,
-            source: `page ${clip.region.page}`,
+            source: action.source,
             claim: null,
-            // evidence 是入库那一刻的副本，不随摘录变化。
-            evidence: clip.sourceText,
+            // evidence 是入库那一刻的副本，不随摘录变化。**可以是空的**
+            // （ADR-0020）：出处是底线，逐字引文是加分。
+            evidence: clip.sourceText ?? "",
             stance: null,
+            // **待定就是「生成了、还没确认」**（术语表：状态）。不需要第二个「草稿」
+            // 概念——那个词现在指 Blog Studio 的稿子，而 pending 本来就在库里、
+            // 在知识图里找得到。
             status: "pending",
             sourceClipDeleted: false,
+            // 主题不由这里定：它要对着知识库已有的主题池提议才不会分叉
+            // （`contextstudio/docs/adr/0003`）。入库那一刻先空着。
+            topics: [],
           },
         ],
       };

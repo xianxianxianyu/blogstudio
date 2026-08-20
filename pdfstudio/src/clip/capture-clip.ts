@@ -74,3 +74,71 @@ export async function captureClip(
 
   return { ok: true, state: next, clipId: clip.id };
 }
+
+
+/**
+ * 只框选，不识别（ADR-0019）。
+ *
+ * 摘录停在 **`capturing`**——那个状态的含义本来就是「已框选、待识别」，
+ * `recognize-failed` 也正是退回到它。所以「延后识别」不需要新状态：它就是这个状态，
+ * 而 `recognize` 的守卫要的也正是它，**「事后再认」那条路本来就通**。
+ *
+ * 为什么默认不认：ADR-0016 假设的是英文论文（有文本层、翻译有价值），而在中文扫描书上
+ * 每一框都是二十秒起的视觉调用，产出多半用不上。
+ */
+export async function captureOnly(
+  deps: CaptureClipDeps,
+  state: ClipsState,
+  docId: string,
+  region: Region,
+  /** 上一次用过的颜色。连续划同一类时读者一次都不用点。 */
+  tagId: TagColor | null = null,
+): Promise<CaptureOutcome> {
+  const next = reduce(state, { type: "capture", id: deps.newId(), region, at: deps.now(), tagId });
+
+  // 同 captureClip：capture 会合并到同区域的已有摘录上，id 未必是 newId() 那个。
+  const clip = next.clips.find((candidate) => sameRegion(candidate.region, region));
+  if (!clip) return { ok: true, state: next, clipId: "" };
+
+  await deps.store.save(docId, clip);
+  return { ok: true, state: next, clipId: clip.id };
+}
+
+/**
+ * 认一条已经框好、还停在 `capturing` 的摘录。
+ *
+ * 与 `captureClip` 的区别只有一处：区域来自那条摘录自己，而不是调用方现给的。
+ * 失败照样退回 `capturing`——不退的话它停在 `recognizing` 就再也认不了了。
+ */
+export async function recognizeClip(
+  deps: CaptureClipDeps,
+  state: ClipsState,
+  docId: string,
+  clipId: string,
+  options?: RecognizeOptions,
+): Promise<CaptureOutcome> {
+  const target = state.clips.find((candidate) => candidate.id === clipId);
+  if (!target) {
+    return { ok: false, state, clipId, error: new Error("没有这条摘录。") };
+  }
+
+  let next = reduce(state, { type: "recognize", id: clipId });
+
+  let content;
+  try {
+    content = await deps.recognizer.recognize(target.region, options);
+  } catch (error) {
+    return {
+      ok: false,
+      state: reduce(next, { type: "recognize-failed", id: clipId }),
+      clipId,
+      error,
+    };
+  }
+
+  next = reduce(next, { type: "recognized", id: clipId, content });
+  const saved = next.clips.find((candidate) => candidate.id === clipId) as Clip;
+  await deps.store.save(docId, saved);
+
+  return { ok: true, state: next, clipId };
+}

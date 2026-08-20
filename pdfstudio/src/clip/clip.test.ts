@@ -29,6 +29,9 @@ const textContent = (sourceText: string | null): ClipContent => ({
   screenshot: PIXELS,
 });
 
+/** 出处由调用方给：reducer 不知道书叫什么名字。 */
+const SOURCE = { docId: "doc-1", title: "Attention Is All You Need", locator: "第 3 页" };
+
 /** 走到 ready 的摘录。sourceText 为 null 就是纯图。 */
 function readyClip(sourceText: string | null): ClipsState {
   return [
@@ -186,7 +189,7 @@ describe("Clip reducer — 原文只准修错字", () => {
   });
 
   it("入库后原文冻结——它已经是 context 的 evidence", () => {
-    const promoted = reduce(readyClip(FIXED), { type: "promote", id: "c1", contextId: "ctx1" });
+    const promoted = reduce(readyClip(FIXED), { type: "promote", id: "c1", contextId: "ctx1", source: SOURCE });
 
     expect(can(promoted, { type: "fix-source", id: "c1", text: OCR_TYPO }).ok).toBe(false);
     expect(
@@ -201,6 +204,7 @@ describe("Clip reducer — 译文与标签", () => {
       type: "promote",
       id: "c1",
       contextId: "ctx1",
+      source: SOURCE,
     });
 
     const state = reduce(promoted, { type: "edit-translation", id: "c1", text: "主流的序列转导模型" });
@@ -246,6 +250,7 @@ describe("Clip reducer — 同一区域重复截图", () => {
       type: "promote",
       id: "c1",
       contextId: "ctx1",
+      source: SOURCE,
     });
 
     expect(can(promoted, { type: "recapture", id: "c1", region: REGION }).ok).toBe(false);
@@ -261,6 +266,7 @@ describe("Clip reducer — 删除已入库的摘录", () => {
       type: "promote",
       id: "c1",
       contextId: "ctx1",
+      source: SOURCE,
     });
 
     const state = reduce(promoted, { type: "delete", id: "c1" });
@@ -277,7 +283,7 @@ describe("Clip reducer — 入库", () => {
   it("生成 context，evidence 是入库那一刻的原文", () => {
     const ready = readyClip("The dominant sequence transduction models");
 
-    const state = reduce(ready, { type: "promote", id: "c1", contextId: "ctx1" });
+    const state = reduce(ready, { type: "promote", id: "c1", contextId: "ctx1", source: SOURCE });
 
     expect(state.clips[0].state).toBe("promoted");
     expect(state.contexts).toHaveLength(1);
@@ -288,16 +294,27 @@ describe("Clip reducer — 入库", () => {
     expect(state.contexts[0].stance).toBeNull();
   });
 
-  it("纯图摘录没有原文，入库被禁止", () => {
+  it("**纯图也能入库**——出处是底线，逐字引文是加分（ADR-0020）", () => {
+    // 此前这里断言的是「纯图入库被禁止」。那条守卫在 ADR-0019 之后变成死路：
+    // 松手不再自动识别，图区摘录连原文都还没有，照旧禁止的话新主路径下一条都进不去。
+    // 没有 evidence 的 context 仍然可回溯——`Source` 是结构化的，点一下翻回那一页。
     const ready = readyClip(null);
 
-    expect(can(ready, { type: "promote", id: "c1", contextId: "ctx1" }).ok).toBe(false);
+    expect(can(ready, { type: "promote", id: "c1", contextId: "ctx1", source: SOURCE }).ok).toBe(true);
 
-    const state = reduce(ready, { type: "promote", id: "c1", contextId: "ctx1" });
+    const state = reduce(ready, { type: "promote", id: "c1", contextId: "ctx1", source: SOURCE });
 
-    // sourceText === null ⟺ 纯图 ⟺ 入库 blocked，判定只看这一个字段。
-    expect(state.clips[0].state).toBe("ready");
-    expect(state.contexts).toHaveLength(0);
+    expect(state.clips[0].state).toBe("promoted");
+    expect(state.contexts[0].evidence).toBe("");
+  });
+
+  it("**还没识别的也能入库**——`capturing` 有锚点、有截图，出处是齐的", () => {
+    const capturing = {
+      clips: [{ ...readyClip("x").clips[0], state: "capturing" as const, sourceText: null, content: null }],
+      contexts: [],
+    };
+
+    expect(can(capturing, { type: "promote", id: "c1", contextId: "ctx1", source: SOURCE }).ok).toBe(true);
   });
 });
 
@@ -308,6 +325,7 @@ describe("Clip reducer — 入库后不能被重新识别打回", () => {
       type: "promote",
       id: "c1",
       contextId: "ctx1",
+      source: SOURCE,
     });
 
     expect(can(promoted, { type: "recognized", id: "c1", content: textContent("改写过的原文") }).ok)
@@ -351,7 +369,7 @@ describe("Clip reducer — 对同一区域再次 capture", () => {
 describe("Clip reducer — 对已入库区域再次 capture", () => {
   it("不能把已入库的摘录打回 capturing——原文已冻结为 evidence", () => {
     const FIXED = "The dominant sequence transduction models";
-    const promoted = reduce(readyClip(FIXED), { type: "promote", id: "c1", contextId: "ctx1" });
+    const promoted = reduce(readyClip(FIXED), { type: "promote", id: "c1", contextId: "ctx1", source: SOURCE });
 
     expect(can(promoted, { type: "capture", id: "c2", region: REGION, at: CAPTURED_AT }).ok).toBe(false);
 
@@ -366,13 +384,10 @@ describe("Clip reducer — 对已入库区域再次 capture", () => {
 
 describe("保留轴：重要标记（ADR-0012）", () => {
   it("纯图也能标记为重要", () => {
-    // **这条是整根保留轴存在的理由。** promote 在 sourceText === null 时拒绝
-    // （纯图没有原文，不能当 evidence），所以纯图永远进不了 promoted。
-    // 若拿 promoted 当「重要」用，一张关键的架构图截图就标不了重要，到期必被回收
-    // ——恰恰是最该留的东西。发布轴与保留轴必须是两根。
+    // **两根轴仍然必须是两根**，只是理由换了。ADR-0020 之后纯图能入库了，所以
+    // 「纯图进不了 promoted」这条论据没了；但 `promoted` 说的是「已经交出去了」，
+    // 而 ☆ 说的是「别删我」——一条随手划的、没打算入库的架构图照样要留住。
     const state = reduce(readyClip(null), { type: "toggle-important", id: "c1" });
-
-    expect(can(readyClip(null), { type: "promote", id: "c1", contextId: "x" }).ok).toBe(false);
     expect(state.clips[0].important).toBe(true);
   });
 

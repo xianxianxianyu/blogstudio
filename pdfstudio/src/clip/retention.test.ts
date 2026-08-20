@@ -8,6 +8,8 @@ import { reduce } from "./clip";
 import type { Clip, ClipsState } from "./clip";
 import type { ClipContent, Region, Screenshot } from "../recognizer/recognizer";
 
+const SOURCE = { docId: "doc-1", title: "某本书", locator: "第 3 页" };
+
 const PIXELS: Screenshot = { mime: "image/png", bytes: new Uint8Array([1]), width: 10, height: 10 };
 const REGION: Region = { page: 1, rect: { x: 1, y: 2, width: 30, height: 40 }, pixels: PIXELS };
 const EMPTY: ClipsState = { clips: [], contexts: [] };
@@ -59,6 +61,7 @@ describe("回收判定（ADR-0012）", () => {
       type: "promote",
       id: "c1",
       contextId: "ctx-1",
+      source: SOURCE,
     }).clips[0];
 
     expect(promoted.state).toBe("promoted");
@@ -128,7 +131,7 @@ describe("衰减成墓碑", () => {
     // 守卫漏在编排层就等于没有。
     for (const clip of [
       { ...ready(), important: true },
-      reduce({ clips: [ready()], contexts: [] }, { type: "promote", id: "c1", contextId: "x" }).clips[0],
+      reduce({ clips: [ready()], contexts: [] }, { type: "promote", id: "c1", contextId: "x", source: SOURCE }).clips[0],
       reduce({ clips: [ready()], contexts: [] }, { type: "add-note", id: "c1", text: "笔记" }).clips[0],
     ]) {
       const after = reduce({ clips: [clip], contexts: [] }, { type: "decay", id: "c1" }).clips[0];

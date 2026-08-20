@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mkdtemp, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { captureClip } from "./capture-clip";
+import { captureClip, captureOnly, recognizeClip } from "./capture-clip";
 import { createClipStore } from "./clip-store";
 import type { ClipsState } from "./clip";
 import type { ClipContent, Recognizer, Region, Screenshot } from "../recognizer/recognizer";
@@ -137,5 +137,93 @@ describe("框选 → 识别 → 落盘", () => {
     expect(retried.state.clips).toHaveLength(1);
     expect(retried.state.clips[0].state).toBe("ready");
     expect(await readdir(path.join(root, "doc-1", "clips"))).toEqual(["c1"]);
+  });
+});
+
+describe("只框选，不识别（ADR-0019）", () => {
+  const deps = (recognizer: Recognizer, root: string) => ({
+    recognizer,
+    store: createClipStore(root),
+    newId: () => "new-clip",
+    now: () => CAPTURED_AT,
+  });
+
+  it("**一个模型都不调**，摘录停在 capturing", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "clip-"));
+    let called = false;
+    const spy: Recognizer = {
+      recognize: async () => {
+        called = true;
+        throw new Error("不该被调到");
+      },
+    };
+
+    const out = await captureOnly(deps(spy, root), EMPTY, "doc", REGION, null);
+
+    expect(called).toBe(false);
+    expect(out.ok).toBe(true);
+    expect(out.state.clips[0]).toMatchObject({ state: "capturing", content: null });
+  });
+
+  it("落盘了——刷新之后这条还在，只是还没有内容", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "clip-"));
+    const out = await captureOnly(deps(recognizerThrowing(new Error("x")), root), EMPTY, "doc", REGION, null);
+
+    const back = await createClipStore(root).listByDoc("doc");
+    expect(back).toHaveLength(1);
+    expect(back[0].id).toBe(out.clipId);
+  });
+
+  it("带上默认标记——连续划同一类时一次都不用点", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "clip-"));
+    const out = await captureOnly(deps(recognizerThrowing(new Error("x")), root), EMPTY, "doc", REGION, "green");
+
+    expect(out.state.clips[0].tagId).toBe("green");
+  });
+
+  it("**事后再认**：停在 capturing 的那条能被认出来", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "clip-"));
+    const content: ClipContent = {
+      route: "text",
+      anchor: { page: 3, rect: REGION.rect },
+      sourceText: "认出来的原文",
+      images: [],
+      screenshot: PNG,
+    };
+    const first = await captureOnly(deps(recognizerThrowing(new Error("x")), root), EMPTY, "doc", REGION, null);
+
+    const out = await recognizeClip(deps(recognizerReturning(content), root), first.state, "doc", first.clipId);
+
+    expect(out.ok).toBe(true);
+    expect(out.state.clips[0]).toMatchObject({ state: "ready", sourceText: "认出来的原文" });
+  });
+
+  it("事后再认失败要退回 capturing——不然它再也认不了了", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "clip-"));
+    const first = await captureOnly(deps(recognizerThrowing(new Error("x")), root), EMPTY, "doc", REGION, null);
+
+    const failed = recognizeClip(
+      deps(recognizerThrowing(new RecognizeError("model-unavailable", "端点不通")), root),
+      first.state,
+      "doc",
+      first.clipId,
+    );
+    const out = await failed;
+
+    expect(out.ok).toBe(false);
+    expect(out.state.clips[0].state).toBe("capturing");
+  });
+
+  it("认一条不存在的，不炸也不假装成功", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "clip-"));
+    const out = await recognizeClip(deps(recognizerReturning({} as ClipContent), root), EMPTY, "doc", "没有这条");
+
+    expect(out.ok).toBe(false);
+    // **要是有意的拒绝，不是碰巧被 catch 兜住的空指针。** 去掉守卫的话
+    // `target.region` 会抛 TypeError，而它正好落进同一个 catch——返回值一模一样，
+    // 只有错误的类型能分辨这两件事。
+    if (out.ok) throw new Error("不该成功");
+    expect(out.error).not.toBeInstanceOf(TypeError);
+    expect(String((out.error as Error).message)).toContain("没有这条摘录");
   });
 });

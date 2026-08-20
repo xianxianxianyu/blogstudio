@@ -1,11 +1,15 @@
-import { useState } from "react";
 import { TAG_COLORS, type Tag, type TagColor } from "../../src/tag/tag";
 
 /**
- * 调色盘：**折叠**的，平时只露当前色。
+ * 调色盘：五个色块，**一直摊开**。
  *
- * 浮动菜单里已经有备注输入框、☆、问这段、删除、✕ 五样，而且它是压在正文上的——横着
- * 再摆五个色块会把它撑宽，刚因为遮挡改过一次定位。所以点开才展开。
+ * 它此前是折叠的——平时只露当前色，点一下才展开。那个折叠是为了当时那个「一条横的
+ * 浮动菜单」让路：里面已经挤了备注框、☆、问这段、删除、✕ 五样，再摆五个色块会把它
+ * 撑宽，而它是压在正文上的。
+ *
+ * **那个理由随 ADR-0019 一起没了**：工具条拆成两级之后，调色盘住在第二级的笔记面板里，
+ * 那一栏的宽度本来就是给它的。而折叠的代价是实打实的——**选个颜色要点两下**，
+ * 其中第一下什么也没做成。
  *
  * 摘录面板里也用它，同一个组件：两处的操作是同一件事，做成两套迟早长歪。
  */
@@ -18,19 +22,7 @@ export function TagPalette({
   value: TagColor | null;
   onPick: (tagId: TagColor | null) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const named = (id: TagColor) => tags.find((tag) => tag.id === id)?.name ?? id;
-
-  if (!open) {
-    return (
-      <button
-        className="swatch current"
-        data-tag={value ?? "none"}
-        title={value === null ? "选个分类" : `分类：${named(value)}`}
-        onClick={() => setOpen(true)}
-      />
-    );
-  }
 
   return (
     <span className="palette">
@@ -40,11 +32,8 @@ export function TagPalette({
           className={`swatch${id === value ? " on" : ""}`}
           data-tag={id}
           title={named(id)}
-          onClick={() => {
-            // 再点一次当前色 = 取消分类。省掉一个「无」按钮，也省掉一次解释。
-            onPick(id === value ? null : id);
-            setOpen(false);
-          }}
+          // 再点一次当前色 = 取消分类。省掉一个「无」按钮，也省掉一次解释。
+          onClick={() => onPick(id === value ? null : id)}
         />
       ))}
     </span>

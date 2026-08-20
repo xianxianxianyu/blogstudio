@@ -83,6 +83,14 @@ export interface RecognizeOptions {
    */
   sourceText?: string;
   targetLang?: string;
+  /**
+   * 要不要顺手翻译。默认要。
+   *
+   * **文本路由的原文是免费的（文本层），翻译不是**——它是一次模型调用。ADR-0019 把
+   * 「松手即翻译」推翻之后，文字区仍然免费取原文，只是不再自动翻；要译文时由读者
+   * 在工具条上要。
+   */
+  translate?: boolean;
 }
 
 export interface Recognizer {
@@ -277,7 +285,10 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
           // 译文一律由翻译模块产出，识别模型顺手回的那份不采纳（ADR-0010）。
           // 路由表的 translation 一栏现在管的是「要不要调翻译模块」——公式区不翻，
           // 翻 LaTeX 没有意义。
-          translation: allow.translation ? await translate(deps, sourceText, targetLang) : undefined,
+          translation:
+            allow.translation && options?.translate !== false
+              ? await translate(deps, sourceText, targetLang)
+              : undefined,
           multimodal: allow.multimodal ? (output.multimodal ?? undefined) : undefined,
           images: [region.pixels],
           screenshot: region.pixels,
@@ -292,7 +303,7 @@ export function createRecognizer(deps: RecognizerDeps): Recognizer {
         route: "text",
         anchor,
         sourceText,
-        translation: await translate(deps, sourceText, targetLang),
+        translation: options?.translate === false ? undefined : await translate(deps, sourceText, targetLang),
         images: [],
         screenshot: region.pixels,
       };
