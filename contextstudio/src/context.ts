@@ -8,7 +8,10 @@
  * （`docs/adr/0001-shared-knowledge-base.md`）——PDF Studio 只是产出方之一。
  * `pdfstudio/src/knowledge/context.ts` 目前有一份自己的副本，等 pdfstudio 那条线程
  * 的在途改动落地后应改为从这里导入（见 `.scratch/knowledge-graph/issues/01`）。
+ *
+ * @module
  */
+
 /**
  * 一条 context 的出处。
  *
@@ -37,7 +40,12 @@ export interface Context {
   claim: string | null;
   /** 逐字原文，不允许改写——转述发生在消费端，不在入库端。 */
   evidence: string;
-  stance: "support" | "refute" | "neutral" | null;
+  /**
+   * 这条证据对它的断言是支持、反驳还是背景。术语表（`contextstudio/CONTEXT.md`）裁定
+   * 第三个值叫 **`background`**，不是 `neutral`——「中立」听着像还没判，而它其实是
+   * 已经判完的一类：这条不站队，它提供背景。`null` 才是还没判。
+   */
+  stance: "support" | "refute" | "background" | null;
   status: "pending" | "approved" | "rejected" | "disputed";
   sourceClipDeleted: boolean;
   /**

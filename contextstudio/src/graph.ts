@@ -21,7 +21,16 @@ export interface Edge {
 }
 
 export interface TopicStat {
+  /** 归一化形式。**这是 key**——边、分组、去重都按它判定相等。 */
   topic: string;
+  /**
+   * 读者原样写下的那一份，取库里第一次出现的写法。**给人看的一律用它。**
+   *
+   * 少了它，「对齐到池里在用的写法」就是句空话：池子里只剩小写，`proposeTopics`
+   * 只能提议小写，读者写的「Agent Design」会在第二次入库时被系统改成「agent design」——
+   * 正是 `Node.topics` 那条注释拒绝的事。归一化是**相等规则**，不是**显示规则**。
+   */
+  display: string;
   /** 挂着这个主题的 context 有几条。 */
   size: number;
 }
@@ -45,7 +54,35 @@ export interface Graph {
  *
  * 只做这两样，不做同义词合并、不做词干还原：那些需要判断，而这里必须是纯规则。
  */
-const normalizeTopic = (topic: string): string => topic.trim().toLowerCase();
+export const normalizeTopic = (topic: string): string => topic.trim().toLowerCase();
+
+/**
+ * `Graph.topics` 的按名索引。导出它，是因为下游（`intake` 要 display、`focus` 要 size）
+ * 各自 `new Map(graph.topics.map(...))` 建一遍，同一个索引写两处，改一处就会静默走偏。
+ */
+export function topicIndex(graph: Graph): Map<string, TopicStat> {
+  return new Map(graph.topics.map((stat) => [stat.topic, stat]));
+}
+
+/** 把归一化后的主题换回读者的写法。池里没有的（新主题）原样返回。 */
+export function display(index: Map<string, TopicStat>, topic: string): string {
+  return index.get(topic)?.display ?? topic;
+}
+
+/**
+ * 一条边的稀有度：共享的每个主题的 IDF 之和。**排邻居和分簇用的是同一个数**，
+ * 所以它住在这里而不是各写一份。
+ *
+ * 用 `log(1 + n/size)` 而不是教科书的 `log(n/size)`，是因为后者有个退化：一个**每条
+ * context 都挂**的主题 IDF 恰好是 0。排序时无所谓，聚类时是致命的——全库只用一个主题
+ * 的话所有边权都是 0，总权重也是 0，于是「谁都不像一簇」，整个库被报成一堆孤儿。
+ * 加一之后最笼统的主题也还剩 `log 2`，相对差距几乎没变（实测 6.8 倍）。
+ *
+ * **交出的仍然是政策，不是事实**——`Graph.topics` 只给频次，这个函数是可以换掉的那层。
+ */
+export function rarity(topics: string[], index: Map<string, TopicStat>, total: number): number {
+  return topics.reduce((sum, topic) => sum + Math.log(1 + total / (index.get(topic)?.size || 1)), 0);
+}
 
 /**
  * 从一批 context 算出知识图：**共享至少一个主题的两条 context 之间有一条边**
@@ -65,22 +102,27 @@ export function buildGraph(contexts: Context[]): Graph {
 
   // 主题 → 挂着它的 context。边只可能在同一个主题的成员之间产生，所以先分组，
   // 而不是拿所有 context 两两比主题——后者是 O(n²) 次数组求交，前者只在真有共享时才动。
-  const byTopic = new Map<string, string[]>();
+  const byTopic = new Map<string, { display: string; members: string[] }>();
   for (const context of contexts) {
     // 去重放在每条 context 内部：同一个主题写了两遍（或写成 "eval" 与 "Eval"）
     // 会让它在同一组里出现两次，两两配对时就配到了自己身上。
-    for (const topic of new Set(context.topics.map(normalizeTopic))) {
-      if (topic === "") continue;
-      const members = byTopic.get(topic);
-      if (members) members.push(context.id);
-      else byTopic.set(topic, [context.id]);
+    const seen = new Set<string>();
+    for (const written of context.topics) {
+      const topic = normalizeTopic(written);
+      if (topic === "" || seen.has(topic)) continue;
+      seen.add(topic);
+      const group = byTopic.get(topic);
+      // 先到先得。写法之争没有正确答案，但**必须稳定**——按「最后一次出现」的话，
+      // 新导入一条就可能把全库这个主题的显示改掉一次。
+      if (group) group.members.push(context.id);
+      else byTopic.set(topic, { display: written.trim(), members: [context.id] });
     }
   }
 
   // 一对 context 共享几个主题，仍然只是**一条**边——多出来的主题进 `topics`，不进边数。
   // 按 `a|b` 归并，否则「共享两个主题」会画出两条重叠的线，而它们说的是同一件事。
   const byPair = new Map<string, Edge>();
-  for (const [topic, members] of byTopic) {
+  for (const [topic, { members }] of byTopic) {
     for (let i = 0; i < members.length; i++) {
       for (let j = i + 1; j < members.length; j++) {
         const [a, b] = members[i] < members[j] ? [members[i], members[j]] : [members[j], members[i]];
@@ -105,7 +147,7 @@ export function buildGraph(contexts: Context[]): Graph {
 
   // 分组时已经按归一化后的主题分好了，频次直接读它，不重扫一遍。
   const topics: TopicStat[] = [...byTopic.entries()]
-    .map(([topic, members]) => ({ topic, size: members.length }))
+    .map(([topic, group]) => ({ topic, display: group.display, size: group.members.length }))
     .sort((left, right) => right.size - left.size || left.topic.localeCompare(right.topic));
 
   return { nodes, edges, topics };

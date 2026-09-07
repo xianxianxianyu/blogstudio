@@ -6,7 +6,7 @@
 <meta name="referrer" content="no-referrer">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>blog-studio-chat-concepts.html</title>
-<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;max-width:736px;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{width:100%;height:100%;margin:0;overflow:hidden}body{background:inherit}iframe{display:block;width:100vw;height:100vh;border:0}</style>
 </head>
 <body>
 <iframe id="codex-visualization" sandbox="allow-scripts" scrolling="no" referrerpolicy="no-referrer" title="blog-studio-chat-concepts.html" data-srcdoc="&lt;!doctype html&gt;
@@ -1082,7 +1082,10 @@ html&gt;body{padding:0}&lt;/style&gt;
 &lt;div id=&quot;blog-studio-chat-concepts&quot;&gt;&lt;/div&gt;
 
 &lt;style&gt;
+  html &gt; body { padding: 0; }
+
   #blog-studio-chat-concepts {
+    height: 100vh;
     color-scheme: light dark;
     --studio-bg: light-dark(#e9e7e1, #10100f);
     --studio-paper: light-dark(#faf9f6, #1b1b19);
@@ -1109,51 +1112,17 @@ html&gt;body{padding:0}&lt;/style&gt;
   #blog-studio-chat-concepts textarea { font: inherit; color: inherit; }
   #blog-studio-chat-concepts button { cursor: pointer; }
 
-  #blog-studio-chat-concepts .studio-concepts {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-
-  #blog-studio-chat-concepts .studio-concept {
-    padding: 10px 12px;
-    border: 1px solid var(--studio-line);
-    border-radius: 7px;
-    background: var(--studio-paper);
-    color: var(--studio-muted);
-    text-align: left;
-  }
-
-  #blog-studio-chat-concepts .studio-concept strong {
-    display: block;
-    margin-bottom: 2px;
-    color: var(--studio-ink);
-    font-weight: 500;
-  }
-
-  #blog-studio-chat-concepts .studio-concept span { font-size: .78rem; }
-  #blog-studio-chat-concepts .studio-concept[aria-pressed=&quot;true&quot;] {
-    border-color: var(--studio-ink);
-    background: var(--studio-ink);
-    color: var(--studio-paper);
-  }
-  #blog-studio-chat-concepts .studio-concept[aria-pressed=&quot;true&quot;] strong { color: var(--studio-paper); }
-
-  #blog-studio-chat-concepts .studio-window-wrap { width: 100%; }
+  #blog-studio-chat-concepts .studio-window-wrap { width: 100%; height: 100%; }
   #blog-studio-chat-concepts .studio-window {
     position: relative;
+    display: flex;
     overflow: hidden;
     width: 100%;
-    min-height: 760px;
-    margin: 0 auto;
-    border: 1px solid var(--studio-line-strong);
-    border-radius: 10px;
+    height: 100%;
+    min-height: 0;
+    flex-direction: column;
     background: var(--studio-paper);
-    transition: max-width .2s ease;
   }
-
-  #blog-studio-chat-concepts .studio-window.is-mobile { max-width: 390px; }
 
   #blog-studio-chat-concepts .studio-topbar {
     display: flex;
@@ -1225,8 +1194,9 @@ html&gt;body{padding:0}&lt;/style&gt;
 
   #blog-studio-chat-concepts .studio-body {
     display: grid;
+    min-height: 0;
+    flex: 1;
     grid-template-columns: 192px minmax(0, 1fr);
-    min-height: 706px;
   }
 
   #blog-studio-chat-concepts .studio-body.is-focus { grid-template-columns: minmax(0, 1fr); }
@@ -1282,8 +1252,11 @@ html&gt;body{padding:0}&lt;/style&gt;
 
   #blog-studio-chat-concepts .studio-workspace {
     position: relative;
+    display: flex;
     min-width: 0;
-    min-height: 706px;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
     background: var(--studio-paper);
   }
 
@@ -1301,8 +1274,6 @@ html&gt;body{padding:0}&lt;/style&gt;
     justify-content: flex-end;
     min-width: 0;
   }
-
-  #blog-studio-chat-concepts .studio-toolbar-menu-wrap { position: relative; }
 
   #blog-studio-chat-concepts .studio-tool,
   #blog-studio-chat-concepts .studio-small-action,
@@ -1327,86 +1298,20 @@ html&gt;body{padding:0}&lt;/style&gt;
     font-size: .76rem;
   }
 
-  #blog-studio-chat-concepts .studio-icon-tool {
-    position: relative;
-    display: inline-grid;
-    min-width: 32px;
-    height: 32px;
-    padding: 0 8px;
-    place-items: center;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    background: transparent;
-    color: var(--studio-muted);
-    font-size: .96rem;
-    line-height: 1;
-  }
-
-  #blog-studio-chat-concepts .studio-icon-tool:hover,
-  #blog-studio-chat-concepts .studio-icon-tool[aria-pressed=&quot;true&quot;],
-  #blog-studio-chat-concepts .studio-icon-tool[aria-expanded=&quot;true&quot;] {
-    border-color: var(--studio-line);
-    background: var(--studio-panel);
-    color: var(--studio-ink);
-  }
-
-  #blog-studio-chat-concepts .studio-history-badge {
-    position: absolute;
-    top: -4px;
-    right: -4px;
-    display: grid;
-    min-width: 16px;
-    height: 16px;
-    padding: 0 4px;
-    place-items: center;
-    border: 1px solid var(--studio-paper);
-    border-radius: 999px;
-    background: var(--studio-ink);
-    color: var(--studio-paper);
-    font-size: .58rem;
-  }
-
-  #blog-studio-chat-concepts .studio-toolbar-menu {
-    position: absolute;
-    z-index: 60;
-    top: 38px;
-    right: 0;
-    width: 190px;
-    padding: 6px;
-    border: 1px solid var(--studio-line-strong);
-    border-radius: 8px;
-    background: var(--studio-paper);
-    box-shadow: 0 12px 30px var(--studio-shadow);
-  }
-
-  #blog-studio-chat-concepts .studio-menu-action {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 8px 9px;
-    border: 0;
-    border-radius: 5px;
-    background: transparent;
-    text-align: left;
-  }
-
-  #blog-studio-chat-concepts .studio-menu-action:hover { background: var(--studio-panel); }
-  #blog-studio-chat-concepts .studio-menu-action span:last-child {
-    color: var(--studio-muted);
-    font-size: .7rem;
-  }
-
   #blog-studio-chat-concepts .studio-canvas {
     position: relative;
-    min-height: 658px;
-    padding: 42px 10% 142px;
+    min-height: 0;
+    flex: 1;
+    padding: 42px clamp(20px, 8vw, 110px) 142px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-width: thin;
   }
 
   #blog-studio-chat-concepts .studio-canvas.has-expand { padding-bottom: 330px; }
 
   #blog-studio-chat-concepts .studio-article {
+    width: 100%;
     max-width: 650px;
     margin: 0 auto;
     font-family: Georgia, &quot;Times New Roman&quot;, serif;
@@ -1425,27 +1330,88 @@ html&gt;body{padding:0}&lt;/style&gt;
     font-family: Inter, ui-sans-serif, sans-serif;
   }
 
+  #blog-studio-chat-concepts .studio-block-shell { position: relative; }
   #blog-studio-chat-concepts .studio-block {
     position: relative;
-    margin: 0 0 18px;
-    padding: 3px 5px;
-    border-radius: 4px;
-    line-height: 1.74;
+    margin: 0 0 24px;
+    padding: 8px 10px 10px;
+    border-radius: 5px;
+    line-height: 1.72;
     outline: 0;
   }
 
   #blog-studio-chat-concepts .studio-block:hover,
   #blog-studio-chat-concepts .studio-block:focus { background: var(--studio-panel); }
-  #blog-studio-chat-concepts .studio-block.is-selected { background: var(--studio-accent-soft); }
-  #blog-studio-chat-concepts .studio-block.is-selected::after {
+  #blog-studio-chat-concepts .studio-block.is-selected { background: var(--studio-panel); }
+  #blog-studio-chat-concepts .studio-block.is-locked {
+    padding-right: 72px;
+    background: var(--studio-accent-soft);
+    box-shadow: inset 3px 0 0 var(--studio-accent);
+  }
+  #blog-studio-chat-concepts .studio-block h2 {
+    margin: 0 0 10px;
+    font-size: 1.35rem;
+    font-weight: 500;
+    letter-spacing: -.02em;
+    line-height: 1.28;
+  }
+  #blog-studio-chat-concepts .studio-block h3 {
+    margin: 18px 0 7px;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+  #blog-studio-chat-concepts .studio-block p { margin: 0 0 13px; }
+  #blog-studio-chat-concepts .studio-block p:last-child,
+  #blog-studio-chat-concepts .studio-block ul:last-child,
+  #blog-studio-chat-concepts .studio-block ol:last-child { margin-bottom: 0; }
+  #blog-studio-chat-concepts .studio-block ul,
+  #blog-studio-chat-concepts .studio-block ol { margin: 8px 0 14px; padding-left: 24px; }
+  #blog-studio-chat-concepts .studio-block li { margin: 4px 0; }
+  #blog-studio-chat-concepts .studio-block blockquote {
+    margin: 16px 0;
+    padding: 8px 14px;
+    border-left: 3px solid var(--studio-accent);
+    color: var(--studio-muted);
+    font-style: italic;
+  }
+  #blog-studio-chat-concepts .studio-block pre {
+    margin: 14px 0;
+    padding: 13px 15px;
+    overflow-x: auto;
+    border: 1px solid var(--studio-line);
+    border-radius: 6px;
+    background: var(--studio-panel);
+    font-family: &quot;SFMono-Regular&quot;, Consolas, monospace;
+    font-size: .76rem;
+    line-height: 1.55;
+  }
+  #blog-studio-chat-concepts .studio-block table {
+    width: 100%;
+    margin: 15px 0;
+    border-collapse: collapse;
+    font-family: Inter, ui-sans-serif, sans-serif;
+    font-size: .76rem;
+  }
+  #blog-studio-chat-concepts .studio-block th,
+  #blog-studio-chat-concepts .studio-block td { padding: 7px 8px; border-bottom: 1px solid var(--studio-line); text-align: left; }
+  #blog-studio-chat-concepts .studio-block th { color: var(--studio-muted); font-weight: 500; }
+  #blog-studio-chat-concepts .studio-block hr { margin: 20px 0; border: 0; border-top: 1px solid var(--studio-line); }
+  #blog-studio-chat-concepts .studio-task-list { list-style: none; padding-left: 2px !important; }
+  #blog-studio-chat-concepts .studio-task-list li::before { margin-right: 8px; color: var(--studio-good); content: &quot;✓&quot;; }
+
+  #blog-studio-chat-concepts .studio-block.is-locked::after {
     position: absolute;
-    top: 50%;
-    right: -12px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--studio-accent);
-    content: &quot;&quot;;
+    top: 7px;
+    right: 7px;
+    padding: 2px 6px;
+    border: 1px solid var(--studio-accent);
+    border-radius: 999px;
+    background: var(--studio-paper);
+    color: var(--studio-accent);
+    content: &quot;Locked&quot;;
+    font-family: Inter, ui-sans-serif, sans-serif;
+    font-size: .58rem;
+    line-height: 1.2;
   }
 
   #blog-studio-chat-concepts .studio-edit-hint {
@@ -1455,30 +1421,79 @@ html&gt;body{padding:0}&lt;/style&gt;
     font-size: .72rem;
   }
 
-  #blog-studio-chat-concepts .studio-outline {
-    position: absolute;
-    z-index: 38;
-    top: 54px;
-    left: 12px;
-    width: 220px;
-    padding: 8px;
-    border: 1px solid var(--studio-line-strong);
+  #blog-studio-chat-concepts .studio-article-outline {
+    position: fixed;
+    z-index: 35;
+    top: 50%;
+    right: 12px;
+    width: 42px;
+    padding: 7px 5px;
+    overflow: hidden;
+    border: 1px solid transparent;
     border-radius: 8px;
-    background: var(--studio-paper);
-    box-shadow: 0 12px 30px var(--studio-shadow);
+    background: color-mix(in srgb, var(--studio-paper) 84%, transparent);
+    opacity: .5;
+    transform: translateY(-50%);
+    transition: width .18s ease, opacity .18s ease, background .18s ease, box-shadow .18s ease;
   }
-
-  #blog-studio-chat-concepts .studio-outline button,
-  #blog-studio-chat-concepts .studio-thread-row {
-    width: 100%;
-    padding: 8px;
+  #blog-studio-chat-concepts .studio-article-outline:hover,
+  #blog-studio-chat-concepts .studio-article-outline:focus-within {
+    width: 188px;
+    border-color: var(--studio-line);
+    background: var(--studio-paper);
+    box-shadow: 0 10px 28px var(--studio-shadow);
+    opacity: .96;
+  }
+  #blog-studio-chat-concepts .studio-outline-label {
+    height: 0;
+    overflow: hidden;
+  }
+  #blog-studio-chat-concepts .studio-article-outline button {
+    display: grid;
+    width: 176px;
+    margin: 0 0 2px;
+    padding: 6px 5px;
+    grid-template-columns: 25px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
     border: 0;
-    border-radius: 5px;
+    border-radius: 4px;
     background: transparent;
+    color: var(--studio-muted);
+    font-size: .69rem;
+    line-height: 1.35;
     text-align: left;
   }
-  #blog-studio-chat-concepts .studio-outline button:hover,
-  #blog-studio-chat-concepts .studio-thread-row:hover { background: var(--studio-panel); }
+  #blog-studio-chat-concepts .studio-outline-index {
+    position: relative;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+  }
+  #blog-studio-chat-concepts .studio-outline-text {
+    overflow: hidden;
+    opacity: 0;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: opacity .12s ease;
+  }
+  #blog-studio-chat-concepts .studio-article-outline:hover .studio-outline-text,
+  #blog-studio-chat-concepts .studio-article-outline:focus-within .studio-outline-text { opacity: 1; }
+  #blog-studio-chat-concepts .studio-article-outline button:hover { background: var(--studio-panel); color: var(--studio-ink); }
+  #blog-studio-chat-concepts .studio-article-outline button[aria-current=&quot;true&quot;] {
+    color: var(--studio-ink);
+    font-weight: 500;
+  }
+  #blog-studio-chat-concepts .studio-article-outline button[aria-current=&quot;true&quot;] .studio-outline-index::after {
+    position: absolute;
+    top: 50%;
+    right: -3px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--studio-accent);
+    content: &quot;&quot;;
+    transform: translateY(-50%);
+  }
 
   #blog-studio-chat-concepts .studio-prompts {
     position: absolute;
@@ -1536,9 +1551,9 @@ html&gt;body{padding:0}&lt;/style&gt;
   #blog-studio-chat-concepts .studio-answer {
     position: absolute;
     z-index: 28;
-    top: 272px;
-    right: 4.5%;
-    width: min(330px, 48%);
+    top: 0;
+    right: -300px;
+    width: 330px;
     padding: 13px;
     border: 1px solid var(--studio-line-strong);
     border-radius: 10px;
@@ -1707,25 +1722,8 @@ html&gt;body{padding:0}&lt;/style&gt;
   }
   #blog-studio-chat-concepts .studio-note-cell span { color: var(--studio-muted); font-size: .76rem; line-height: 1.45; }
 
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-body { display: block; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-sidebar { display: none; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-brand &gt; span:nth-child(2),
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-breadcrumb,
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-tool-label { display: none; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-canvas { padding: 28px 7% 148px; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-answer {
-    top: auto;
-    right: 10px;
-    bottom: 112px;
-    left: 10px;
-    width: auto;
-  }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-answer::before { display: none; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-focus-answer { grid-template-columns: 1fr; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-focus-context { display: none; }
-  #blog-studio-chat-concepts .studio-window.is-mobile .studio-drawer { width: 100%; }
-
   @media (max-width: 650px) {
+    #blog-studio-chat-concepts .studio-article-outline { display: none; }
     #blog-studio-chat-concepts .studio-body { grid-template-columns: 150px minmax(0, 1fr); }
     #blog-studio-chat-concepts .studio-sidebar { padding: 9px; }
     #blog-studio-chat-concepts .studio-toolbar { align-items: flex-start; }
@@ -1736,7 +1734,6 @@ html&gt;body{padding:0}&lt;/style&gt;
   }
 
   @media (max-width: 500px) {
-    #blog-studio-chat-concepts .studio-concepts { grid-template-columns: 1fr; }
     #blog-studio-chat-concepts .studio-body { display: block; }
     #blog-studio-chat-concepts .studio-sidebar { display: none; }
     #blog-studio-chat-concepts .studio-brand &gt; span:nth-child(2),
@@ -1766,55 +1763,68 @@ html&gt;body{padding:0}&lt;/style&gt;
     const root = document.getElementById(&quot;blog-studio-chat-concepts&quot;);
     if (!root) return;
 
+    const section = (title, body) =&gt; ({
+      title,
+      html: `&lt;h2&gt;${title}&lt;/h2&gt;${body}`
+    });
+
     const drafts = {
       chat: {
         title: &quot;把 Chat 从一个房间变成一种能力&quot;,
         deck: &quot;输入可以悬浮，但回答需要找到正确的落点。&quot;,
-        meta: &quot;2 threads · just now&quot;,
+        meta: &quot;6 sections · 3 threads&quot;,
         blocks: [
-          &quot;固定 Chat 侧栏有一种诚实的简单：文章在这里，对话在那里。但这种清晰是用空间换来的，真正重要的正文反而最窄。&quot;,
-          &quot;我更想让对话从文章本身发生，而不是先离开文章，再进入另一个房间。&quot;,
-          &quot;Read 和 Edit 也不应该是两个页面。文章默认适合阅读，点击任意 Block 就能直接编辑，光标离开后恢复干净排版。&quot;,
-          &quot;这里的关键不是把右栏做成浮窗，而是拆开 Composer、Answer、Artifact 和 Memory。&quot;
+          section(&quot;固定侧栏为什么失效&quot;, `&lt;p&gt;固定 Chat 侧栏有一种诚实的简单：&lt;strong&gt;文章在这里，对话在那里&lt;/strong&gt;。但这种清晰是用空间换来的，真正重要的正文反而最窄。&lt;/p&gt;&lt;p&gt;当任务从查一句事实变成比较来源、重写段落或补充论证时，右栏会逐渐成为第二个文档。用户不得不在两个滚动容器、两套选择状态和两条阅读路径之间来回切换。&lt;/p&gt;&lt;blockquote&gt;界面的稳定，不应该来自一个永远占据空间的矩形，而应该来自上下文不会丢失。&lt;/blockquote&gt;`),
+          section(&quot;对话应该从文章发生&quot;, `&lt;p&gt;我更想让对话从文章本身发生，而不是先离开文章，再进入另一个房间。选中一个 Block，就等于声明了问题的上下文和修改边界。&lt;/p&gt;&lt;ul&gt;&lt;li&gt;解释类问题贴近原文显示短回答；&lt;/li&gt;&lt;li&gt;修改类请求先生成可审阅的 Diff；&lt;/li&gt;&lt;li&gt;长讨论收进该 Block 的 Thread；&lt;/li&gt;&lt;li&gt;所有结果都能回到文章中的明确位置。&lt;/li&gt;&lt;/ul&gt;`),
+          section(&quot;输入和回答需要解耦&quot;, `&lt;p&gt;Composer 可以保持轻量并悬浮在底部，但 Answer 不必永远跟着 Composer。回答应该根据意图回到最合适的内容位置。&lt;/p&gt;&lt;h3&gt;四种输出形态&lt;/h3&gt;&lt;ol&gt;&lt;li&gt;&lt;strong&gt;Answer&lt;/strong&gt;：六行以内的局部解释。&lt;/li&gt;&lt;li&gt;&lt;strong&gt;Diff&lt;/strong&gt;：对当前 Block 的建议修改。&lt;/li&gt;&lt;li&gt;&lt;strong&gt;Thread&lt;/strong&gt;：需要保留过程的长对话。&lt;/li&gt;&lt;li&gt;&lt;strong&gt;Artifact&lt;/strong&gt;：表格、代码或可以独立复用的内容。&lt;/li&gt;&lt;/ol&gt;`),
+          section(&quot;Living Canvas 是默认表面&quot;, `&lt;p&gt;Read 和 Edit 不应该是两个页面。文章默认保持适合阅读的排版，点击任意 Block 后直接进入编辑状态，光标离开后恢复干净的正文。&lt;/p&gt;&lt;pre&gt;&lt;code&gt;markdown → block model → living canvas
+                ↘ revision history&lt;/code&gt;&lt;/pre&gt;&lt;p&gt;Markdown 仍然是可靠的数据层，但用户日常面对的是标题、段落、列表、引用和代码块，而不是语法符号。&lt;/p&gt;`),
+          section(&quot;每次修改都锁定 Block&quot;, `&lt;p&gt;锁定不是限制编辑，而是确保一次请求只有一个确定的落点。即使用户随后查看其他段落，正在生成的回答和 Diff 仍然属于原来的 Block。&lt;/p&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;动作&lt;/th&gt;&lt;th&gt;锁定范围&lt;/th&gt;&lt;th&gt;结果&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;解释&lt;/td&gt;&lt;td&gt;当前 Block&lt;/td&gt;&lt;td&gt;Anchored Answer&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;改写&lt;/td&gt;&lt;td&gt;当前 Block&lt;/td&gt;&lt;td&gt;Proposed Diff&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;研究&lt;/td&gt;&lt;td&gt;Block + Sources&lt;/td&gt;&lt;td&gt;Thread&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;`),
+          section(&quot;最后的设计约束&quot;, `&lt;p&gt;这个模型必须保持克制。Bubble 过长会重新遮挡正文，隐式切换上下文会让锁定失去可信度，过多状态徽标则会破坏阅读感。&lt;/p&gt;&lt;ul class=&quot;studio-task-list&quot;&gt;&lt;li&gt;短回答最多约六行&lt;/li&gt;&lt;li&gt;修改进入文章前必须可审阅&lt;/li&gt;&lt;li&gt;目录只映射 Markdown 标题&lt;/li&gt;&lt;li&gt;滚动位置和光标位置始终保留&lt;/li&gt;&lt;/ul&gt;`)
         ]
       },
       boundary: {
         title: &quot;Agent 的边界不是权限开关&quot;,
         deck: &quot;真正可靠的边界来自可见状态、可逆操作和确定性校验。&quot;,
-        meta: &quot;5 sources · 12 min&quot;,
+        meta: &quot;5 sections · 5 sources&quot;,
         blocks: [
-          &quot;如果一个 Agent 能执行动作，权限开关只能回答它是否被允许，却不能解释它为何此刻应该执行。&quot;,
-          &quot;人需要看到计划、输入、影响范围和失败后的恢复路径，而不是只看到一个最终按钮。&quot;,
-          &quot;因此，建议和修改之间必须存在 Proposed Diff，批准和发布之间也必须存在确定性校验。&quot;,
-          &quot;自动化最适合处理重复且可验证的步骤，而不是替代内容判断。&quot;
+          section(&quot;权限只能回答能不能&quot;, `&lt;p&gt;如果一个 Agent 能执行动作，权限开关只能回答它是否被允许，却不能解释它为何此刻应该执行。&lt;/p&gt;&lt;blockquote&gt;授权是边界的起点，不是边界本身。&lt;/blockquote&gt;&lt;p&gt;可靠系统还需要暴露意图、输入、影响范围和恢复路径，让用户知道下一步会发生什么。&lt;/p&gt;`),
+          section(&quot;计划必须可见&quot;, `&lt;p&gt;在不可逆操作之前，Agent 应该把计划压缩成可以快速检查的结构。用户不需要阅读完整思维过程，只需要确认关键事实。&lt;/p&gt;&lt;ul&gt;&lt;li&gt;将修改哪些文件或 Block；&lt;/li&gt;&lt;li&gt;会调用哪些外部服务；&lt;/li&gt;&lt;li&gt;预计产生什么副作用；&lt;/li&gt;&lt;li&gt;失败后如何恢复。&lt;/li&gt;&lt;/ul&gt;`),
+          section(&quot;修改先成为 Proposed Diff&quot;, `&lt;p&gt;建议和修改之间必须存在 Proposed Diff。Diff 把抽象意图变成可检查的增删关系，也让接受、拒绝和继续追问拥有共同的对象。&lt;/p&gt;&lt;pre&gt;&lt;code&gt;proposal.status = &quot;pending&quot;
+proposal.scope  = lockedBlock
+proposal.apply  = userApproved&lt;/code&gt;&lt;/pre&gt;`),
+          section(&quot;发布需要确定性校验&quot;, `&lt;p&gt;批准内容不等于允许发布。发布之前仍应运行可以重复验证的检查，例如链接、Frontmatter、构建结果和敏感信息扫描。&lt;/p&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;检查&lt;/th&gt;&lt;th&gt;失败策略&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;Schema&lt;/td&gt;&lt;td&gt;阻止发布&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Broken links&lt;/td&gt;&lt;td&gt;展示定位&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;Build&lt;/td&gt;&lt;td&gt;保留上一个版本&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;`),
+          section(&quot;自动化的合适边界&quot;, `&lt;p&gt;自动化最适合处理重复且可验证的步骤，而不是替代内容判断。系统可以自动格式化、校验和生成预览，但观点、语气和发布时机仍然需要人的明确决定。&lt;/p&gt;&lt;hr&gt;&lt;p&gt;&lt;strong&gt;判断标准：&lt;/strong&gt;如果失败结果无法被快速发现或回滚，这一步就不应该静默自动执行。&lt;/p&gt;`)
         ]
       },
       canvas: {
         title: &quot;Living Canvas 的编辑模型&quot;,
-        deck: &quot;阅读是静止状态，编辑是激活状态，Source 只是逃生舱。&quot;,
-        meta: &quot;1 thread · 28 min&quot;,
+        deck: &quot;Markdown 是数据层，Canvas 是阅读与编辑共用的表面。&quot;,
+        meta: &quot;6 sections · 2 threads&quot;,
         blocks: [
-          &quot;所见即所得并不意味着抛弃 Markdown，而是让 Markdown 退到可靠的数据层。&quot;,
-          &quot;用户点击段落即可编辑；复杂结构可以进入专门的 Block Editor。&quot;,
-          &quot;Source Drawer 仍然存在，用于 Frontmatter、Raw HTML、冲突和无损检查。&quot;,
-          &quot;Agent 的文字结果首先成为 Diff，只有接受之后才进入文章。&quot;
+          section(&quot;Markdown 仍然是数据层&quot;, `&lt;p&gt;所见即所得并不意味着抛弃 Markdown，而是让 Markdown 退到可靠的数据层。标题、段落和列表都对应稳定的 Markdown 节点。&lt;/p&gt;&lt;pre&gt;&lt;code&gt;## 标题
+
+正文段落
+
+- 列表项目&lt;/code&gt;&lt;/pre&gt;`),
+          section(&quot;标题生成目录&quot;, `&lt;p&gt;右侧 TOC 只读取 Markdown 的二级标题。标题改名后，目录标签同步更新；点击目录项时，Canvas 定位并锁定对应 Section Block。&lt;/p&gt;&lt;ul&gt;&lt;li&gt;H1 是文章标题，不进入页内目录；&lt;/li&gt;&lt;li&gt;H2 是主要章节；&lt;/li&gt;&lt;li&gt;H3 保留在正文中，不扩大目录层级。&lt;/li&gt;&lt;/ul&gt;`),
+          section(&quot;阅读态就是默认编辑器&quot;, `&lt;p&gt;用户点击任意 Section 后即可编辑富文本内容。没有工具栏常驻，没有额外 Edit 页面，也不要求用户理解 Markdown 标记。&lt;/p&gt;&lt;blockquote&gt;阅读是静止状态，编辑是被激活的局部状态。&lt;/blockquote&gt;`),
+          section(&quot;不同节点保留不同语义&quot;, `&lt;p&gt;Canvas 不把所有内容压平成 Paragraph。列表仍然可以排序，引用仍然拥有来源语义，代码块仍然保留语言信息。&lt;/p&gt;&lt;ol&gt;&lt;li&gt;解析 Markdown AST；&lt;/li&gt;&lt;li&gt;映射为可编辑 Block；&lt;/li&gt;&lt;li&gt;保存时只序列化变更节点；&lt;/li&gt;&lt;li&gt;生成新的 Revision。&lt;/li&gt;&lt;/ol&gt;`),
+          section(&quot;Metadata 独立于正文&quot;, `&lt;p&gt;描述、标签、Slug 和发布时间不属于阅读流，因此进入 Metadata Inspector。正文保持干净，结构化字段仍然可以被校验。&lt;/p&gt;&lt;table&gt;&lt;thead&gt;&lt;tr&gt;&lt;th&gt;字段&lt;/th&gt;&lt;th&gt;来源&lt;/th&gt;&lt;/tr&gt;&lt;/thead&gt;&lt;tbody&gt;&lt;tr&gt;&lt;td&gt;title&lt;/td&gt;&lt;td&gt;文章 H1&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;description&lt;/td&gt;&lt;td&gt;Metadata&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;tags&lt;/td&gt;&lt;td&gt;Metadata&lt;/td&gt;&lt;/tr&gt;&lt;/tbody&gt;&lt;/table&gt;`),
+          section(&quot;Agent 结果先进入 Diff&quot;, `&lt;p&gt;Agent 的文字结果首先成为 Diff，只有接受之后才进入 Markdown。被拒绝的建议保留在 Thread 中，但不会污染正文和版本历史。&lt;/p&gt;&lt;ul class=&quot;studio-task-list&quot;&gt;&lt;li&gt;锁定目标 Section&lt;/li&gt;&lt;li&gt;生成结构化 Patch&lt;/li&gt;&lt;li&gt;展示语义 Diff&lt;/li&gt;&lt;li&gt;接受后创建 Revision&lt;/li&gt;&lt;/ul&gt;`)
         ]
       }
     };
 
     const state = {
-      concept: &quot;semantic&quot;,
       draft: &quot;chat&quot;,
       focus: false,
-      mobile: false,
-      outline: false,
-      menu: false,
-      source: false,
       frontmatter: false,
-      threads: false,
       addOpen: false,
       answer: &quot;near&quot;,
       selectedBlock: 1,
+      lockedBlock: 1,
+      pendingScroll: null,
       composer: &quot;&quot;,
       addContext: &quot;&quot;,
       addPrompt: &quot;&quot;,
@@ -1827,15 +1837,8 @@ html&gt;body{padding:0}&lt;/style&gt;
       .replaceAll(&quot;&gt;&quot;, &quot;&amp;gt;&quot;)
       .replaceAll('&quot;', &quot;&amp;quot;&quot;);
 
-    function conceptPicker() {
-      return `&lt;div class=&quot;studio-concepts&quot; aria-label=&quot;Retained chat concepts&quot;&gt;
-        &lt;button class=&quot;studio-concept&quot; type=&quot;button&quot; data-action=&quot;concept&quot; data-value=&quot;anchor&quot; aria-pressed=&quot;${state.concept === &quot;anchor&quot;}&quot;&gt;&lt;strong&gt;A · Anchored Bubble&lt;/strong&gt;&lt;span&gt;一种固定落点：局部问题始终贴着对应 Block&lt;/span&gt;&lt;/button&gt;
-        &lt;button class=&quot;studio-concept&quot; type=&quot;button&quot; data-action=&quot;concept&quot; data-value=&quot;semantic&quot; aria-pressed=&quot;${state.concept === &quot;semantic&quot;}&quot;&gt;&lt;strong&gt;E · Semantic Landing&lt;/strong&gt;&lt;span&gt;一个调度系统：Near / Expand / Focus / Inline Diff&lt;/span&gt;&lt;/button&gt;
-      &lt;/div&gt;`;
-    }
-
     function topbar(item) {
-      return `&lt;header class=&quot;studio-topbar&quot;&gt;&lt;div class=&quot;studio-brand&quot;&gt;&lt;span class=&quot;studio-mark&quot;&gt;B&lt;/span&gt;&lt;span&gt;Blog Studio&lt;/span&gt;&lt;small class=&quot;studio-version&quot;&gt;v1 candidate&lt;/small&gt;&lt;/div&gt;&lt;div class=&quot;studio-breadcrumb&quot;&gt;Draft / ${escapeHtml(item.title)}&lt;/div&gt;&lt;div class=&quot;studio-save-state&quot;&gt;&lt;span class=&quot;studio-save-dot&quot;&gt;&lt;/span&gt;&lt;span&gt;${escapeHtml(state.saveLabel)}&lt;/span&gt;&lt;/div&gt;&lt;/header&gt;`;
+      return `&lt;header class=&quot;studio-topbar&quot;&gt;&lt;div class=&quot;studio-brand&quot;&gt;&lt;span class=&quot;studio-mark&quot;&gt;B&lt;/span&gt;&lt;span&gt;Blog Studio&lt;/span&gt;&lt;small class=&quot;studio-version&quot;&gt;A · anchored&lt;/small&gt;&lt;/div&gt;&lt;div class=&quot;studio-breadcrumb&quot;&gt;Draft / ${escapeHtml(item.title)}&lt;/div&gt;&lt;div class=&quot;studio-save-state&quot;&gt;&lt;span class=&quot;studio-save-dot&quot;&gt;&lt;/span&gt;&lt;span&gt;${escapeHtml(state.saveLabel)}&lt;/span&gt;&lt;/div&gt;&lt;/header&gt;`;
     }
 
     function sidebar() {
@@ -1843,69 +1846,36 @@ html&gt;body{padding:0}&lt;/style&gt;
     }
 
     function toolbar() {
-      const menu = state.menu
-        ? `&lt;div class=&quot;studio-toolbar-menu&quot; role=&quot;menu&quot;&gt;&lt;button class=&quot;studio-menu-action&quot; type=&quot;button&quot; role=&quot;menuitem&quot; data-action=&quot;source&quot;&gt;&lt;span&gt;Markdown source&lt;/span&gt;&lt;span&gt;⌘ /&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-menu-action&quot; type=&quot;button&quot; role=&quot;menuitem&quot; data-action=&quot;mobile&quot;&gt;&lt;span&gt;${state.mobile ? &quot;Exit mobile preview&quot; : &quot;Mobile preview&quot;}&lt;/span&gt;&lt;span&gt;Preview&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-menu-action&quot; type=&quot;button&quot; role=&quot;menuitem&quot; data-action=&quot;frontmatter&quot;&gt;&lt;span&gt;Frontmatter&lt;/span&gt;&lt;span&gt;Metadata&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;`
-        : &quot;&quot;;
-      return `&lt;div class=&quot;studio-toolbar&quot;&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;focus&quot; aria-pressed=&quot;${state.focus}&quot;&gt;${state.focus ? &quot;Exit focus&quot; : &quot;Focus&quot;}&lt;/button&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;outline&quot; aria-pressed=&quot;${state.outline}&quot;&gt;Outline&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;span class=&quot;studio-tool-label&quot;&gt;Living Canvas · click any paragraph to edit&lt;/span&gt;&lt;button class=&quot;studio-icon-tool&quot; type=&quot;button&quot; data-action=&quot;threads&quot; aria-label=&quot;Open chat history&quot; title=&quot;Chat history&quot; aria-pressed=&quot;${state.threads}&quot;&gt;↺&lt;span class=&quot;studio-history-badge&quot;&gt;3&lt;/span&gt;&lt;/button&gt;&lt;div class=&quot;studio-toolbar-menu-wrap&quot;&gt;&lt;button class=&quot;studio-icon-tool&quot; type=&quot;button&quot; data-action=&quot;menu&quot; aria-label=&quot;More article tools&quot; aria-haspopup=&quot;menu&quot; aria-expanded=&quot;${state.menu}&quot;&gt;···&lt;/button&gt;${menu}&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`;
+      return `&lt;div class=&quot;studio-toolbar&quot;&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;focus&quot; aria-pressed=&quot;${state.focus}&quot;&gt;${state.focus ? &quot;Exit focus&quot; : &quot;Focus&quot;}&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-toolbar-group&quot;&gt;&lt;button class=&quot;studio-tool&quot; type=&quot;button&quot; data-action=&quot;frontmatter&quot;&gt;Metadata&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;
     }
 
-    function outline() {
-      if (!state.outline) return &quot;&quot;;
-      return `&lt;nav class=&quot;studio-outline&quot; aria-label=&quot;Article outline&quot;&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;0&quot;&gt;01 · 固定侧栏的问题&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;1&quot;&gt;02 · 对话从文章发生&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;2&quot;&gt;03 · Living Canvas&lt;/button&gt;&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;3&quot;&gt;04 · 四层模型&lt;/button&gt;&lt;/nav&gt;`;
+    function articleOutline(item) {
+      return `&lt;nav class=&quot;studio-article-outline&quot; aria-label=&quot;Markdown 标题目录&quot;&gt;&lt;div class=&quot;studio-outline-label&quot;&gt;On this page&lt;/div&gt;${item.blocks.map((block, index) =&gt; `&lt;button type=&quot;button&quot; data-action=&quot;jump&quot; data-value=&quot;${index}&quot; aria-current=&quot;${state.lockedBlock === index}&quot; title=&quot;${escapeHtml(block.title)}&quot;&gt;&lt;span class=&quot;studio-outline-index&quot;&gt;${String(index + 1).padStart(2, &quot;0&quot;)}&lt;/span&gt;&lt;span class=&quot;studio-outline-text&quot;&gt;${escapeHtml(block.title)}&lt;/span&gt;&lt;/button&gt;`).join(&quot;&quot;)}&lt;/nav&gt;`;
     }
 
     function diffBlock() {
       if (state.answer !== &quot;diff&quot;) return &quot;&quot;;
-      return `&lt;div class=&quot;studio-diff&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;Proposed diff · paragraph ${state.selectedBlock + 1}&lt;/span&gt;&lt;del&gt;Chat 应该悬浮在文章上方。&lt;/del&gt;&lt;ins&gt;输入可以悬浮，但回答应根据长度与意图回到最合适的位置。&lt;/ins&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;accept-diff&quot;&gt;Accept&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;reject-diff&quot;&gt;Reject&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;ask-diff&quot;&gt;Ask why&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;
+      return `&lt;div class=&quot;studio-diff&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;Proposed diff · locked to block ${state.lockedBlock + 1}&lt;/span&gt;&lt;del&gt;Chat 应该悬浮在文章上方。&lt;/del&gt;&lt;ins&gt;输入可以悬浮，但回答应根据长度与意图回到最合适的位置。&lt;/ins&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;accept-diff&quot;&gt;Accept&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;reject-diff&quot;&gt;Reject&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;ask-diff&quot;&gt;Ask why&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;`;
     }
 
     function article(item) {
-      return `&lt;div class=&quot;studio-canvas ${state.answer === &quot;expand&quot; ? &quot;has-expand&quot; : &quot;&quot;}&quot;&gt;&lt;article class=&quot;studio-article&quot;&gt;&lt;h1&gt;${escapeHtml(item.title)}&lt;/h1&gt;&lt;p class=&quot;studio-deck&quot;&gt;${escapeHtml(item.deck)}&lt;/p&gt;${item.blocks.map((block, index) =&gt; `&lt;p class=&quot;studio-block ${state.selectedBlock === index ? &quot;is-selected&quot; : &quot;&quot;}&quot; contenteditable=&quot;true&quot; data-block=&quot;${index}&quot; spellcheck=&quot;false&quot;&gt;${escapeHtml(block)}&lt;/p&gt;${index === state.selectedBlock ? diffBlock() : &quot;&quot;}`).join(&quot;&quot;)}&lt;p class=&quot;studio-edit-hint&quot;&gt;Markdown-backed · click to edit · Source remains available as an escape hatch&lt;/p&gt;&lt;/article&gt;&lt;/div&gt;`;
-    }
-
-    function prompts() {
-      if (state.concept !== &quot;semantic&quot; || state.answer === &quot;focus&quot;) return &quot;&quot;;
-      const choices = [[&quot;near&quot;, &quot;Explain selection&quot;], [&quot;expand&quot;, &quot;Compare sources&quot;], [&quot;focus&quot;, &quot;Deep research&quot;], [&quot;diff&quot;, &quot;Rewrite paragraph&quot;]];
-      return `&lt;div class=&quot;studio-prompts&quot; aria-label=&quot;Semantic landing examples&quot;&gt;${choices.map(([key, label]) =&gt; `&lt;button class=&quot;studio-prompt&quot; type=&quot;button&quot; data-action=&quot;answer&quot; data-value=&quot;${key}&quot; aria-pressed=&quot;${state.answer === key}&quot;&gt;${label}&lt;/button&gt;`).join(&quot;&quot;)}&lt;/div&gt;`;
+      return `&lt;div class=&quot;studio-canvas&quot;&gt;${articleOutline(item)}&lt;article class=&quot;studio-article&quot;&gt;&lt;h1&gt;${escapeHtml(item.title)}&lt;/h1&gt;&lt;p class=&quot;studio-deck&quot;&gt;${escapeHtml(item.deck)}&lt;/p&gt;${item.blocks.map((block, index) =&gt; `&lt;div class=&quot;studio-block-shell&quot;&gt;&lt;section class=&quot;studio-block ${state.selectedBlock === index ? &quot;is-selected&quot; : &quot;&quot;} ${state.lockedBlock === index ? &quot;is-locked&quot; : &quot;&quot;}&quot; contenteditable=&quot;true&quot; data-block=&quot;${index}&quot; spellcheck=&quot;false&quot;&gt;${block.html}&lt;/section&gt;${index === state.lockedBlock ? `${diffBlock()}${nearAnswer()}` : &quot;&quot;}&lt;/div&gt;`).join(&quot;&quot;)}&lt;p class=&quot;studio-edit-hint&quot;&gt;Rendered from Markdown blocks · H2 headings map to TOC · changes are autosaved&lt;/p&gt;&lt;/article&gt;&lt;/div&gt;`;
     }
 
     function composer() {
       if (state.answer === &quot;focus&quot;) return &quot;&quot;;
-      return `&lt;form class=&quot;studio-composer&quot;&gt;&lt;div class=&quot;studio-composer-main&quot;&gt;&lt;div class=&quot;studio-context&quot;&gt;&lt;span class=&quot;studio-chip&quot;&gt;Current draft&lt;/span&gt;&lt;span class=&quot;studio-chip&quot;&gt;Paragraph ${state.selectedBlock + 1}&lt;/span&gt;&lt;span class=&quot;studio-chip&quot;&gt;5 sources&lt;/span&gt;&lt;/div&gt;&lt;textarea name=&quot;message&quot; aria-label=&quot;Ask Codex&quot; placeholder=&quot;Ask about this article…&quot;&gt;${escapeHtml(state.composer)}&lt;/textarea&gt;&lt;/div&gt;&lt;button class=&quot;studio-send&quot; type=&quot;submit&quot;&gt;Send ↑&lt;/button&gt;&lt;/form&gt;`;
+      return `&lt;form class=&quot;studio-composer&quot;&gt;&lt;div class=&quot;studio-composer-main&quot;&gt;&lt;div class=&quot;studio-context&quot;&gt;&lt;span class=&quot;studio-chip&quot;&gt;Current draft&lt;/span&gt;&lt;span class=&quot;studio-chip&quot; data-lock-target&gt;🔒 Next: Block ${state.selectedBlock + 1}&lt;/span&gt;&lt;span class=&quot;studio-chip&quot;&gt;5 sources&lt;/span&gt;&lt;/div&gt;&lt;textarea name=&quot;message&quot; aria-label=&quot;Ask Codex&quot; placeholder=&quot;Ask or request a change to the selected block…&quot;&gt;${escapeHtml(state.composer)}&lt;/textarea&gt;&lt;/div&gt;&lt;button class=&quot;studio-send&quot; type=&quot;submit&quot;&gt;Send ↑&lt;/button&gt;&lt;/form&gt;`;
     }
 
     function nearAnswer() {
       if (state.answer !== &quot;near&quot;) return &quot;&quot;;
-      const text = state.concept === &quot;anchor&quot;
-        ? &quot;A 把回答绑定在当前 Block。它很适合局部解释，但严格限制为短回复；更长内容进入完整 Thread，避免气泡继续遮挡正文。&quot;
-        : &quot;这段适合 Near：它是在解释一个局部判断。回答贴近原文，读完后可以收成 Thread Chip，修改则转成 Proposed Diff。&quot;;
-      return `&lt;aside class=&quot;studio-answer&quot; style=&quot;top:${210 + state.selectedBlock * 82}px&quot; aria-label=&quot;Anchored answer&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;strong&gt;Answer · paragraph ${state.selectedBlock + 1}&lt;/strong&gt;&lt;span class=&quot;studio-status&quot;&gt;${state.concept === &quot;anchor&quot; ? &quot;A · Anchor&quot; : &quot;E · Near&quot;}&lt;/span&gt;&lt;/div&gt;&lt;p&gt;${text}&lt;/p&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Turn into diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;open-thread&quot;&gt;Open full answer&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Collapse&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
-    }
-
-    function expandAnswer() {
-      if (state.concept !== &quot;semantic&quot; || state.answer !== &quot;expand&quot;) return &quot;&quot;;
-      return `&lt;aside class=&quot;studio-expand&quot; aria-label=&quot;Expanded long answer&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;strong&gt;Source comparison · 5 sources&lt;/strong&gt;&lt;span class=&quot;studio-status&quot;&gt;E · Expand&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-expand-copy&quot;&gt;&lt;p&gt;&lt;strong&gt;共同点&lt;/strong&gt;&lt;br&gt;几个来源都把固定 Chat 当作工作区，却忽略了文章本身已经是主要工作区。持续并列会让正文宽度成为稀缺资源。&lt;/p&gt;&lt;p&gt;&lt;strong&gt;分歧&lt;/strong&gt;&lt;br&gt;有的方案让回复覆盖内容，有的让布局重排。Semantic Landing 的优势是根据任务选择表面，而不是强迫所有回复进入同一矩形。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;answer&quot; data-value=&quot;focus&quot;&gt;Open focus&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Create diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Collapse to thread&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
-    }
-
-    function focusAnswer() {
-      if (state.concept !== &quot;semantic&quot; || state.answer !== &quot;focus&quot;) return &quot;&quot;;
-      return `&lt;section class=&quot;studio-focus-answer&quot; aria-label=&quot;Focused conversation&quot;&gt;&lt;aside class=&quot;studio-focus-context&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;Context preserved&lt;/span&gt;&lt;blockquote&gt;“${escapeHtml(drafts[state.draft].blocks[state.selectedBlock])}”&lt;/blockquote&gt;&lt;span class=&quot;studio-chip&quot;&gt;5 sources&lt;/span&gt; &lt;span class=&quot;studio-chip&quot;&gt;revision 18&lt;/span&gt;&lt;/aside&gt;&lt;div class=&quot;studio-focus-copy&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;span class=&quot;studio-status&quot;&gt;E · Focus&lt;/span&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;return-canvas&quot;&gt;Return to canvas&lt;/button&gt;&lt;/div&gt;&lt;h2&gt;Chat 不应该拥有一个永久地址&lt;/h2&gt;&lt;p&gt;深度讨论可以暂时占据注意力，但仍保持与原文的可逆连接。&lt;/p&gt;&lt;div class=&quot;studio-focus-section&quot;&gt;&lt;strong&gt;输入和回答解耦&lt;/strong&gt;&lt;p&gt;Composer 保持轻量，回答根据意图选择 Near、Expand、Focus 或 Artifact。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;studio-focus-section&quot;&gt;&lt;strong&gt;修改回到文章&lt;/strong&gt;&lt;p&gt;聊天记录解释为什么改，Living Canvas 负责展示 Diff 并决定是否接受。&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Create proposed diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Save to thread&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/section&gt;`;
-    }
-
-    function sourceDrawer(item) {
-      if (!state.source) return &quot;&quot;;
-      const markdown = `# ${item.title}\n\n${item.deck}\n\n${item.blocks.join(&quot;\n\n&quot;)}`;
-      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Markdown source drawer&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Markdown Source&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-source&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;textarea aria-label=&quot;Markdown source&quot;&gt;${escapeHtml(markdown)}&lt;/textarea&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;apply-source&quot;&gt;Apply &amp; return&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;close-source&quot;&gt;Cancel&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
+      const text = &quot;回答已锁定在当前 Block。它适合局部解释和短改写；更长内容进入完整 Thread，避免气泡遮挡正文。&quot;;
+      return `&lt;aside class=&quot;studio-answer&quot; aria-label=&quot;Anchored answer&quot;&gt;&lt;div class=&quot;studio-answer-head&quot;&gt;&lt;strong&gt;Answer · locked block ${state.lockedBlock + 1}&lt;/strong&gt;&lt;span class=&quot;studio-status&quot;&gt;A · Anchor&lt;/span&gt;&lt;/div&gt;&lt;p&gt;${text}&lt;/p&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;make-diff&quot;&gt;Turn into diff&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;collapse&quot;&gt;Save to thread&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
     }
 
     function frontmatterDrawer() {
       if (!state.frontmatter) return &quot;&quot;;
       return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Frontmatter inspector&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Frontmatter&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-frontmatter&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;studio-field&quot;&gt;&lt;label for=&quot;studio-frontmatter-description&quot;&gt;Description&lt;/label&gt;&lt;textarea id=&quot;studio-frontmatter-description&quot;&gt;输入可以悬浮，但回答需要找到正确的落点。&lt;/textarea&gt;&lt;/div&gt;&lt;div class=&quot;studio-field&quot;&gt;&lt;label for=&quot;studio-frontmatter-tags&quot;&gt;Tags&lt;/label&gt;&lt;input id=&quot;studio-frontmatter-tags&quot; value=&quot;design, agents, writing&quot;&gt;&lt;/div&gt;&lt;div class=&quot;studio-actions&quot;&gt;&lt;button class=&quot;studio-small-action primary&quot; type=&quot;button&quot; data-action=&quot;apply-frontmatter&quot;&gt;Save metadata&lt;/button&gt;&lt;button class=&quot;studio-small-action&quot; type=&quot;button&quot; data-action=&quot;close-frontmatter&quot;&gt;Cancel&lt;/button&gt;&lt;/div&gt;&lt;/aside&gt;`;
-    }
-
-    function threadsDrawer() {
-      if (!state.threads) return &quot;&quot;;
-      return `&lt;aside class=&quot;studio-drawer&quot; aria-label=&quot;Chat history&quot;&gt;&lt;div class=&quot;studio-source-head&quot;&gt;&lt;h2&gt;Chat history&lt;/h2&gt;&lt;button class=&quot;studio-close&quot; type=&quot;button&quot; data-action=&quot;close-threads&quot;&gt;Close&lt;/button&gt;&lt;/div&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;near&quot;&gt;&lt;strong&gt;Why should input float?&lt;/strong&gt;&lt;span&gt;Paragraph 2 · 3 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;expand&quot;&gt;&lt;strong&gt;Compare five interface references&lt;/strong&gt;&lt;span&gt;Article context · 6 messages&lt;/span&gt;&lt;/button&gt;&lt;button class=&quot;studio-thread-row&quot; type=&quot;button&quot; data-action=&quot;open-answer&quot; data-value=&quot;diff&quot;&gt;&lt;strong&gt;Rewrite the product principle&lt;/strong&gt;&lt;span&gt;Paragraph 3 · proposed diff&lt;/span&gt;&lt;/button&gt;&lt;/aside&gt;`;
     }
 
     function addModal() {
@@ -1914,25 +1884,44 @@ html&gt;body{padding:0}&lt;/style&gt;
     }
 
     function note() {
-      const anchor = state.concept === &quot;anchor&quot;;
-      return `&lt;div class=&quot;studio-note&quot;&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Logic&lt;/strong&gt;&lt;span&gt;${anchor ? &quot;回答属于内容位置：所有回复先成为 Block 旁的 Bubble。&quot; : &quot;输入统一，回答按照意图落到 Near、Expand、Focus 或 Diff。&quot;}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Best for&lt;/strong&gt;&lt;span&gt;${anchor ? &quot;局部解释、核查和短改写，规则简单可预测。&quot; : &quot;同时覆盖短答、长分析、深聊和直接改文。&quot;}&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Main guardrail&lt;/strong&gt;&lt;span&gt;${anchor ? &quot;Bubble 最多约 6 行，超长只给摘要和完整 Thread 入口。&quot; : &quot;表面迁移必须保留 Block、revision、光标和滚动位置。&quot;}&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;`;
+      return `&lt;div class=&quot;studio-note&quot;&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Logic&lt;/strong&gt;&lt;span&gt;回答属于内容位置：每次请求都会锁定到对应 Block。&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Best for&lt;/strong&gt;&lt;span&gt;局部解释、核查和短改写，规则简单可预测。&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;studio-note-cell&quot;&gt;&lt;strong&gt;Main guardrail&lt;/strong&gt;&lt;span&gt;Bubble 最多约 6 行，超长内容收进对应 Block 的 Thread。&lt;/span&gt;&lt;/div&gt;&lt;/div&gt;`;
     }
 
     function workspace(item) {
-      return `&lt;main class=&quot;studio-workspace&quot;&gt;${toolbar()}${outline()}${article(item)}${prompts()}${composer()}${nearAnswer()}${expandAnswer()}${focusAnswer()}${sourceDrawer(item)}${frontmatterDrawer()}${threadsDrawer()}&lt;/main&gt;`;
+      return `&lt;main class=&quot;studio-workspace&quot;&gt;${toolbar()}${article(item)}${composer()}${frontmatterDrawer()}&lt;/main&gt;`;
     }
 
     function render() {
       const item = drafts[state.draft];
-      root.innerHTML = `${conceptPicker()}&lt;div class=&quot;studio-window-wrap&quot;&gt;&lt;section class=&quot;studio-window ${state.mobile ? &quot;is-mobile&quot; : &quot;&quot;}&quot; aria-label=&quot;Blog Studio A and E prototype&quot;&gt;${topbar(item)}&lt;div class=&quot;studio-body ${state.focus ? &quot;is-focus&quot; : &quot;&quot;}&quot;&gt;${sidebar()}${workspace(item)}&lt;/div&gt;${note()}${addModal()}&lt;/section&gt;&lt;/div&gt;`;
+      const pendingScroll = state.pendingScroll;
+      state.pendingScroll = null;
+      root.innerHTML = `&lt;div class=&quot;studio-window-wrap&quot;&gt;&lt;section class=&quot;studio-window&quot; aria-label=&quot;Blog Studio anchored block prototype&quot;&gt;${topbar(item)}&lt;div class=&quot;studio-body ${state.focus ? &quot;is-focus&quot; : &quot;&quot;}&quot;&gt;${sidebar()}${workspace(item)}&lt;/div&gt;${note()}${addModal()}&lt;/section&gt;&lt;/div&gt;`;
+      if (pendingScroll !== null) {
+        requestAnimationFrame(() =&gt; root.querySelector(`[data-block=&quot;${pendingScroll}&quot;]`)?.scrollIntoView({ behavior: &quot;smooth&quot;, block: &quot;start&quot; }));
+      }
     }
 
     root.addEventListener(&quot;input&quot;, (event) =&gt; {
       if (event.target.matches(&quot;.studio-composer textarea&quot;)) state.composer = event.target.value;
       if (event.target.dataset.addField) state[event.target.dataset.addField] = event.target.value;
       if (event.target.dataset.block !== undefined) {
-        drafts[state.draft].blocks[Number(event.target.dataset.block)] = event.target.textContent;
-        state.saveLabel = &quot;Saving…&quot;;
+        const block = Number(event.target.dataset.block);
+        const sectionBlock = drafts[state.draft].blocks[block];
+        sectionBlock.html = event.target.innerHTML;
+        sectionBlock.title = event.target.querySelector(&quot;h2&quot;)?.textContent.trim() || sectionBlock.title;
+        const outlineButton = root.querySelector(`[data-action=&quot;jump&quot;][data-value=&quot;${block}&quot;]`);
+        const outlineText = outlineButton?.querySelector(&quot;.studio-outline-text&quot;);
+        if (outlineButton) outlineButton.title = sectionBlock.title;
+        if (outlineText) outlineText.textContent = sectionBlock.title;
+        state.selectedBlock = block;
+        state.lockedBlock = block;
+        state.answer = &quot;none&quot;;
+        root.querySelectorAll(&quot;[data-block]&quot;).forEach(node =&gt; node.classList.toggle(&quot;is-locked&quot;, Number(node.dataset.block) === block));
+        root.querySelector(&quot;.studio-answer&quot;)?.remove();
+        root.querySelector(&quot;.studio-diff&quot;)?.remove();
+        const lockTarget = root.querySelector(&quot;[data-lock-target]&quot;);
+        if (lockTarget) lockTarget.textContent = `🔒 Next: Block ${block + 1}`;
+        state.saveLabel = &quot;Saving locked block…&quot;;
         setTimeout(() =&gt; {
           state.saveLabel = &quot;Autosaved&quot;;
           const label = root.querySelector(&quot;.studio-save-state span:last-child&quot;);
@@ -1945,6 +1934,8 @@ html&gt;body{padding:0}&lt;/style&gt;
       if (event.target.dataset.block === undefined) return;
       state.selectedBlock = Number(event.target.dataset.block);
       root.querySelectorAll(&quot;[data-block]&quot;).forEach(node =&gt; node.classList.toggle(&quot;is-selected&quot;, Number(node.dataset.block) === state.selectedBlock));
+      const lockTarget = root.querySelector(&quot;[data-lock-target]&quot;);
+      if (lockTarget) lockTarget.textContent = `🔒 Next: Block ${state.selectedBlock + 1}`;
     });
 
     root.addEventListener(&quot;submit&quot;, (event) =&gt; {
@@ -1952,11 +1943,8 @@ html&gt;body{padding:0}&lt;/style&gt;
       event.preventDefault();
       const message = new FormData(event.target).get(&quot;message&quot;)?.toString().trim() || &quot;&quot;;
       state.composer = message;
-      if (state.concept === &quot;anchor&quot;) state.answer = &quot;near&quot;;
-      else if (/rewrite|改写|重写/i.test(message)) state.answer = &quot;diff&quot;;
-      else if (/deep|研究|深入/i.test(message)) state.answer = &quot;focus&quot;;
-      else if (/compare|比较|来源/i.test(message) || message.length &gt; 60) state.answer = &quot;expand&quot;;
-      else state.answer = &quot;near&quot;;
+      state.lockedBlock = state.selectedBlock;
+      state.answer = /rewrite|改写|重写|修改|润色/i.test(message) ? &quot;diff&quot; : &quot;near&quot;;
       render();
     });
 
@@ -1967,56 +1955,41 @@ html&gt;body{padding:0}&lt;/style&gt;
       const value = target.dataset.value;
 
       if (action === &quot;close-add&quot; &amp;&amp; event.target.closest(&quot;.studio-modal&quot;) &amp;&amp; !event.target.closest(&quot;button[data-action='close-add']&quot;)) return;
-      if (action === &quot;concept&quot;) {
-        state.concept = value;
-        state.answer = &quot;near&quot;;
-      }
       if (action === &quot;draft&quot;) {
         state.draft = value;
         state.selectedBlock = 1;
+        state.lockedBlock = 1;
         state.answer = &quot;near&quot;;
-        state.source = false;
         state.frontmatter = false;
-        state.threads = false;
-        state.menu = false;
       }
       if (action === &quot;focus&quot;) state.focus = !state.focus;
-      if (action === &quot;menu&quot;) state.menu = !state.menu;
-      if (action === &quot;mobile&quot;) { state.mobile = !state.mobile; state.menu = false; }
-      if (action === &quot;outline&quot;) state.outline = !state.outline;
-      if (action === &quot;source&quot;) { state.source = true; state.frontmatter = false; state.threads = false; state.menu = false; }
-      if (action === &quot;close-source&quot;) state.source = false;
-      if (action === &quot;apply-source&quot;) { state.source = false; state.saveLabel = &quot;Source applied&quot;; }
-      if (action === &quot;frontmatter&quot;) { state.frontmatter = true; state.source = false; state.threads = false; state.menu = false; }
+      if (action === &quot;frontmatter&quot;) state.frontmatter = true;
       if (action === &quot;close-frontmatter&quot;) state.frontmatter = false;
       if (action === &quot;apply-frontmatter&quot;) { state.frontmatter = false; state.saveLabel = &quot;Metadata saved&quot;; }
-      if (action === &quot;threads&quot; || action === &quot;open-thread&quot;) { state.threads = true; state.source = false; state.frontmatter = false; state.menu = false; }
-      if (action === &quot;close-threads&quot;) state.threads = false;
-      if (action === &quot;answer&quot;) state.answer = value;
-      if (action === &quot;make-diff&quot;) { state.answer = &quot;diff&quot;; state.threads = false; }
+      if (action === &quot;answer&quot;) { state.lockedBlock = state.selectedBlock; state.answer = value; }
+      if (action === &quot;make-diff&quot;) state.answer = &quot;diff&quot;;
       if (action === &quot;collapse&quot;) state.answer = &quot;none&quot;;
-      if (action === &quot;return-canvas&quot;) state.answer = &quot;near&quot;;
-      if (action === &quot;open-answer&quot;) { state.answer = value; state.threads = false; }
       if (action === &quot;accept-diff&quot;) { state.answer = &quot;none&quot;; state.saveLabel = &quot;Diff accepted · autosaved&quot;; }
       if (action === &quot;reject-diff&quot;) { state.answer = &quot;near&quot;; state.saveLabel = &quot;Diff rejected&quot;; }
-      if (action === &quot;ask-diff&quot;) { state.answer = state.concept === &quot;semantic&quot; ? &quot;expand&quot; : &quot;near&quot;; }
-      if (action === &quot;jump&quot;) { state.selectedBlock = Number(value); state.outline = false; }
+      if (action === &quot;ask-diff&quot;) state.answer = &quot;near&quot;;
+      if (action === &quot;jump&quot;) { state.selectedBlock = Number(value); state.lockedBlock = state.selectedBlock; state.pendingScroll = state.selectedBlock; state.answer = &quot;none&quot;; }
       if (action === &quot;open-add&quot;) state.addOpen = true;
       if (action === &quot;close-add&quot;) state.addOpen = false;
       if (action === &quot;create-draft&quot;) {
         drafts.generated = {
           title: state.addPrompt.trim() || &quot;Untitled agent draft&quot;,
           deck: &quot;Generated from the saved creation context.&quot;,
-          meta: &quot;new · autosaved&quot;,
+          meta: &quot;4 sections · new&quot;,
           blocks: [
-            state.addContext.trim() || &quot;Start writing here. This Living Canvas is ready for direct editing.&quot;,
-            &quot;The source context remains attached to this draft and can be inspected from the article thread.&quot;,
-            &quot;Ask Codex from the floating composer when you want to explain, compare, research, or rewrite.&quot;,
-            &quot;Any generated change will appear as a Proposed Diff before it enters the article.&quot;
+            section(&quot;Starting point&quot;, `&lt;p&gt;${escapeHtml(state.addContext.trim() || &quot;Start writing here. This Living Canvas is ready for direct editing.&quot;)}&lt;/p&gt;`),
+            section(&quot;Attached context&quot;, `&lt;p&gt;The creation context remains attached to this draft and can be revisited from its Block thread.&lt;/p&gt;`),
+            section(&quot;Working with the draft&quot;, `&lt;p&gt;Ask Codex from the floating composer when you want to explain, compare, research, or rewrite.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Select a section&lt;/li&gt;&lt;li&gt;Describe the change&lt;/li&gt;&lt;li&gt;Review the proposed diff&lt;/li&gt;&lt;/ul&gt;`),
+            section(&quot;Review before applying&quot;, `&lt;p&gt;Any generated change appears as a Proposed Diff before it enters the article and creates a new revision.&lt;/p&gt;`)
           ]
         };
         state.draft = &quot;generated&quot;;
         state.selectedBlock = 0;
+        state.lockedBlock = 0;
         state.answer = &quot;none&quot;;
         state.addOpen = false;
         state.saveLabel = &quot;Draft created&quot;;
@@ -2029,9 +2002,6 @@ html&gt;body{padding:0}&lt;/style&gt;
     root.addEventListener(&quot;keydown&quot;, (event) =&gt; {
       if (event.key !== &quot;Escape&quot;) return;
       if (state.addOpen) state.addOpen = false;
-      else if (state.source) state.source = false;
-      else if (state.threads) state.threads = false;
-      else if (state.outline) state.outline = false;
       else if (state.answer === &quot;focus&quot; || state.answer === &quot;expand&quot;) state.answer = &quot;near&quot;;
       else if (state.answer !== &quot;none&quot;) state.answer = &quot;none&quot;;
       render();

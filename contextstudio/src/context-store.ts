@@ -99,10 +99,13 @@ function parse(text: string): Context {
     },
     claim: claim === "" ? null : claim,
     evidence: body.slice(evidenceAt + EVIDENCE_HEADING.length).trim(),
-    stance: front.stance as Context["stance"],
-    status: front.status as Context["status"],
-    sourceClipDeleted: front.sourceClipDeleted as boolean,
-    topics: front.topics as string[],
+    // `??` 而不是裸 `as`，与 `pdfstudio/src/clip/clip-store.ts` 同一条定案：
+    // **默认值要偏向不丢数据**。已经落过盘的文件不会有后加的字段，读成 undefined 的话
+    // `buildGraph` 里 `context.topics.map(...)` 当场抛，而抛出的地方离病因很远。
+    stance: (front.stance as Context["stance"]) ?? null,
+    status: (front.status as Context["status"]) ?? "pending",
+    sourceClipDeleted: (front.sourceClipDeleted as boolean) ?? false,
+    topics: (front.topics as string[]) ?? [],
   };
 }
 
@@ -113,17 +116,43 @@ function parse(text: string): Context {
  * 把读者定好的主题、立场、状态**静默抹掉**——不报错，只是某天发现全没了。
  *
  * 分界线是「谁是这个字段的真相」：
- * - `evidence` / `source` / `sourceClipId` —— 上游。摘录那边修了 OCR 错字要能带过来。
+ * - `source` / `sourceClipId` —— 上游。书改了名、页码算法修了，要能带过来。
  * - `topics` / `stance` / `status` —— 读者。导入的空值不覆盖库里的非空值。
+ * - `evidence` —— **谁都不是，它冻结**。见下。
  */
 function merge(stored: Context, incoming: Context): Context {
   return {
     ...incoming,
+    // **evidence 冻结在第一次入库那一刻**（`docs/adr/0002` ③：「此后不对齐……摘录被改
+    // 则两份各走各的」）。
+    //
+    // 这一行原先写的是反面——让上游覆盖，理由是「摘录那边修了 OCR 错字要能带过来」。
+    // 那条理由本身成立，但它换来的东西更贵：evidence 是**逐字引文**，Blog Studio 的
+    // draft 会把它照抄进正文并留下 provenance。悄悄改掉一句已经被引用的原文，是这个
+    // 系统里最难发现的一种错——文章还在，引文变了，没有任何东西会报错。
+    //
+    // 错字要修就重新走一遍摘录、产出**新的一条** context，让两份并存、由读者取舍。
+    // ADR 把它写成硬要求却只在 prose 里，导出层照着写错也没人挡——所以由存储这一侧执行。
+    evidence: stored.evidence,
     topics: incoming.topics.length > 0 ? incoming.topics : stored.topics,
     stance: incoming.stance ?? stored.stance,
     // status 没有「空」值，所以看的是它是不是还停在初始态——读者判过了就不退回去。
     status: incoming.status === "pending" ? stored.status : incoming.status,
   };
+}
+
+/**
+ * id 直接当文件名，所以它必须是个安全的文件名。
+ *
+ * **抛而不是跳过。** ADR-0002 ① 把 id 列为「最容易漏、代价最大」的一条：id 由
+ * `(docId, clipId)` 派生，而 docId 是书架目录名，带斜杠完全可能。带斜杠的 id 会让
+ * `writeFile` 落到别处（或直接 ENOENT），而 `all()` 只收 `<root>/*.md`——那一条就这么
+ * 没了，不报错。静默丢数据是这里唯一不能接受的失败方式。
+ */
+function assertSafeId(id: string): void {
+  if (id === "" || id === "." || id === ".." || /[/\\]/.test(id) || id.startsWith(".")) {
+    throw new Error(`context id 不能当文件名用：${JSON.stringify(id)}`);
+  }
 }
 
 export function createContextStore(root: string): ContextStore {
@@ -134,6 +163,7 @@ export function createContextStore(root: string): ContextStore {
    * 完整文件、要么是新的完整文件，不会是写了一半的（ADR-0004 代价 ①）。
    */
   async function write(context: Context): Promise<void> {
+    assertSafeId(context.id);
     const target = file(context.id);
     const temp = target + ".tmp";
     await writeFile(temp, render(context));

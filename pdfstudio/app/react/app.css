@@ -12,6 +12,45 @@
   --mark: #b45309;
   --bad: #b91c1c;
   --radius: 8px;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+  /* ── 代码块的一套颜色 ──────────────────────────────────────
+     **只有这里和下面那段 `@media` 出现字面色。** `code-theme.ts` 里的 CodeMirror 主题
+     一个色值都不写，全是 `var(--code-…)`——这是「跟随系统深浅」唯一能做对的写法：
+     主题是个 extension，换它要重配编辑器，而 macOS 日落自动切深色时重配，等于
+     **在读者打字打到一半把光标甩回开头**。挪进 CSS 之后切换是浏览器自己的事。
+
+     只有七类词。代码块在一篇稿子里是配角：要一眼看出「这是代码、这几个是关键字」，
+     不是替代 IDE。类别少，深浅两套各七个数，改配色时两边不容易漂。 */
+  --code-bg: #f6f7f9;
+  --code-ink: #24292f;
+  --code-gutter: #b8bfc7;
+  --code-select: #cfe0ff;
+  --code-key: #cf222e;
+  --code-str: #0a3069;
+  --code-num: #0550ae;
+  --code-note: #6e7781;
+  --code-fn: #8250df;
+  --code-type: #953800;
+  --code-mark: #57606a;
+}
+
+/* 系统切深色时只换这七个数——**其余部分（纸、书架、设置）仍然只有浅色一套**，
+   这是当时明确选的：跟随的是代码块，不是整个应用。 */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --code-bg: #282c34;
+    --code-ink: #abb2bf;
+    --code-gutter: #4b5263;
+    --code-select: #3e4451;
+    --code-key: #c678dd;
+    --code-str: #98c379;
+    --code-num: #d19a66;
+    --code-note: #7f848e;
+    --code-fn: #61afef;
+    --code-type: #e5c07b;
+    --code-mark: #56b6c2;
+  }
 }
 
 * { box-sizing: border-box; }
@@ -470,21 +509,37 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 .shell-main > .shelf-page,
 .shell-main > .settings,
 .shell-main > .studio { flex: 1; min-height: 0; overflow: auto; }
+/* 发布页自己分两栏、各自滚，所以它要的是「填满」而不是「能滚」。 */
+.shell-main > .publish { flex: 1; min-height: 0; }
 
 .rail {
   width: 200px; flex: none;
   display: flex; flex-direction: column; min-height: 0;
   border-right: 1px solid var(--line); background: var(--paper);
   padding: 10px 8px;
+  /* 只动宽度。收起来不是换一套界面，是同一套界面窄了一截——所以过渡也只有这一位。 */
+  transition: width .12s ease;
 }
-/* 两个根：竖排、够大。它们是入口，不是页签——一天点不了几次，但每次都要一眼找到。 */
+
+/* 收起 / 展开那个小把手。平时几乎看不见：它一天按不了两次，却永远占着最上面一行。 */
+.rail-tighten {
+  flex: none; align-self: flex-end; margin: -2px 2px 6px;
+  padding: 2px 6px; border: none; border-radius: 6px; background: none;
+  color: var(--faint); font-size: 13px; line-height: 1.2;
+}
+.rail-tighten:hover { background: #fff; color: var(--ink); }
+
+/* 四个根：竖排、够大。它们是入口，不是页签——一天点不了几次，但每次都要一眼找到。 */
 .roots { display: flex; flex-direction: column; gap: 4px; }
 .root {
+  display: flex; align-items: center; gap: 9px;
   padding: 10px 12px; border: none; border-radius: 8px; background: none;
   color: var(--muted); font-size: 15px; font-weight: 600; text-align: left;
 }
 .root:hover { background: #fff; color: var(--ink); }
 .root.on { background: #fff; color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+/* 根的图标比案头那一列大一号：它们是入口，收起来之后这一栏全靠这几个字符认路。 */
+.root .what { font-size: 15px; }
 
 /* 案头。**跟上面隔开一条线**：根是「去哪儿」，这一列是「手边有什么」，
    两者不是同一类选择，挨在一起会被当成四个并列的页签。 */
@@ -502,9 +557,11 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 .desk-item > button {
   background: none; border: none; padding: 7px 0; text-align: left;
   color: inherit; font: inherit; min-width: 0;
-  /* 书名很长，截断而不是换行——案头一项一行，两行会让整列高度乱跳。 */
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+/* 图标与名字在同一个按钮里：收起来之后名字被藏掉，图标得还能点（Shell.tsx）。 */
+.desk-item .grow { display: flex; align-items: center; gap: 6px; }
+/* 书名很长，截断而不是换行——案头一项一行，两行会让整列高度乱跳。 */
+.desk-item .label { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .desk-item:hover { background: #fff; }
 .desk-item.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
 /* 关闭按钮平时不占视线，悬停或选中时才露出来。 */
@@ -514,12 +571,39 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 
 .rail-foot {
   flex: none; margin-top: 10px; padding: 7px;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
   border: 1px solid var(--line); border-radius: 6px; background: #fff;
   color: var(--muted); font-size: 13px;
 }
 .rail-foot:hover { color: var(--ink); }
 /* 设置是一个根，所以它会亮——与上面三个根同一套反馈（Shell.tsx）。 */
 .rail-foot.on { color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+
+/* ── 收起来的活动栏：只剩图标 ─────────────────────────────────
+   规则只有两条：**藏掉一切文字，把剩下的图标居中**。没有第二套结构——DOM 一个
+   节点都没变，所以收起状态下不会出现「展开时好好的、窄了就点不动」的那一类 bug。 */
+.rail.tight { width: 56px; }
+.rail.tight .rail-tighten { align-self: center; margin-right: 0; }
+.rail.tight .label,
+.rail.tight .desk-label { display: none; }
+.rail.tight .root,
+.rail.tight .rail-foot { justify-content: center; gap: 0; padding-left: 0; padding-right: 0; }
+.rail.tight .desk-item { padding: 0; }
+.rail.tight .desk-item .grow { flex: 1; justify-content: center; gap: 0; padding: 8px 0; }
+/* 那个叉在 40px 宽里跟图标是同一块地方——挤在一起就会「想切过去，结果关掉了」。 */
+.rail.tight .desk-item .shut { display: none; }
+
+/* 悬停时飘在栏外的名字。`fixed` 不是随手写的：案头那一列要能滚，滚动容器会把贴在
+   条目上的东西裁掉，而 CSS 没有「纵向滚、横向不裁」（Shell.tsx 里那段注释）。
+   `pointer-events: none`——它压在 PDF 上，能挡住点击的提示比没有提示更糟。 */
+.rail-tip {
+  position: fixed; left: 62px; transform: translateY(-50%); z-index: 40;
+  pointer-events: none; max-width: 260px;
+  padding: 5px 9px; border-radius: 6px;
+  background: var(--ink); color: #fff; font-size: 12.5px; line-height: 1.35;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* ── 写：稿子架、编辑器、右边那栏 ─────────────────────────── */
 
@@ -628,3 +712,202 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 .web-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .web-pane > .err { margin: 10px 14px 0; }
 .web-slot { flex: 1; min-height: 0; background: var(--paper); }
+
+/* Loop ------------------------------------------------------------------ */
+
+/* 项目那一列：名字在左，最近一轮的成绩在右。**这一列要回答的是「它还好吗」**。 */
+.loop-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: none;
+}
+.loop-row:hover { background: var(--hover); }
+
+/* 一行一轮，最新在最上面。 */
+.run { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 8px; }
+.run.open { border-color: var(--accent, #888); }
+.run-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  text-align: left;
+  background: none;
+  border: 0;
+}
+.run-head:hover { background: var(--hover); }
+.run-body { padding: 0 12px 12px; }
+
+/* 报告原样摆出来，**不重排**：它是 markdown 源文，人手改过的痕迹也该看得见。 */
+.report {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 6px 0;
+}
+
+/* ── 稿子里的代码块、图与公式 ───────────────────────────────── */
+
+/* 代码块是一块「贴上去的牌子」，不是一段生硬的色块：给它圆角和边，让它在纸上有厚度。
+   底色走变量，深浅两套自动换（见文件开头）。 */
+.milkdown .milkdown-code-block {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  overflow: hidden;
+  margin: 14px 0;
+}
+/* 顶上那条工具栏（语言选择器 + 复制）**始终是浅色的**：它是纸上的家具，不是代码的一部分。
+   跟着代码一起变深的话，深色模式下整块牌子会糊成一坨，找不到边界。 */
+.milkdown .milkdown-code-block .tools {
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+  padding: 4px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.milkdown .milkdown-code-block .cm-editor { background: var(--code-bg); }
+.milkdown .milkdown-code-block .cm-editor.cm-focused { outline: none; }
+
+/* 图。**始终浅色，不跟系统走**——要跟随的是代码块；图是一张画，把画反相不叫配色，
+   手工染过色的节点（`style A fill:#f9f`）反完就是另一个意思了。 */
+.milkdown .milkdown-code-block .preview-panel .preview {
+  background: #fff;
+  padding: 14px;
+  display: flex;
+  justify-content: center;
+}
+.milkdown .milkdown-code-block .preview-panel .preview svg { max-width: 100%; height: auto; }
+/* 画不出来的时候要**说一句话**，不能留白：正在打的图有一多半时间语法是不完整的，
+   那时候的空白会被读成「坏了」。 */
+.diagram-oops { margin: 0; color: var(--muted); font-size: 13px; }
+
+/* 行内公式跟中文混排时基线会往下坠一点，压回去。块级公式给上下留白，别贴着正文。 */
+.milkdown .katex { font-size: 1.05em; }
+.milkdown span[data-type="math_inline"] .katex { vertical-align: baseline; }
+.milkdown .milkdown-latex-block { margin: 14px 0; }
+
+/* ── 发布：选一篇稿子，看清楚要写什么，再送出去 ─────────────── */
+
+.publish { display: flex; height: 100%; min-height: 0; }
+.publish-list {
+  width: 260px; flex: none; overflow: auto; padding: 12px 8px;
+  border-right: 1px solid var(--line); background: var(--paper);
+}
+.publish-row {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 10px; border: none; border-radius: 6px; background: none;
+  color: var(--muted); font-size: 13px; text-align: left;
+}
+.publish-row:hover { background: #fff; }
+.publish-row.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+.publish-row .grow { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.publish-row .faint { flex: none; font-size: 11px; }
+
+.publish-main { flex: 1; min-width: 0; overflow: auto; padding: 16px 20px; }
+.publish-plan { max-width: 820px; display: flex; flex-direction: column; gap: 12px; }
+.publish-head { display: flex; align-items: center; gap: 10px; }
+.publish-head code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+/* 新建和覆盖是两件很不一样的事——同一眼里就得分清楚，不能靠读那两个字。 */
+.publish-kind { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+.publish-kind.new { background: var(--accent-soft); color: var(--accent); }
+.publish-kind.update { background: #fef3c7; color: var(--mark); }
+
+.publish-slug { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.publish-slug input {
+  flex: 1; min-width: 0; font: inherit; padding: 5px 8px;
+  border: 1px solid var(--line); border-radius: 6px;
+}
+
+/* 不能送的硬理由。**红的、在按钮上面**：按钮灰着而不说为什么，是这一页最容易犯的错。 */
+.publish-stop { border-left: 3px solid var(--bad); padding: 6px 10px; background: #fef2f2; }
+.publish-stop p { margin: 2px 0; color: var(--bad); font-size: 13px; }
+.publish-warn { border-left: 3px solid var(--mark); padding: 6px 10px; background: #fffbeb; margin-bottom: 12px; }
+.publish-warn p { margin: 2px 0; color: var(--mark); font-size: 13px; }
+.publish-done { color: var(--accent); font-size: 13px; }
+
+.publish-findings p { margin: 3px 0; color: var(--muted); font-size: 12.5px; }
+.publish-text pre {
+  margin: 6px 0 0; padding: 12px; max-height: 420px; overflow: auto;
+  background: var(--code-bg); color: var(--code-ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  font: 12.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word;
+}
+.publish-findings summary, .publish-text summary { font-size: 13px; color: var(--muted); cursor: pointer; }
+
+.publish-empty { padding: 24px; max-width: 720px; }
+.publish-empty pre {
+  padding: 12px; background: var(--code-bg); color: var(--code-ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  font: 12.5px/1.6 var(--mono); overflow: auto;
+}
+
+/* 四段各占一行。序号列固定宽，四行的动词才对得齐——对不齐就读不出「这是一串步骤」。 */
+.publish-steps {
+  list-style: none; margin: 0 0 4px; padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper);
+}
+.publish-steps li { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: 13px; }
+.publish-steps code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
+.publish-no { flex: none; width: 1.4em; color: var(--faint); }
+.publish-what { flex: none; width: 9em; color: var(--muted); }
+/* 删除是唯一不可逆的一档，给它自己的颜色——数字混在一行里没人会停下来看。 */
+.publish-gone { color: var(--bad); }
+.publish-done details p { margin: 2px 0; }
+
+/* 管理页那一列：一行装得下状态、标题、标签和两个动作，所以每一段各自定宽，别互相挤。 */
+.publish-list .seg { margin-bottom: 8px; }
+.publish-row.off { opacity: .62; }
+.publish-row .publish-kind { flex: none; font-size: 11px; padding: 1px 6px; }
+.publish-tagline, .publish-tags {
+  flex: none; max-width: 12em; font: inherit; font-size: 12px; color: var(--muted);
+  background: none; border: none; padding: 2px 6px; border-radius: 5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.publish-tagline:hover { background: var(--accent-soft); color: var(--accent); }
+.publish-tags { border: 1px solid var(--accent); color: var(--ink); }
+.publish-row .btn { flex: none; padding: 3px 8px; font-size: 12px; }
+/* 左栏要宽一些：92 篇里挑一篇，标题截断得太狠就挑不出来。 */
+.publish .publish-list { width: 560px; }
+
+/* ── Writer 的文章架：按标签筛 ─────────────────────────────── */
+
+.writer-search {
+  width: 100%; max-width: 460px; margin-bottom: 12px;
+  padding: 7px 12px; font: inherit; font-size: 14px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+.writer-search:focus { outline: none; border-color: var(--accent); }
+/* 标签会很多（47 篇带 categories、46 篇带 tags），所以换行铺开而不是横着滚——
+   横滚的那几个永远没人点。 */
+.writer-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.writer-tags button {
+  padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px;
+  background: #fff; color: var(--muted); font-size: 12.5px;
+}
+.writer-tags button:hover { color: var(--ink); }
+.writer-tags button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* 两个标记跟在标题后面。**下架是状态，HTML 是「这篇在这儿改不了」**——
+   两件事不同，所以颜色也不同。 */
+.writer-off, .writer-html {
+  margin-left: 8px; padding: 1px 6px; border-radius: 4px;
+  font-size: 11px; font-weight: 600; vertical-align: middle;
+}
+.writer-off { background: #fef3c7; color: var(--mark); }
+.writer-html { background: #f4f4f5; color: var(--faint); }
+
+/* 回收站：默认收着。它不是日常主路径，但要找的时候得找得到（而不是去开 Finder）。 */
+.writer-trash { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); }
+.writer-trash > .muted { font-size: 12.5px; margin: 10px 0; }
+.writer-trash .publish-row { padding: 6px 10px; }
+.writer-trash .publish-row .faint { flex: none; font-size: 12px; }

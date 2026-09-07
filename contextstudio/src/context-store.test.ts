@@ -66,21 +66,45 @@ describe("ContextStore", () => {
     expect(stored.status).toBe("approved");
   });
 
-  // 反过来，上游是 evidence 的真相——摘录那边修了 OCR 错字，重导要能把它带过来。
-  it("重导会覆盖 evidence 与 source，上游说了算", async () => {
+  // source 是上游的真相——书改了名、页码算法修了，重导要能带过来。
+  it("重导会覆盖 source，上游说了算", async () => {
     const store = createContextStore(await root());
-    await store.ingest("doc_1", [context("ctx_001", { evidence: "打错的原文" })]);
+    await store.ingest("doc_1", [context("ctx_001")]);
 
     await store.ingest("doc_1", [
       context("ctx_001", {
-        evidence: "修好的原文",
         source: { docId: "doc_1", title: "Attention Is All You Need", locator: "p.4" },
       }),
     ]);
 
     const [stored] = await store.all();
-    expect(stored.evidence).toBe("修好的原文");
     expect(stored.source.locator).toBe("p.4");
+  });
+
+  // **这一条曾经写反了。** 原测试叫「重导会覆盖 evidence，上游说了算」，理由是「摘录
+  // 那边修了错字要能带过来」——听着合理，但它执行的是 ADR-0002 ③ 的反面。
+  //
+  // evidence 是逐字引文，Blog Studio 的 draft 会把它照抄进正文并留 provenance。悄悄改掉
+  // 一句已经被引用的原文，是这个系统里最难发现的错：文章还在，引文变了，没人报错。
+  // ADR 把它写成硬要求却只写在 prose 里，所以由存储这一侧执行。
+  it("evidence 冻结在第一次入库那一刻，重导不覆盖", async () => {
+    const store = createContextStore(await root());
+    await store.ingest("doc_1", [context("ctx_001", { evidence: "打错的原文" })]);
+
+    await store.ingest("doc_1", [context("ctx_001", { evidence: "改过的原文" })]);
+
+    const [stored] = await store.all();
+    expect(stored.evidence).toBe("打错的原文");
+  });
+
+  // ADR-0002 ① 把 id 列为「最容易漏、代价最大」的一条。id 由 (docId, clipId) 派生，
+  // 而 docId 是书架目录名，带斜杠完全可能——落到别处而 all() 只收 <root>/*.md，
+  // 那一条就这么没了，不报错。静默丢数据是这里唯一不能接受的失败方式。
+  it("id 当不了文件名时抛，不静默丢掉这一条", async () => {
+    const store = createContextStore(await root());
+
+    await expect(store.ingest("doc_1", [context("doc_1/ctx_001")])).rejects.toThrow(/文件名/);
+    await expect(store.ingest("doc_1", [context("../逃出去")])).rejects.toThrow(/文件名/);
   });
 
   // 没有 markSourceDeleted 方法：这个文档下库里有、这批没有的，就是来源被删了。

@@ -10,7 +10,7 @@ import { WriterChatPanel } from "./WriterChatPanel";
 import { DraftPane } from "./DraftPane";
 
 /**
- * 写这一篇——左边正文，右边两栏：**稿子**（查出来的问题、留过的版本）与**问稿子**。
+ * 写这一篇——左边正文，右边两栏：**稿子**（大纲、查出来的问题）与**问稿子**。
  *
  * 与阅读页是同一个骨架，连右栏两栏的分法都一样（那边是「摘录 | 问文档」）：两侧是同一个
  * 应用的两种工作，不该有两套布局语言。
@@ -20,11 +20,14 @@ export function DraftPage({
   talk,
   progress,
   contexts,
+  onUploadImage,
   onBack,
 }: {
   writer: Writer;
   talk: WritingTalk;
   progress: Progress;
+  /** 粘进来的图存到哪，回报正文里该写的路径（见 `DraftEditor`）。 */
+  onUploadImage: (file: File) => Promise<string>;
   /**
    * 知识库现在有哪些 context。检查要拿正文里的 `[ctx:id]` 对着它核，右栏也用它的条数。
    * **读不出来要给 null**，不能给空数组——那会让每一条引用都变成「库里找不到」。
@@ -43,7 +46,6 @@ export function DraftPage({
    */
   const [stage, setStage] = useState<HTMLDivElement | null>(null);
   const [pool, setPool] = useState<Context[] | null>(null);
-  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -87,16 +89,6 @@ export function DraftPage({
 
   if (state.openId === null) return null;
 
-  /** 留一版 / 取回旧版都会写盘，跑的时候把两个按钮按住，别让人点出两条并发的写。 */
-  const run = async (work: () => Promise<void>) => {
-    setBusy(true);
-    try {
-      await work();
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <div className="book-view">
       <div className="topbar">
@@ -114,12 +106,13 @@ export function DraftPage({
       <div className="panes">
         <div className="stage paper" ref={setStage}>
           {/* `key` 换了才换文本：编辑器是非受控的（见 DraftEditor）。换稿子换 `openId`，
-              取回旧版和打记号换 `epoch`——日常打字两个都不动。 */}
+              打记号换 `epoch`——日常打字两个都不动。 */}
           <DraftEditor
             key={`${state.openId}:${state.epoch}`}
             initial={writer.text()}
             onChange={(markdown) => writer.edit(markdown)}
             onSelect={(text) => (text === "" ? talk.unquote() : talk.quote(text))}
+            onUploadImage={onUploadImage}
           />
         </div>
 
@@ -138,11 +131,7 @@ export function DraftPage({
               outline={outline}
               report={report}
               onJump={jumpTo}
-              revisions={state.revisions}
-              busy={busy}
               onMarkAuthored={(line) => writer.markAuthored(line)}
-              onSnapshot={() => void run(() => writer.snapshot("留一版"))}
-              onRestore={(n) => void run(() => writer.restore(n))}
             />
           ) : (
             <WriterChatPanel talk={talk} progress={progress} count={pool?.length ?? null} />

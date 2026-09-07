@@ -24,8 +24,12 @@ import { createHttpClipStore } from "../http-clip-store";
 import { createHttpTagStore } from "../http-tags";
 import { createHttpOutlineStore } from "../http-outline";
 import { createHttpBookshelf } from "../http-bookshelf";
+import { createHttpSiteStore } from "../http-sites";
+import { createHttpPublishing } from "../http-publish";
+import { createHttpBlog } from "../http-blog";
 import { createHttpContextStudio } from "../http-context-studio";
-import { createHttpDraftStore, createHttpRevisionStore } from "../http-drafts";
+import { createHttpLoopReader } from "../http-loops";
+import { createHttpDraftStore } from "../http-drafts";
 import { createWriter } from "../../../blogstudio/src/writing";
 import { createRecaller } from "../../../blogstudio/src/recall";
 import { createWriterChat } from "../../../blogstudio/src/writer-chat";
@@ -161,9 +165,9 @@ bindConversation(ws, conversation);
  * ——Blog Studio 只从知识库读 `context` 那一个形状（`CONTEXT-MAP.md`）。
  */
 const contextStudio = createHttpContextStudio(apiUrl("/__contexts"));
+const loops = createHttpLoopReader(apiUrl("/__loops"));
 const writer = createWriter({
   store: createHttpDraftStore(apiUrl("/__drafts")),
-  revisions: createHttpRevisionStore(apiUrl("/__drafts")),
   newId: () => crypto.randomUUID(),
   now: () => Date.now(),
 });
@@ -226,6 +230,10 @@ createRoot(document.querySelector("#root")!).render(
     progress={progress}
     tocModel={tocModel}
     localTocOcr={localTocOcr}
+    loops={loops}
+    publishing={createHttpPublishing(apiUrl("/__publish"))}
+    blog={createHttpBlog(apiUrl("/__blog"))}
+    siteStore={createHttpSiteStore(apiUrl("/__sites"))}
     contextStudio={contextStudio}
     writer={writer}
     talk={talk}

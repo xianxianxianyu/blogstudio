@@ -9,8 +9,7 @@ import {
   rootOf,
   rememberOnDesk,
   type Active,
-  type DeskItem,
-} from "./desk";
+  type DeskItem, openLoopOnDesk,} from "./desk";
 
 const reading = (id: string): Active => ({ kind: "doc", id });
 const writing = (id: string): Active => ({ kind: "draft", id });
@@ -209,5 +208,25 @@ describe("网页也进同一个案头", () => {
 
     // 同一个 pageId 再开一次＝回到它，不新增。
     expect(openPageOnDesk(desk, "https://example.com/a", "https://example.com/a?utm_source=x", "")).toBe(desk);
+  });
+});
+
+describe("Loop 项目", () => {
+  it("打开一个 loop 项目，它落到案头上", () => {
+    const desk = openLoopOnDesk([], "研究 KV cache");
+
+    expect(desk).toEqual([{ kind: "loop", id: "研究 KV cache" }]);
+  });
+
+  it("**关掉最后一个 loop 项目，退回 Loop 那一列**——不是掉进书架", () => {
+    // `rootOf` 是查表不是三元表达式，正因为这种错**不会报错**：网页那次就是默默
+    // 归到了 Writer 名下，现象是「关掉最后一个网页，莫名其妙掉进写作页」。
+    expect(rootOf("loop")).toEqual({ kind: "loops" });
+  });
+
+  it("同一个项目不会开成两条", () => {
+    const desk = openLoopOnDesk(openLoopOnDesk([], "p"), "p");
+
+    expect(desk).toHaveLength(1);
   });
 });

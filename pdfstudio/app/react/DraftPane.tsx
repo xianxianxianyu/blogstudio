@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Report } from "../../../blogstudio/src/checks";
 import type { Heading } from "../../../blogstudio/src/outline";
-import type { RevisionInfo } from "../../../blogstudio/src/revisions";
 
 /**
  * 右栏的「稿子」那一栏：**主体是大纲**。
@@ -17,23 +16,15 @@ import type { RevisionInfo } from "../../../blogstudio/src/revisions";
 export function DraftPane({
   outline,
   report,
-  revisions,
-  busy,
   onJump,
   onMarkAuthored,
-  onSnapshot,
-  onRestore,
 }: {
   outline: Heading[];
   /** 还没查过（正文刚打开、库还没读回来）就是 null。 */
   report: Report | null;
-  revisions: RevisionInfo[];
-  busy: boolean;
   /** 跳到第几个标题（`Heading.index`）。 */
   onJump: (headingIndex: number) => void;
   onMarkAuthored: (line: number) => void;
-  onSnapshot: () => void;
-  onRestore: (n: number) => void;
 }) {
   const [open, setOpen] = useState(false);
   const findings = report?.findings ?? [];
@@ -85,9 +76,6 @@ export function DraftPane({
           {report === null ? "正在查…" : SAY[report.verdict]}
           {findings.length > 0 && <span className="faint"> {open ? "收起" : "看看"}</span>}
         </button>
-        <button className="btn" disabled={busy} onClick={onSnapshot}>
-          留一版
-        </button>
       </div>
 
       {open && findings.length > 0 && (
@@ -111,25 +99,6 @@ export function DraftPane({
         </ul>
       )}
 
-      <h3 className="section">留过的版本</h3>
-      {revisions.length === 0 ? (
-        <p className="faint">
-          还没留过。<b>自动保存不留版</b>——它防的是丢字；留版是「这一版我认」，由你自己按。
-        </p>
-      ) : (
-        <ul className="revisions">
-          {revisions.map((revision) => (
-            <li key={revision.n}>
-              <button className="grow" disabled={busy} onClick={() => onRestore(revision.n)}>
-                <b>第 {revision.n} 版</b>
-                <span className="faint">
-                  {revision.why} · {new Date(revision.at).toLocaleString("zh-CN")}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { normalizeTags, type Tag } from "./tag";
 
@@ -50,6 +50,12 @@ export function createTagStore(root: string): TagStore {
     },
 
     async save(tags: Tag[]): Promise<void> {
+      // **每次写之前都保证目录在**，不是靠调用方启动时建过一次。
+      // `local-api.ts` 那句 `mkdirSync(libraryRoot)` 的语义是「首次运行把家搭起来」；
+      // 把 store 的正确性挂在它上面，就等于挂在「调用方启动时做过什么」上——
+      // 目录中途没了的话，改标记名会一直 ENOENT 到重启为止，而界面上只有一句
+      // 「保存失败」。`mkdir -p` 在目录已存在时几乎不花什么。
+      await mkdir(root, { recursive: true });
       await writeFile(file, render(normalizeTags(tags)), "utf8");
     },
   };

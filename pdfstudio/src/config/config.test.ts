@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fieldSource, parseConfig, resolveEndpoint } from "./config";
+import { CAPABILITIES, fieldSource, parseConfig, resolveEndpoint } from "./config";
 import type { AppConfig } from "./config";
 import { loadConfig, saveConfig } from "./config-file";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
@@ -13,12 +13,13 @@ const FLAT = {
 };
 
 describe("Config — 只配一个端点的读者", () => {
-  it("扁平写法仍然有效，五个功能全部解析到它", () => {
+  it("扁平写法仍然有效，每个功能都解析到它", () => {
     const config = parseConfig(FLAT);
 
-    // ADR-0010 让配置按功能分组，但只配一个端点的读者不该被迫填五遍。
+    // ADR-0010 让配置按功能分组，但只配一个端点的读者不该被迫填好几遍。
     // 而且既有的 config.json 就是这个形状，不能让它一夜失效。
-    for (const capability of ["recognition", "translation", "chat", "embedding", "claim"] as const) {
+    // 遍历 `CAPABILITIES` 而不是手抄一份：手抄的那一份正是 `chat` 当初漏掉的地方。
+    for (const capability of CAPABILITIES) {
       expect(resolveEndpoint(config, capability)).toEqual(FLAT);
     }
   });
@@ -128,5 +129,38 @@ describe("回收策略配置", () => {
     await saveConfig(file, { ...config, retention: { ttlDays: 30, acknowledged: true } });
 
     expect((await loadConfig(file)).retention).toEqual({ ttlDays: 30, acknowledged: true });
+  });
+});
+
+describe("Config — 能配的能力就是真的生效的能力", () => {
+  it("不认识的能力从配置里丢掉——留着只会让人以为它生效了", () => {
+    // `embedding` 在设置里摆了三栏可填，接线那侧却写死了本地 embeddinggemma，
+    // 读者填进去的东西**无声失效**。把它从能力表里删掉之后，旧配置里残留的那一段
+    // 也要一并丢掉，否则它继续躺在 config.json 里，下次谁看见都会以为它管用。
+    const config = parseConfig({
+      default: FLAT,
+      capabilities: {
+        chat: { model: "big-chat" },
+        embedding: { model: "bge-m3" },
+      },
+    });
+
+    expect(resolveEndpoint(config, "chat").model).toBe("big-chat");
+    expect(config.capabilities).not.toHaveProperty("embedding");
+  });
+});
+
+describe("Config — 问文档与写作助手是两个能力", () => {
+  it("给写作助手换个模型，不会连带把问文档也换掉", () => {
+    // 能力是按**任务**切的，不是按产品切的（ADR-0010）。「问文档」是单文档问答、
+    // 材料是这一篇 PDF 的原文；「写作助手」的材料是正在写的稿子加从知识库召回的
+    // context。两件事对模型的要求不一样，共用一个能力就意味着调其中一个必然动到另一个。
+    const config = parseConfig({
+      default: FLAT,
+      capabilities: { writing: { model: "a-bigger-one" } },
+    });
+
+    expect(resolveEndpoint(config, "writing").model).toBe("a-bigger-one");
+    expect(resolveEndpoint(config, "chat")).toEqual(FLAT);
   });
 });

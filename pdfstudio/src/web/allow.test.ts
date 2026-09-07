@@ -62,3 +62,51 @@ describe("哪些地址允许加载", () => {
     expect(allows(["垃圾", "https://example.com"], "https://example.com/a")).toBe(true);
   });
 });
+
+describe("www 与裸域算同一个站", () => {
+  /**
+   * 实测（2026-08-21，`curl -I`）：两个方向都有，而且反方向更多。
+   *
+   *   baidu.com / electronjs.org      裸域 301 → www
+   *   github.com / docs.rs / arxiv.org  www 301 → 裸域
+   *   news.ycombinator.com            **根本没有 www**（连不上）
+   *
+   * 所以「输入时自动补 www」会在后四个站上直接失败。正确的位置是这里：
+   * `X` 与 `www.X` 按惯例永远是同一家，白名单把它们当同一个站，**两个方向的跳转
+   * 一次都不会被拦**，而且不用猜。
+   */
+  it("加了裸域，www 的也放行——baidu 那种 301", () => {
+    expect(allows(["https://baidu.com"], "https://www.baidu.com/")).toBe(true);
+  });
+
+  it("加了 www，裸域的也放行——github 那种反向 301", () => {
+    expect(allows(["https://www.github.com"], "https://github.com/")).toBe(true);
+  });
+
+  it("**只放宽 www 这一个，别的子域一律不放**", () => {
+    expect(allows(["https://example.com"], "https://evil.example.com/")).toBe(false);
+    expect(allows(["https://example.com"], "https://api.example.com/")).toBe(false);
+    // 前缀是 www 但不是那一段也不行。
+    expect(allows(["https://example.com"], "https://wwwx.example.com/")).toBe(false);
+  });
+
+  it("**只削开头的 `www.`**——`replace` 会削任意位置的，把主机削成另一个站", () => {
+    // `"mywww.site.com".replace("www.", "")` → `"mysite.com"`。
+    // 于是白名单里加了 `mywww.site.com`，`mysite.com` 会被判成同一个站。
+    expect(allows(["https://mywww.site.com"], "https://mysite.com/")).toBe(false);
+  });
+
+  it("经典绕过仍然挡得住", () => {
+    expect(allows(["https://example.com"], "https://example.com.evil.com/")).toBe(false);
+    expect(allows(["https://www.example.com"], "https://www.example.com.evil.com/")).toBe(false);
+  });
+
+  it("协议仍然要对——放宽的只有 www，不是别的", () => {
+    expect(allows(["https://baidu.com"], "http://www.baidu.com/")).toBe(false);
+  });
+
+  it("路径限制照旧跟着走", () => {
+    expect(allows(["https://docs.rs/tokio"], "https://www.docs.rs/tokio/latest")).toBe(true);
+    expect(allows(["https://docs.rs/tokio"], "https://www.docs.rs/serde")).toBe(false);
+  });
+});

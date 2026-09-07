@@ -119,16 +119,33 @@ describe("buildGraph", () => {
     ]);
 
     expect(graph.topics).toEqual([
-      { topic: "eval", size: 3 },
-      { topic: "rag", size: 1 },
-      { topic: "本地模型", size: 1 },
+      { topic: "eval", display: "eval", size: 3 },
+      { topic: "rag", display: "rag", size: 1 },
+      { topic: "本地模型", display: "本地模型", size: 1 },
     ]);
   });
 
   it("主题频次也按归一化后的形式统计", () => {
     const graph = buildGraph([context("a", ["Eval"]), context("b", [" eval "])]);
 
-    expect(graph.topics).toEqual([{ topic: "eval", size: 2 }]);
+    expect(graph.topics).toEqual([{ topic: "eval", display: "Eval", size: 2 }]);
+  });
+
+  // 归一化是**相等规则**，不是**显示规则**。少了 display，池子里就只剩小写，
+  // `proposeTopics` 只能提议小写，读者写的字会被系统悄悄改掉。
+  it("主题带上读者原样写的那一份，取第一次出现的写法", () => {
+    const graph = buildGraph([context("a", ["Agent Design"]), context("b", ["agent design"])]);
+
+    expect(graph.topics).toEqual([{ topic: "agent design", display: "Agent Design", size: 2 }]);
+  });
+
+  // 按「最后一次出现」的话，新导入一条就可能把全库这个主题的显示改掉一次。
+  it("后来的写法不改已经定下的显示形式", () => {
+    const first = buildGraph([context("a", ["RAG"]), context("b", ["rag"])]);
+    const swapped = buildGraph([context("b", ["rag"]), context("a", ["RAG"])]);
+
+    expect(first.topics[0].display).toBe("RAG");
+    expect(swapped.topics[0].display).toBe("rag");
   });
 
   it("空白主题不算主题，不产生边", () => {

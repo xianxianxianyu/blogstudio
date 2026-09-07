@@ -21,6 +21,22 @@ function parse(url: string): URL | null {
   }
 }
 
+/**
+ * `X` 与 `www.X` 算同一个站。**只放宽 www 这一个前缀，别的子域一律不放。**
+ *
+ * 理由是实测的（2026-08-21，`curl -I`）：跳转**两个方向都有，而且反方向更多**——
+ * baidu / electronjs 是裸域 → www，而 github / docs.rs / arxiv / ai-sdk.dev 是
+ * www → 裸域，news.ycombinator.com 根本没有 www。所以「输入时自动补 www」会在后一半
+ * 站上直接失败；放宽在这里则两个方向都覆盖，而且不用猜。
+ *
+ * 为什么只放 `www`：它按惯例永远是同一个运营方。别的子域**不是**——`*.github.io`、
+ * `*.s3.amazonaws.com` 这类下面住的是任意用户的内容，放宽等于把整个平台开给攻击者。
+ */
+function sameSite(a: string, b: string): boolean {
+  const bare = (host: string) => (host.startsWith("www.") ? host.slice(4) : host);
+  return bare(a) === bare(b);
+}
+
 export function allows(sites: readonly string[], url: string): boolean {
   const target = parse(url);
   if (!target) return false;
@@ -32,7 +48,7 @@ export function allows(sites: readonly string[], url: string): boolean {
     // **主机要完全相等**：`startsWith` 会让 `example.com.evil.com` 混进来（经典绕过），
     // 而 `endsWith` 会让 `evil-example.com` 混进来。子域名也不算——`evil.example.com`
     // 与 `example.com` 是两个主机，谁给谁签名都不是我们能假设的。
-    if (allowed.protocol !== target.protocol || allowed.host !== target.host) return false;
+    if (allowed.protocol !== target.protocol || !sameSite(allowed.host, target.host)) return false;
 
     // 路径按**段**比，不按字符串前缀：`/tokio` 不该放行 `/tokio-evil`。
     //

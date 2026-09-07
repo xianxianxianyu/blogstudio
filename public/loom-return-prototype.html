@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loom · 回来看到什么（原型）</title>
+<meta name="description" content="扔掉用的原型，只回答一个问题：一个 loop 在你不在时跑完，你回来看到什么才会觉得它有用。">
+<style>
+/* ============================================================
+   丢弃式原型 —— 不是产品代码，不要往这里加功能。
+   取色一律用变量，值抄自 pdfstudio/app/react/app.css，好让密度和真产品一致。
+   ============================================================ */
+:root{
+  --ink:#18181b; --muted:#71717a; --faint:#a1a1aa; --line:#e4e4e7;
+  --paper:#fafafa; --accent:#2563eb; --accent-soft:#eef2ff;
+  --mark:#b45309; --bad:#b91c1c; --good:#15803d; --radius:8px;
+  --font:15px/1.65 -apple-system,"PingFang SC",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{margin:0;font:var(--font);color:var(--ink);background:#fff}
+button{font:inherit;cursor:pointer;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:600}
+code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace}
+.muted{color:var(--muted)} .faint{color:var(--faint);font-size:13px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.btn{background:#fff;border:1px solid var(--line);padding:5px 12px;border-radius:6px}
+.btn:hover{background:var(--paper)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ── 外壳：抄真产品的左栏，好让原型「顶在真界面上」 ───────── */
+.shell{display:flex;height:100vh}
+.rail{width:200px;flex:none;display:flex;flex-direction:column;
+  border-right:1px solid var(--line);background:var(--paper);padding:10px 8px}
+.roots{display:flex;flex-direction:column;gap:4px}
+.root{padding:10px 12px;border:none;border-radius:8px;background:none;
+  color:var(--muted);font-size:15px;font-weight:600;text-align:left}
+.root.on{background:#fff;color:var(--accent);box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.desk{flex:1;margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;flex-direction:column;gap:1px;overflow:auto}
+.desk-label{margin:0 0 6px 12px;color:var(--faint);font-size:12px}
+.desk-item{display:flex;align-items:center;gap:6px;padding:7px 12px;
+  border-radius:6px;font-size:13px;color:var(--muted)}
+.desk-item.on{background:#fff;color:var(--ink);font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.main{flex:1;min-width:0;overflow:auto;padding:28px 32px 90px}
+.head{display:flex;align-items:baseline;gap:12px;margin-bottom:6px}
+.head h1{font-size:24px;letter-spacing:-.01em}
+.sub{margin:0 0 26px;color:var(--muted)}
+
+/* ── 通用零件 ─────────────────────────────────────────── */
+.card{border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.pill.need{background:#fef3c7;color:var(--mark)}
+.pill.done{background:#dcfce7;color:var(--good)}
+.pill.fail{background:#fee2e2;color:var(--bad)}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.cost{font:12px ui-monospace,monospace;color:var(--faint)}
+
+/* ── A：收件箱 ───────────────────────────────────────── */
+.inbox{display:flex;flex-direction:column;gap:0}
+.inbox .group{margin-top:22px}
+.inbox .group:first-child{margin-top:0}
+.inbox .glabel{font-size:13px;color:var(--faint);margin-bottom:8px}
+.item{display:flex;gap:12px;align-items:flex-start;padding:13px 14px;
+  border:1px solid var(--line);border-top:none;background:#fff}
+.item:first-of-type{border-top:1px solid var(--line);border-radius:8px 8px 0 0}
+.item:last-of-type{border-radius:0 0 8px 8px}
+.item .dot{width:8px;height:8px;border-radius:99px;margin-top:8px;flex:none}
+.item .dot.need{background:var(--mark)} .item .dot.done{background:var(--good)}
+.item .dot.fail{background:var(--bad)}
+.item .who{font-size:12px;color:var(--faint);font-family:ui-monospace,monospace}
+
+/* ── B：差异 ─────────────────────────────────────────── */
+.diff{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+.diff .side{padding:16px 18px}
+.diff .side+.side{border-left:1px solid var(--line);background:#fcfdff}
+.diff h4{font-size:13px;color:var(--faint);font-weight:600;margin-bottom:12px}
+.dline{padding:5px 8px;border-radius:5px;font-size:14px;margin-bottom:2px}
+.dline.add{background:#f0fdf4;color:var(--good)}
+.dline.change{background:#fffbeb;color:var(--mark)}
+.dline.same{color:var(--faint)}
+.drift{margin-top:22px}
+.track{display:flex;align-items:center;gap:0;margin:14px 0 6px}
+.node{padding:5px 11px;border:1px solid var(--line);border-radius:99px;font-size:13px;background:#fff;white-space:nowrap}
+.node.ran{border-color:var(--good);background:#f0fdf4;color:var(--good)}
+.node.here{border-color:var(--mark);background:#fffbeb;color:var(--mark);font-weight:600}
+.node.skip{border-style:dashed;color:var(--faint)}
+.arrow{color:var(--faint);padding:0 6px;font-size:12px}
+.loopback{margin-left:14px;padding-left:14px;border-left:2px solid var(--line)}
+
+/* ── C：清单 ─────────────────────────────────────────── */
+.goals{display:flex;flex-direction:column;gap:14px}
+.goal{padding:16px 18px;border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+.goal .top{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.goal .top h3{font-size:16px}
+.bar{height:7px;border-radius:99px;background:var(--line);overflow:hidden;margin-bottom:10px}
+.bar span{display:block;height:100%;background:var(--good)}
+.bar.warn span{background:var(--mark)}
+.left{font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:5px;margin-top:10px}
+.left b{font-weight:600;color:var(--ink)}
+
+/* ── 三层导航与 run 列表 ─────────────────────────────── */
+.projects{display:flex;flex-direction:column;gap:6px}
+.proj{display:flex;align-items:center;gap:12px;text-align:left;width:100%;
+  padding:12px 14px;border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+.proj:hover{border-color:var(--accent)}
+.proj.on{border-color:var(--accent);background:var(--accent-soft)}
+.runs{display:flex;flex-direction:column;gap:0}
+.run{display:flex;align-items:center;gap:12px;padding:10px 14px;
+  border:1px solid var(--line);border-top:none;background:#fff;font-size:14px}
+.run:first-child{border-top:1px solid var(--line);border-radius:8px 8px 0 0}
+.run:last-child{border-radius:0 0 8px 8px}
+.run.tall{padding:13px 14px;align-items:flex-start}
+.run.dim{background:#fcfcfd}
+.run.fold{width:100%;color:var(--muted);justify-content:center;font-size:13px}
+.rn{font:12px ui-monospace,monospace;color:var(--faint);width:26px;flex:none}
+.rwhen{color:var(--muted);width:96px;flex:none;font-size:13px}
+.rstop{font-size:13px;color:var(--muted)} .rstop.need{color:var(--mark);font-weight:600}
+.gain{display:inline-block;padding:1px 8px;margin-right:5px;border-radius:5px;
+  background:#f0fdf4;color:var(--good);font-size:13px}
+.grid{display:inline-grid;gap:3px;align-items:center;border:1px solid var(--line);
+  border-radius:var(--radius);padding:12px 14px;background:#fff;overflow:auto;max-width:100%}
+.gh{font-size:11px;color:var(--faint);padding:0 4px;white-space:nowrap;text-align:center}
+.gn{font:11px ui-monospace,monospace;color:var(--faint)}
+.gw{font-size:11px;color:var(--faint);white-space:nowrap;padding-right:6px}
+.cell{width:22px;height:22px;border-radius:5px;background:var(--paper);
+  display:inline-flex;align-items:center;justify-content:center;font-size:11px;color:#fff}
+.cell.hit{background:var(--good)}
+.cell.stopped{background:var(--mark);box-shadow:0 0 0 2px #fde68a}
+.tot{text-align:center;font:11px ui-monospace,monospace;color:var(--muted)}
+
+.cell.band{background:#bbf7d0;color:var(--good)}
+.gain-row,.bandnote{padding:2px 0 9px 30px;font-size:13px;color:var(--muted);
+  border-bottom:1px solid var(--line);margin-bottom:6px}
+.bandnote{background:#fcfcfd}
+
+.run{cursor:pointer} .run:hover{background:var(--accent-soft)}
+.clickable{cursor:pointer;text-decoration:underline;text-decoration-color:var(--line)}
+.clickable:hover{color:var(--accent)}
+.steps{border-collapse:collapse;width:100%;font-size:14px}
+.steps th{text-align:left;font-size:12px;color:var(--faint);font-weight:600;
+  padding:0 12px 8px 0;border-bottom:1px solid var(--line)}
+.steps td{padding:10px 12px 10px 0;border-bottom:1px solid var(--line);vertical-align:top}
+.steps tr.waiting td{background:#fffbeb}
+.steps tr.noterow td{padding:0 12px 10px 0;border-bottom:1px solid var(--line)}
+
+.sect{font-size:15px;margin:26px 0 6px}
+.track{display:flex;align-items:center;flex-wrap:wrap;gap:2px;padding:14px;
+  border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+.node .x{font-size:11px;margin-left:4px;opacity:.8}
+.steps-fold{margin-top:14px}
+.steps-fold summary{cursor:pointer;color:var(--muted);font-size:13px;padding:4px 0}
+.outs{display:flex;flex-direction:column;gap:8px}
+.out{display:flex;align-items:center;gap:12px;padding:13px 15px;
+  border:1px solid var(--line);border-radius:var(--radius);background:#fff}
+.out.bad{border-color:#fecaca;background:#fffafa}
+.okind{font-size:12px;color:var(--faint);width:56px;flex:none}
+.gatebox{margin-top:22px;padding:15px 17px;border:1px solid #fde68a;
+  border-radius:var(--radius);background:#fffbeb}
+.chatfab{position:fixed;right:26px;bottom:80px;width:48px;height:48px;border-radius:99px;
+  border:1px solid var(--line);background:#fff;font-size:20px;
+  box-shadow:0 6px 22px rgba(0,0,0,.14);z-index:50}
+.chatfab:hover{background:var(--accent-soft);border-color:var(--accent)}
+
+.chatpanel{position:fixed;right:26px;bottom:140px;width:390px;max-height:60vh;
+  display:none;flex-direction:column;background:#fff;border:1px solid var(--line);
+  border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.18);z-index:60;overflow:hidden}
+.chatpanel.open{display:flex}
+.chead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.sees{padding:10px 14px;background:var(--paper);border-bottom:1px solid var(--line);
+  display:flex;flex-wrap:wrap;gap:5px;align-items:center;font-size:12px}
+.seetag{padding:2px 8px;border-radius:99px;background:#dcfce7;color:var(--good)}
+.seetag.off{background:#f4f4f5;color:var(--faint)}
+.chatlog{flex:1;overflow:auto;padding:14px;font-size:14px}
+.ask{background:var(--accent-soft);color:var(--accent);padding:8px 11px;
+  border-radius:10px;margin-bottom:10px;display:inline-block}
+.say{background:var(--paper);padding:11px 13px;border-radius:10px;line-height:1.6}
+.asks{display:flex;flex-direction:column;gap:6px;margin-top:12px;align-items:flex-start}
+.asks .btn{font-size:13px;padding:4px 10px}
+.cbox{display:flex;gap:8px;padding:11px 14px;border-top:1px solid var(--line)}
+.cbox input{flex:1;font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:7px}
+
+/* ── 切换条（明显不是设计的一部分） ─────────────────────── */
+.switch{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:99;
+  display:flex;align-items:center;gap:2px;padding:5px;border-radius:99px;
+  background:#111827;color:#fff;box-shadow:0 8px 30px rgba(0,0,0,.28);font-size:13px}
+.switch button{background:none;border:none;color:#fff;padding:6px 12px;border-radius:99px}
+.switch button:hover{background:rgba(255,255,255,.14)}
+.switch .label{padding:0 12px;font-weight:600;white-space:nowrap}
+.switch .hint{opacity:.55;font-size:12px;padding-right:10px}
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" id="rail"></nav>
+  <main class="main" id="main"></main>
+</div>
+
+<div class="switch">
+  <button id="prev" title="上一个（←）">←</button>
+  <span class="label" id="label"></span>
+  <button id="next" title="下一个（→）">→</button>
+  <span class="hint">原型 · ?variant=</span>
+</div>
+
+<script>
+/* ============================================================
+   假数据：一个夜里跑过的 loop。三个变体读的是同一份，
+   差别只在「怎么组织它」——那正是要比的东西。
+   ============================================================ */
+const PROJECTS = [
+  { id:"attn", name:"注意力机制这篇", loom:"researched-essay", runs:9,
+    need:2, lastGain:"+12 context · 草稿 rev3", spent:4.10, since:"6 天前起" },
+  { id:"scan", name:"每天扫这 6 个源", loom:"scan-only", runs:41,
+    need:0, lastGain:"+3 context", spent:1.88, since:"41 天前起" },
+  { id:"kv",   name:"KV cache 那篇", loom:"researched-essay", runs:2,
+    need:1, lastGain:"停在闸门 A", spent:0.31, since:"前天起" },
+];
+
+/** 预设图的骨架。**每次 run 都对着它画**——节点实例带 node_id 指回来。 */
+const SKELETON = ["research","coverage","闸门A","draft","闸门B","eval","revise","checks","publish"];
+
+/**
+ * 九次 run。`did` 是这一次真正跑过的节点；没列的就是跳过或没走到。
+ * `gain` 是产物；`same` 表示这一次什么新东西都没有（大多数 run 应该是这样）。
+ */
+const RUNS = [
+  { n:9, when:"今天 03:02", cost:0.83, did:["eval","revise","eval","闸门B"], stop:"闸门B",
+    gain:["草稿 rev3（78 分）","检查 2/3"], same:false },
+  { n:8, when:"昨天 03:01", cost:0.61, did:["research","coverage","draft","eval"], stop:"eval",
+    gain:["+12 context","草稿 rev2（62 分）"], same:false },
+  { n:7, when:"前天 03:02", cost:0.02, did:["research"], stop:"没有新东西",
+    gain:[], same:true },
+  { n:6, when:"3 天前 03:01", cost:0.02, did:["research"], stop:"没有新东西", gain:[], same:true },
+  { n:5, when:"4 天前 03:02", cost:0.31, did:["research","coverage"], stop:"闸门A",
+    gain:["+4 context","覆盖度 71%"], same:false },
+  { n:4, when:"5 天前 03:01", cost:0.02, did:["research"], stop:"没有新东西", gain:[], same:true },
+  { n:3, when:"6 天前 03:02", cost:0.02, did:["research"], stop:"没有新东西", gain:[], same:true },
+  { n:2, when:"7 天前 03:01", cost:0.02, did:["research"], stop:"没有新东西", gain:[], same:true },
+  { n:1, when:"8 天前 03:02", cost:1.27, did:["research","coverage","闸门A","draft"], stop:"闸门B",
+    gain:["+37 context","覆盖度 64%","草稿 rev1"], same:false },
+];
+
+/** 每次 run 的细节。点一行才看得到——这一层是第三层。 */
+const DETAIL = {
+  9:{ nodes:[
+      {n:"eval",   inst:2, st:"done", t:"11 分",  in:"rev2", out:"evalreport_2", cost:0.21, note:"78 分 · 还有一处缺出处"},
+      {n:"revise", inst:2, st:"done", t:"26 分",  in:"evalreport_2", out:"rev3", cost:0.38, note:"改了 4 段"},
+      {n:"eval",   inst:3, st:"done", t:"9 分",   in:"rev3", out:"evalreport_3", cost:0.19, note:"78 分 · 没提高，按 guard 停"},
+      {n:"闸门B",  inst:1, st:"等你", t:"—",      in:"rev3", out:"—", cost:0, note:"这篇要不要保留「涌现是假象」那条反方？"}],
+      retries:2, tokens:412_000 },
+  8:{ nodes:[
+      {n:"research",inst:1,st:"done",t:"38 分",in:"6 个源",out:"+12 context",cost:0.14,note:"另有 3 条重复，已合并"},
+      {n:"coverage",inst:1,st:"done",t:"4 分", in:"TOC + 53 context",out:"覆盖度 88%",cost:0.05,note:""},
+      {n:"draft",  inst:1,st:"done",t:"31 分",in:"TOC",out:"rev2",cost:0.29,note:""},
+      {n:"eval",   inst:1,st:"done",t:"10 分",in:"rev2",out:"evalreport_1",cost:0.13,note:"62 分 · 三处没有 provenance"}],
+      retries:0, tokens:298_000 },
+  5:{ nodes:[
+      {n:"research",inst:1,st:"done",t:"22 分",in:"6 个源",out:"+4 context",cost:0.26,note:""},
+      {n:"coverage",inst:1,st:"done",t:"3 分", in:"TOC + 41 context",out:"覆盖度 71%",cost:0.05,note:""},
+      {n:"闸门A",  inst:1,st:"已解", t:"—",   in:"覆盖度报告",out:"通过",cost:0,note:"你在 4 天前 09:12 点了通过"}],
+      retries:0, tokens:150_000 },
+  1:{ nodes:[
+      {n:"research",inst:1,st:"done",t:"2 小时 10 分",in:"6 个源",out:"+37 context",cost:0.91,note:"第一次跑，全量扫"},
+      {n:"coverage",inst:1,st:"done",t:"3 分", in:"TOC + 37 context",out:"覆盖度 64%",cost:0.05,note:""},
+      {n:"闸门A",  inst:1,st:"已解", t:"—",   in:"覆盖度报告",out:"打回",cost:0,note:"你 8 天前点了「材料不够」"},
+      {n:"draft",  inst:1,st:"done",t:"29 分",in:"TOC",out:"rev1",cost:0.31,note:""}],
+      retries:0, tokens:520_000 },
+};
+/** 第二块：产出的结果。**真的东西**，能点开的那种。 */
+const OUT = {
+  9:[{k:"草稿",t:"rev3",sub:"78 分 · 比 rev2 改了 4 段",act:"打开 diff"},
+     {k:"评审",t:"evalreport_3",sub:"3 条 judgement，1 条仍未解决",act:"看报告"},
+     {k:"检查",t:"2 / 3 通过",sub:"第 4 段一处断言没有出处",act:"去补",bad:true}],
+  8:[{k:"context",t:"+12 条",sub:"另有 3 条与已有重复，已合并",act:"看这 12 条"},
+     {k:"草稿",t:"rev2",sub:"62 分 · 首版全文",act:"打开"},
+     {k:"评审",t:"evalreport_1",sub:"三处没有 provenance",act:"看报告"}],
+  5:[{k:"context",t:"+4 条",sub:"",act:"看这 4 条"},
+     {k:"覆盖度",t:"71%",sub:"TOC 有 3 节还没有材料",act:"看报告"}],
+  1:[{k:"context",t:"+37 条",sub:"第一次全量扫",act:"看这 37 条"},
+     {k:"草稿",t:"rev1",sub:"闸门 A 打回后仍生成了草稿",act:"打开"}],
+};
+
+const dull = (n) => ({ nodes:[
+  {n:"research",inst:1,st:"done",t:"1 分",in:"6 个源",out:"没有新材料",cost:0.02,note:"6 个源都没更新，按 guard 停"}],
+  retries:0, tokens:9_000 });
+
+const RUN = {
+  task: "注意力机制这篇",
+  loom: "researched-essay",
+  from: "昨天 22:14", to: "今天 03:02", wall: "4 小时 48 分",
+  cost: { usd: 0.83, tokens: 412_000, calls: 37, retries: 2 },
+  scanned: 6, newContexts: 12, dedup: 3,
+  gate: { at: "n5", name: "闸门 B · 角度对不对", asked: "这篇要不要保留「涌现是假象」那条反方？" },
+  evalRounds: [
+    { round: 1, score: 62, verdict: "revise", why: "三处断言没有 provenance" },
+    { round: 2, score: 78, verdict: "revise", why: "还有一处：KV cache 那段" },
+    { round: 3, score: 78, verdict: "stop", why: "分数没再提高，按 guard 停" },
+  ],
+  checks: [
+    { name: "全部断言有出处", ok: false, detail: "1 处仍缺（第 4 段）" },
+    { name: "无重复主题", ok: true },
+    { name: "引文逐字可回跳", ok: true },
+  ],
+};
+
+/* ============================================================
+   三个变体比的是**中间那一层**：一个 loop project 跑过 N 次，怎么摆。
+   外面两层（项目列表、单次 run 的事后）三个变体共用，因为它们不是这次的问题。
+   ============================================================ */
+
+function Projects(active){
+  return `<div class="projects">` + PROJECTS.map(p=>`
+    <button class="proj ${p.id===active?"on":""}" onclick="openProject('${p.id}')">
+      <span class="grow">
+        <b>${p.name}</b>
+        <span class="faint" style="margin-left:8px">${p.loom} · 跑过 ${p.runs} 次 · ${p.since}</span>
+        <div class="faint" style="margin-top:3px">最近：${p.lastGain}</div>
+      </span>
+      ${p.need? `<span class="pill need">${p.need} 件等你</span>` : `<span class="pill done">不用管</span>`}
+      <span class="cost">$${p.spent.toFixed(2)}</span>
+    </button>`).join("") + `</div>`;
+}
+
+/** 打开的 project 详情页的页头。**列表不在这儿**——它是 Loop 根那一屏。 */
+const head = (sub) => `
+  <div class="head"><h1>注意力机制这篇</h1><span class="faint">${sub}</span></div>
+  <p class="sub">
+    <code>researched-essay</code> · 跑过 9 次 · 6 天前起
+    <span class="pill need" style="margin-left:8px">2 件等你</span>
+    <span class="cost" style="margin-left:8px">累计 $4.10</span>
+  </p>`;
+
+/* ── A：时间线 —— 一行一次，像 CI 的构建列表（Codex 式） ─── */
+function VariantA(){
+  return head("时间线") + `
+  <p class="faint" style="margin:0 0 12px">最新的在上面。</p>
+  <div class="runs">` + RUNS.map(r=>`
+    <div class="run ${r.same?"dim":""}" onclick="showRun(${r.n})">
+      <span class="rn">#${r.n}</span>
+      <span class="rwhen">${r.when}</span>
+      <span class="grow">${r.same
+        ? `<span class="faint">没有新东西</span>`
+        : r.gain.map(g=>`<span class="gain">${g}</span>`).join("")}</span>
+      <span class="rstop ${r.stop.startsWith("闸门")?"need":""}">${r.stop}</span>
+      <span class="cost">$${r.cost.toFixed(2)}</span>
+    </div>`).join("") + `</div>
+  <p class="faint" style="margin-top:14px">
+    9 次里有 <b>5 次什么都没产出</b>——它们仍然各占一行。</p>`;
+}
+
+/* ── B：叠在预设图上 —— 同一张骨架，每次 run 画一条 ────────
+   这一条只有 Loom 的设计成立才做得出来：执行图节点带 node_id 指回预设图，
+   所以九次 run 能对齐到同一排列上。 */
+function VariantB(){
+  const heat = {};
+  RUNS.forEach(r=>r.did.forEach(d=>{heat[d]=(heat[d]||0)+1}));
+  return head("叠在预设图上") + `
+  <p class="faint" style="margin:0 0 14px">
+    每一列是预设图里的一个节点，每一行是一次 run。<b>横着看是一次跑了什么，竖着看是这个节点跑过几次。</b></p>
+  <div class="grid" style="grid-template-columns:repeat(${SKELETON.length+3},auto)">
+    <span class="gh"></span><span class="gh"></span>
+    ${SKELETON.map(n=>`<span class="gh">${n}</span>`).join("")}<span class="gh">$</span>
+    ${RUNS.map(r=>`
+      <span class="gn clickable" onclick="showRun(${r.n})">#${r.n}</span>
+      <span class="gw clickable" onclick="showRun(${r.n})">${r.when.replace(" 03:0"," ")}</span>
+      ${SKELETON.map(n=>{
+        const hit = r.did.filter(d=>d===n).length;
+        return `<span class="cell ${hit?"hit":""} ${r.stop===n?"stopped":""}">${hit>1?hit:hit?"●":""}</span>`;
+      }).join("")}
+      <span class="cost">${r.cost.toFixed(2)}</span>`).join("")}
+    <span class="gn"></span><span class="gw faint">跑过</span>
+    ${SKELETON.map(n=>`<span class="tot">${heat[n]||0}</span>`).join("")}<span></span>
+  </div>
+  <p class="faint" style="margin-top:16px">
+    一眼能看出的两件事：<b>research 每次都跑（9 次），publish 一次都没到过</b>；
+    而 <b>eval 只在有新材料的那几次才转</b>。</p>`;
+}
+
+/* ── C：只显示变化 —— 无聊的 run 默认折叠 ────────────────── */
+function VariantC(){
+  const boring = RUNS.filter(r=>r.same).length;
+  return head("只显示变化") + `
+  <p class="faint" style="margin:0 0 12px">
+    9 次里 <b>${boring} 次什么都没产出</b>，已折起。<b>没有产出的 run 不值得占一行。</b></p>
+  <div class="runs">` +
+    RUNS.filter(r=>!r.same).map(r=>`
+    <div class="run tall" onclick="showRun(${r.n})">
+      <span class="rn">#${r.n}</span>
+      <span class="grow">
+        <div class="row" style="gap:6px">${r.gain.map(g=>`<span class="gain">${g}</span>`).join("")}</div>
+        <div class="faint" style="margin-top:5px">${r.when} · 跑了 ${r.did.join(" → ")} · 停在 ${r.stop}</div>
+      </span>
+      <span class="cost">$${r.cost.toFixed(2)}</span>
+    </div>`).join("") + `
+    <button class="run fold">展开 ${boring} 次没有产出的（共 $${RUNS.filter(r=>r.same).reduce((a,b)=>a+b.cost,0).toFixed(2)}）</button>
+  </div>
+  <p class="faint" style="margin-top:14px">
+    代价：<b>「它昨晚跑了吗」这个问题答不上来</b>——折起来的那些看不见。</p>`;
+}
+
+/* ── D：骨架 + 压缩带 —— B 的竖列统计，C 的不占地方 ────────
+   直接把无聊的 run 折起来会丢两样东西：「它昨晚跑了吗」答不上来，竖列的
+   「跑过几次」也会失真。所以**折叠不是隐藏，是压成一条细带**——
+   带子仍然按骨架对齐，仍然计入统计，只是不占九行。 */
+function VariantD(){
+  const heat = {};
+  RUNS.forEach(r => r.did.forEach(d => { heat[d] = (heat[d] || 0) + 1; }));
+  const rich = RUNS.filter(r => !r.same);
+  const dull = RUNS.filter(r => r.same);
+  const dullCost = dull.reduce((a, b) => a + b.cost, 0);
+
+  /** 一行：骨架上的格子。`band` 是压缩带那一行，用浅色表示「这几次都只跑了它」。 */
+  const cells = (did, stop, band) => SKELETON.map(n => {
+    const hit = did.filter(d => d === n).length;
+    return `<span class="cell ${hit ? (band ? "band" : "hit") : ""} ${stop === n ? "stopped" : ""}">${
+      hit > 1 ? hit : hit ? "●" : ""}</span>`;
+  }).join("");
+
+  return head("骨架 + 压缩带") + `
+  <p class="faint" style="margin:0 0 14px">
+    每一列是预设图里的一个节点。<b>有产出的展开，没产出的压成一条带</b>——
+    带子仍然按骨架对齐、仍然计入下面的统计。</p>
+
+  <div class="grid" style="grid-template-columns:repeat(${SKELETON.length + 3},auto)">
+    <span class="gh"></span><span class="gh"></span>
+    ${SKELETON.map(n => `<span class="gh">${n}</span>`).join("")}<span class="gh">$</span>
+
+    ${RUNS.map((r, i) => {
+      // 连续的无聊 run 只在第一段出现时画一条带，之后跳过。
+      if (r.same) {
+        const first = RUNS.findIndex(x => x.same);
+        if (i !== first) return "";
+        return `
+          <span class="gn faint">×${dull.length}</span>
+          <span class="gw faint">2–7 天前</span>
+          ${cells(["research"], null, true)}
+          <span class="cost faint">${dullCost.toFixed(2)}</span>
+          <span class="bandnote" style="grid-column:1/-1">
+            ${dull.length} 次只跑了 research，没有新材料就停了——每次约两分钱。
+            <button class="btn" style="padding:1px 8px;margin-left:6px">逐次展开</button>
+          </span>`;
+      }
+      return `
+        <span class="gn clickable" onclick="showRun(${r.n})">#${r.n}</span>
+        <span class="gw clickable" onclick="showRun(${r.n})">${r.when.replace(" 03:0", " ")}</span>
+        ${cells(r.did, r.stop, false)}
+        <span class="cost">${r.cost.toFixed(2)}</span>
+        <span class="gain-row" style="grid-column:1/-1">
+          ${r.gain.map(g => `<span class="gain">${g}</span>`).join("")}
+          <span class="faint">停在 ${r.stop}</span>
+        </span>`;
+    }).join("")}
+
+    <span class="gn"></span><span class="gw faint">跑过</span>
+    ${SKELETON.map(n => `<span class="tot">${heat[n] || 0}</span>`).join("")}<span></span>
+  </div>
+
+  <p class="faint" style="margin-top:16px">
+    统计把压缩带也算进去了，所以那两件事仍然看得见：
+    <b>research 9 次全跑，publish 一次没到过</b>。
+    而「昨晚跑了吗」也还答得上——带子就在那儿。</p>`;
+}
+
+const VARIANTS = [
+  ["A", "时间线 · 一行一次（Codex 式）", VariantA],
+  ["B", "叠在预设图上 · 横看一次，竖看一个节点", VariantB],
+  ["C", "只显示变化 · 无聊的折起来", VariantC],
+  ["D", "骨架 + 压缩带 · B 的统计，C 的密度", VariantD],
+];
+
+/** Loop 这个根的那一屏：**只有项目列表**，别的都没有。 */
+function RootScreen(){
+  return `
+  <div class="head"><h1>Loop</h1></div>
+  <p class="sub">三个项目 · <b>3 件事等你</b>　<span class="faint">点一个打开，它会进到左边的案头</span></p>
+  ${Projects(null)}`;
+}
+
+const opened  = () => new URLSearchParams(location.search).get("open");
+const openRun = () => new URLSearchParams(location.search).get("run");
+
+/** 第三层：某一次 run 的细节。**这是「点一行进去」看到的东西**。 */
+function RunScreen(n){
+  const r = RUNS.find(x => x.n === Number(n));
+  const d = DETAIL[n] || dull(n);
+  const outs = OUT[n] || [];
+  const ran = {};
+  d.nodes.forEach(x => { ran[x.n] = (ran[x.n] || 0) + 1; });
+
+  /** ① 执行图：预设图的全部节点都画，**这次没跑的是虚线**。 */
+  const graph = SKELETON.map(node => {
+    const times = ran[node] || 0;
+    const cls = r.stop === node ? "here" : times ? "ran" : "skip";
+    return `<span class="node ${cls}">${node}${times > 1 ? `<b class="x">×${times}</b>` : ""}</span>`;
+  }).join('<span class="arrow">→</span>');
+
+  const loops = d.nodes.filter(x => x.inst > 1).length;
+
+  return `
+  <button class="btn" style="margin-bottom:16px" onclick="backToRuns()">← 回到 9 次列表</button>
+  <div class="head"><h1>第 ${r.n} 次</h1><span class="faint">${r.when}</span></div>
+  <p class="sub">
+    停在 <b>${r.stop}</b>
+    <span class="cost" style="margin-left:8px">$${r.cost.toFixed(2)} · ${(d.tokens/1000).toFixed(0)}k token</span>
+    ${d.retries ? `<span class="pill fail" style="margin-left:8px">${d.retries} 次重试，可能重复计费</span>` : ""}
+  </p>
+
+  <h3 class="sect">执行图</h3>
+  <p class="faint" style="margin:0 0 10px">虚线是预设里有、这次没跑的。</p>
+  <div class="track">${graph}</div>
+  ${loops ? `<p class="faint" style="margin-top:8px">
+      <b>eval ⇄ revise</b> 回边转了 ${Math.ceil(loops / 1)} 次——分数没再提高，按 guard 停。</p>` : ""}
+
+  <details class="steps-fold">
+    <summary>逐步细节（${d.nodes.length} 步）</summary>
+    <table class="steps">
+      <thead><tr><th>节点</th><th>状态</th><th>用时</th><th>吃进去</th><th>吐出来</th><th>花费</th></tr></thead>
+      <tbody>${d.nodes.map(x => `
+        <tr class="${x.st === "等你" ? "waiting" : ""}">
+          <td><b>${x.n}</b>${x.inst > 1 ? `<span class="faint"> #${x.inst}</span>` : ""}</td>
+          <td>${x.st === "done" ? `<span class="pill done">完成</span>`
+               : x.st === "等你" ? `<span class="pill need">等你</span>`
+               : `<span class="pill info">${x.st}</span>`}</td>
+          <td class="faint">${x.t}</td><td class="faint">${x.in}</td>
+          <td>${x.out === "—" ? `<span class="faint">—</span>` : `<span class="gain">${x.out}</span>`}</td>
+          <td class="cost">${x.cost ? "$" + x.cost.toFixed(2) : "—"}</td>
+        </tr>
+        ${x.note ? `<tr class="noterow"><td></td><td colspan="5" class="faint">${x.note}</td></tr>` : ""}
+      `).join("")}</tbody>
+    </table>
+  </details>
+
+  <h3 class="sect">产出</h3>
+  ${outs.length ? `<div class="outs">${outs.map(o => `
+    <div class="out ${o.bad ? "bad" : ""}">
+      <span class="okind">${o.k}</span>
+      <span class="grow"><b>${o.t}</b>${o.sub ? `<div class="faint" style="margin-top:3px">${o.sub}</div>` : ""}</span>
+      <button class="btn">${o.act}</button>
+    </div>`).join("")}</div>`
+   : `<p class="muted">这一次没有产物——6 个源都没更新，research 跑了 1 分钟就停了。</p>`}
+
+  ${r.stop.startsWith("闸门") ? `
+    <div class="gatebox">
+      <b>${r.stop} 还等着你</b>
+      <div class="muted" style="margin:6px 0 10px">${d.nodes.find(x => x.st === "等你")?.note ?? ""}</div>
+      <div class="row"><button class="btn primary">保留</button><button class="btn">去掉</button></div>
+    </div>` : ""}
+
+  <button class="chatfab" title="问这一次" onclick="toggleChat()">💬</button>
+  <aside class="chatpanel" id="chatpanel">
+    <div class="chead">
+      <b class="grow">问第 ${r.n} 次</b>
+      <button class="btn" onclick="toggleChat()">✕</button>
+    </div>
+
+    <!-- **把材料摆出来。** 不摆的话，问「为什么第三轮没提高」它没有依据时会编一个
+         像样的理由，而读者分辨不出来——那比答不上来糟糕得多。 -->
+    <div class="sees">
+      <span class="faint">它能看见：</span>
+      <span class="seetag">这次的执行记录（${d.nodes.length} 步）</span>
+      <span class="seetag">${outs.length} 件产物</span>
+      <span class="seetag">前 8 次的记录</span>
+      <span class="seetag off">✕ 知识库全文</span>
+      <span class="seetag off">✕ 稿子正文</span>
+    </div>
+
+    <div class="chatlog">
+      <div class="ask">为什么第三轮没提高？</div>
+      <div class="say">
+        第 3 轮 eval 给了 78 分，和第 2 轮一样。报告里三条 judgement 有两条已解决，
+        剩下一条是<b>第 4 段那处缺出处的断言</b>——revise 改了 4 段但没碰它。
+        <div class="faint" style="margin-top:8px">
+          依据：<code>evalreport_2</code> → <code>evalreport_3</code> 的 diff，以及 revise #2 的 out。
+        </div>
+      </div>
+      <div class="asks">
+        <button class="btn">那条断言在哪一段？</button>
+        <button class="btn">这 12 条 context 从哪几个源来的？</button>
+        <button class="btn">为什么 checks 没过？</button>
+      </div>
+    </div>
+
+    <div class="cbox"><input placeholder="问这一次…"><button class="btn primary">问</button></div>
+  </aside>`;
+}
+
+function toggleChat(){
+  document.getElementById("chatpanel").classList.toggle("open");
+}
+
+function showRun(n){
+  const u = new URLSearchParams(location.search); u.set("run", n);
+  history.replaceState(null, "", `?${u}`); render();
+}
+function backToRuns(){
+  const u = new URLSearchParams(location.search); u.delete("run");
+  history.replaceState(null, "", `?${u}`); render();
+}
+
+function Rail(){
+  const open = opened();
+  return `
+    <div class="roots">
+      <button class="root" onclick="close()">Book</button>
+      <button class="root">Context</button>
+      <button class="root">Writer</button>
+      <button class="root ${open?"":"on"}" onclick="closeProject()">Loop</button>
+    </div>
+    <div class="desk">
+      <p class="desk-label">打开的</p>
+      <div class="desk-item">📕 分布式系统概念与设计</div>
+      <div class="desk-item">✍️ KV cache 那篇草稿</div>
+      ${open ? `<div class="desk-item on">🔁 ${PROJECTS.find(p=>p.id===open).name}
+        <span style="margin-left:auto;color:var(--faint)">✕</span></div>` : ""}
+    </div>`;
+}
+
+function openProject(id){
+  const u = new URLSearchParams(location.search); u.set("open", id);
+  history.replaceState(null,"",`?${u}`); render();
+}
+function closeProject(){
+  const u = new URLSearchParams(location.search); u.delete("open");
+  history.replaceState(null,"",`?${u}`); render();
+}
+
+function current(){
+  const key = new URLSearchParams(location.search).get("variant") || "A";
+  const i = VARIANTS.findIndex(v => v[0] === key.toUpperCase());
+  return i === -1 ? 0 : i;
+}
+function render(){
+  const [key, name, fn] = VARIANTS[current()];
+  document.getElementById("rail").innerHTML = Rail();
+  // 没打开任何 project 时，Loop 根那一屏**只有列表**——变体切换在那儿没有意义，
+  // 因为要比的是详情页怎么组织。
+  document.getElementById("main").innerHTML =
+    !opened()  ? RootScreen()        // 第一层：项目列表
+    : openRun() ? RunScreen(openRun())  // 第三层：某一次 run 的细节
+    : fn();                          // 第二层：跑过几次（四个变体比的就是这层）
+  document.getElementById("label").textContent =
+    !opened() ? "先点一个项目" : openRun() ? "第三层 · 变体在上一层" : `${key} — ${name}`;
+}
+function go(step){
+  const next = VARIANTS[(current() + step + VARIANTS.length) % VARIANTS.length][0];
+  history.replaceState(null, "", `?variant=${next}`);
+  render();
+}
+document.getElementById("prev").onclick = () => go(-1);
+document.getElementById("next").onclick = () => go(1);
+addEventListener("keydown", e => {
+  const t = e.target;
+  if (t instanceof HTMLElement && /INPUT|TEXTAREA/.test(t.tagName)) return;
+  if (e.key === "ArrowLeft") go(-1);
+  if (e.key === "ArrowRight") go(1);
+});
+render();
+</script>
+</body>
+</html>

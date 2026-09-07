@@ -230,4 +230,135 @@ describe("ModelClient adapter — 错误映射", () => {
     expect(error).toBeInstanceOf(ModelError);
     expect((error as ModelError).kind).toBe("malformed-stream");
   });
+
+  describe("system 消息（ADR-0009 的契约里有它）", () => {
+    it("**system 消息要原样发到线上**——SDK 7 默认拒收它，得显式放行", async () => {
+      const { calls, fetchImpl } = recordingFetch(() => completionResponse("好"));
+
+      await createModelClient({ ...CONFIG, fetch: fetchImpl }).complete({
+        messages: [
+          { role: "system", content: "你是写作搭子" },
+          { role: "user", content: "这段怎么改" },
+        ],
+      });
+
+      expect((calls[0].body as { messages: unknown[] }).messages).toEqual([
+        { role: "system", content: "你是写作搭子" },
+        { role: "user", content: "这段怎么改" },
+      ]);
+    });
+
+    it("多条 system **保持原来的顺序**——交错时位置就是语义", async () => {
+      const { calls, fetchImpl } = recordingFetch(() => streamResponse(["嗯"]));
+      const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+      let text = "";
+      for await (const chunk of client.streamComplete({
+        messages: [
+          { role: "system", content: "规矩" },
+          { role: "system", content: "材料" },
+          { role: "user", content: "问" },
+        ],
+      })) {
+        text += chunk.textDelta;
+      }
+
+      expect(text).toBe("嗯");
+      expect((calls[0].body as { messages: { content: string }[] }).messages.map((one) => one.content)).toEqual([
+        "规矩",
+        "材料",
+        "问",
+      ]);
+    });
+  });
+});
+
+/**
+ * 重试就是重新计费。
+ *
+ * Anthropic 的 Messages API **没有 idempotency key**（OpenAI 的 `Idempotency-Key`
+ * 那套它没有对应物），所以「同一个请求发两次」在计费上就是两次。而 SDK 默认
+ * `maxRetries: 2`——一次失败最多发三次。
+ *
+ * 更要命的是 5xx 和超时这两类：请求**可能已经被完整处理并计费了**，我们只是没拿到
+ * 响应。这时重试是在已经付过的钱上再付一次，而且两边都不知道。
+ */
+describe("重试与计费", () => {
+  it("**上游 5xx 不重试**——那次调用可能已经跑完并计过费了，我们只是没拿到响应", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => new Response("upstream boom", { status: 502 }));
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+    await expect(client.complete({ messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(
+      ModelError,
+    );
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it("流式的那条路一样不重试", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => new Response("upstream boom", { status: 502 }));
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl });
+
+    await expect(async () => {
+      // 把流抽干：要的是「抽干这件事」本身，不是每一片的内容。
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 循环变量用不上，抽干才是目的
+      for await (const _ of client.streamComplete({ messages: [{ role: "user", content: "hi" }] }));
+    }).rejects.toThrow(ModelError);
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it("**429 重试**——限流是上游明确回话说「我没做」，那一次不可能计过费", async () => {
+    let n = 0;
+    const { calls, fetchImpl } = recordingFetch(() =>
+      ++n === 1 ? new Response("slow down", { status: 429 }) : completionResponse("好的"),
+    );
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl, sleep: async () => {} });
+
+    const answer = await client.complete({ messages: [{ role: "user", content: "hi" }] });
+
+    expect(answer.text).toBe("好的");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("一直 429 也不会无限重试", async () => {
+    const { calls, fetchImpl } = recordingFetch(() => new Response("slow down", { status: 429 }));
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl, sleep: async () => {} });
+
+    await expect(client.complete({ messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(
+      ModelError,
+    );
+
+    expect(calls).toHaveLength(3);
+  });
+
+  it("流还没吐出第一个字之前的 429，也重试", async () => {
+    let n = 0;
+    const { calls, fetchImpl } = recordingFetch(() =>
+      ++n === 1 ? new Response("slow down", { status: 429 }) : streamResponse(["好", "的"]),
+    );
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl, sleep: async () => {} });
+
+    const out: string[] = [];
+    for await (const chunk of client.streamComplete({ messages: [{ role: "user", content: "hi" }] })) {
+      out.push(chunk.textDelta);
+    }
+
+    expect(out.join("")).toBe("好的");
+    expect(calls).toHaveLength(2);
+  });
+
+  it("**退避要越等越久**——限流时立刻重来，只是把同一堵墙再撞一次", async () => {
+    const waits: number[] = [];
+    const { fetchImpl } = recordingFetch(() => new Response("slow down", { status: 429 }));
+    const client = createModelClient({
+      ...CONFIG,
+      fetch: fetchImpl,
+      sleep: async (ms) => void waits.push(ms),
+    });
+
+    await expect(client.complete({ messages: [{ role: "user", content: "hi" }] })).rejects.toThrow();
+
+    expect(waits).toEqual([1000, 2000]);
+  });
 });

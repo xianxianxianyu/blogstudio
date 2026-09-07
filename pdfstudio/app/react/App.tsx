@@ -13,6 +13,13 @@ import type { Progress } from "../../src/app/progress";
 import type { PdfHost } from "./pdf-host";
 import { ShelfPage } from "./ShelfPage";
 import { ContextStudioPage } from "./ContextStudioPage";
+import type { DeskKind } from "../../src/app/desk";
+import { LoopsPage } from "./LoopsPage";
+import { LoopPage } from "./LoopPage";
+import { PublishPage } from "./PublishPage";
+import type { LoopReader } from "../http-loops";
+import type { Publishing } from "../http-publish";
+import type { BlogClient } from "../http-blog";
 import { PageView, type Busy } from "./PageView";
 import { ClipsPane } from "./ClipsPane";
 import { readOutline } from "./outline";
@@ -30,9 +37,15 @@ import {
   rememberOnDesk,
   type Active,
   type DeskItem,
-} from "../../src/app/desk";
+
+  openLoopOnDesk,} from "../../src/app/desk";
 import { Shell } from "./Shell";
+import { useRemembered } from "./remember";
 import { WebPane } from "./WebPane";
+import { allows } from "../../src/web/allow";
+import { pageIdOf } from "../../src/web/page-id";
+import { openPageOnDesk } from "../../src/app/desk";
+import type { SiteStore } from "../http-sites";
 import type { ModelClient } from "../../src/model/model-client";
 import { errorChain } from "../../src/app/error-chain";
 import { ChatPanel } from "./ChatPanel";
@@ -59,6 +72,34 @@ import type { Context } from "../../../contextstudio/src/context";
  * 组件仍然只是 `ws.state` 的投影：**规则、顺序、落盘都不在这里**（ADR-0013）。
  * 这次重排一行应用层代码都没动，那正是当初抽 Workspace 的回报。
  */
+/**
+ * 案头上每一种条目的名字。加一种 `DeskKind` 就得在这儿写一行，漏了是 TS 报错。
+ *
+ * 书和稿子要去各自的架子上查（名字会改，也会被删）；网页和 loop 项目的名字就在
+ * 条目自己身上，查无可查。
+ */
+type Shelves = {
+  docs: { id: string; title: string }[];
+  writing: { openId: string | null; title: string; drafts: { id: string; title: string }[] };
+};
+
+const TITLE_OF: {
+  [K in DeskKind]: (item: Extract<DeskItem, { kind: K }>, at: Shelves) => string;
+} = {
+  doc: (item, at) => at.docs.find((one) => one.id === item.id)?.title ?? "（这本书没了）",
+  // 正开着的那篇用它的实时名字：改了标题，案头那一行要跟着变。
+  draft: (item, at) =>
+    (at.writing.openId === item.id
+      ? at.writing.title
+      : at.writing.drafts.find((one) => one.id === item.id)?.title) ?? "（这篇稿子没了）",
+  // 网页和 loop 项目的名字就在条目自己身上，架子上查无可查。
+  page: (item) => (item.title !== "" ? item.title : item.url),
+  loop: (item) => item.id,
+};
+
+const titleOf = (item: DeskItem, at: Shelves): string =>
+  (TITLE_OF[item.kind] as (item: DeskItem, at: Shelves) => string)(item, at);
+
 export function App({
   ws,
   host,
@@ -67,7 +108,11 @@ export function App({
   progress,
   tocModel,
   localTocOcr,
+  siteStore,
   contextStudio,
+  loops,
+  publishing,
+  blog,
   writer,
   talk,
   contexts,
@@ -79,10 +124,16 @@ export function App({
   progress: Progress;
   /** 知识库。与书架并列的第二个顶层页面，见 `ContextStudioPage`。 */
   contextStudio: ComponentProps<typeof ContextStudioPage>["studio"];
+  /** Loop 项目，只读。建项目靠往 `loops/` 里放一份 `loop.md`。 */
+  loops: LoopReader;
+  publishing: Publishing;
+  blog: BlogClient;
   /** 认扫描版目录页用的模型。现建而不是钉死一个——改完设置要立刻生效。 */
   tocModel: () => ModelClient;
   /** 本地 OCR，扫描版目录优先走它（云端对这个任务实测不可靠）。没有就返回 null。 */
   localTocOcr: () => Promise<ModelClient | null>;
+  /** 允许在应用内加载的站点。**注入而不是自己去取**：App 不该知道本机 API 的地址。 */
+  siteStore: SiteStore;
   /** 写这一侧的应用层：稿子架、正在写的那一篇、什么时候落盘（ADR-0004）。 */
   writer: Writer;
   /** 写的时候右边那栏的对话状态。与 `conversation`（问文档）各管各的一场。 */
@@ -121,6 +172,26 @@ export function App({
   const [settingsPage, setSettingsPage] = useState<SettingsPageId>("model");
   const [selected, setSelected] = useState<string | null>(null);
   const [pane, setPane] = useState<"clips" | "chat">("clips");
+  /**
+   * 右栏开着没有。**默认开着**——摘录是这一页的主要产物，默认藏起来等于让读者
+   * 第一次进来就得先找到它。收起来这件事得是读者自己说的。
+   */
+  const [sideOpen, toggleSide, setSideOpen] = useRemembered("side-open", true);
+
+  /**
+   * 切到右栏的哪一栏，**并且保证右栏是开着的**。
+   *
+   * 四处「划完就切到摘录」原来直接调 `setPane`。右栏能收起来之后，它们在收起状态下
+   * 全都变成了空动作：框完一个摘录，屏幕上什么都不发生，而摘录其实已经存下了。
+   * 收起来说的是「现在不用」，**框一个摘录恰恰是在说现在要用**——所以这里是打开，
+   * 不是不管。
+   *
+   * 「打开一本书时恢复上次那一栏」不走这里：那是恢复状态，不是一个动作的结果。
+   */
+  const showPane = (which: "clips" | "chat") => {
+    setPane(which);
+    setSideOpen(true);
+  };
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   /**
@@ -230,6 +301,46 @@ export function App({
   }, [stage, pageWidth]);
 
   /** 选区在视口坐标里的矩形。工具条绕开它找空位，不是盖在上面。 */
+  /**
+   * 打开一个网页。
+   *
+   * **地址不在白名单时不直接拒绝，也不直接放行**——问一次。直接拒绝的话读者要先去
+   * 设置里加一条再回来，而他此刻手里就有那个地址；直接放行则等于没有白名单，而
+   * Electron 里 Safe Browsing 和 Certificate Transparency 都是关的（ADR 里那条）。
+   *
+   * 加的是**站点**（协议 + 主机），不是这一个地址——读者要的是「这个站我信」，
+   * 而不是一页一页地授权。
+   */
+  const openUrl = async (raw: string) => {
+    // 没写协议就补 `https://`。**这一半没有歧义，所以自动做**；而「要不要补 www」
+    // 有歧义，不在这儿猜——实测跳转两个方向都有（baidu 裸域→www，github www→裸域，
+    // news.ycombinator.com 根本没有 www），所以那件事放到白名单里解决：
+    // `X` 与 `www.X` 算同一个站（`web/allow.ts`）。
+    const url = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    let sites = await siteStore.load();
+
+    if (!allows(sites, url)) {
+      const origin = (() => {
+        try {
+          return new URL(url).origin;
+        } catch {
+          return null;
+        }
+      })();
+      if (origin === null) {
+        setError(`这不像一个网址：${raw}`);
+        return;
+      }
+      if (!window.confirm(`${origin} 还不在允许的站点里。加进去并打开？`)) return;
+      sites = [...sites, origin];
+      await siteStore.save(sites);
+    }
+
+    // 身份用归一化过的 pageId，地址用原样的——同一篇文章从不同渠道点进来不该开两次。
+    setDesk((was) => openPageOnDesk(was, pageIdOf(url), url, ""));
+    setActive({ kind: "page", id: pageIdOf(url) });
+  };
+
   const [menuAt, setMenuAt] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   /** 页面上右键的位置与当时选中的文字。加书签用（`PageMenu`）。 */
   const [context, setContext] = useState<{ x: number; y: number; selection: string } | null>(null);
@@ -368,14 +479,14 @@ export function App({
           setActive({ kind });
         }}
         desk={desk}
-        titleOf={(item) =>
-          item.kind === "doc"
-            ? (state.docs.find((one) => one.id === item.id)?.title ?? "（这本书没了）")
-            : // 正开着的那篇用它的实时名字：改了标题，案头那一行要跟着变。
-              (writing.openId === item.id
-                ? writing.title
-                : writing.drafts.find((one) => one.id === item.id)?.title) ?? "（这篇稿子没了）"
-        }
+        /**
+         * 案头那一行显示什么名字。
+         *
+         * **用查表不用三元表达式。** 原来是 `kind === "doc" ? 书名 : 稿子名`，于是
+         * 打开的网页显示的是「（这篇稿子没了）」——不报错，只是说了句瞎话。图标那一栏
+         * 犯过同一个错，`rootOf` 也是。表的形状逼着每加一种都写一行。
+         */
+        titleOf={(item) => titleOf(item, { docs: state.docs, writing })}
         onPick={(item) => {
           // 已经开着的那一项点了就是「回到它」，不重开——重开要再读一遍 PDF / 换一场对话。
           if (item.kind === "doc" && item.id === state.docId) {
@@ -384,6 +495,11 @@ export function App({
           }
           if (item.kind === "draft" && item.id === writing.openId) {
             setActive({ kind: "draft", id: item.id });
+            return;
+          }
+          // Loop 项目点开就是点开：没有要加载的领域状态，页面自己去读。
+          if (item.kind === "loop") {
+            setActive({ kind: "loop", id: item.id });
             return;
           }
           leave();
@@ -423,7 +539,7 @@ export function App({
             // 重新生成要把读者送回阅读页——向导住在右栏，看得见左边的 PDF 才能选页。
             onGenerate: () => {
               setActive(closeSettings(active));
-              setPane("clips");
+              showPane("clips");
               setTocOpen(true);
             },
             onShift: (delta) => void ws.saveOutline(shiftSections(sections, delta)),
@@ -437,30 +553,50 @@ export function App({
           url={desk.find((one) => one.kind === "page" && one.id === active.id)?.kind === "page"
             ? (desk.find((one) => one.kind === "page" && one.id === active.id) as { url: string }).url
             : active.id}
-          onBlocked={() => undefined}
+          onAllow={async (origin) => {
+            const sites = await siteStore.load();
+            if (!sites.includes(origin)) await siteStore.save([...sites, origin]);
+          }}
         />
       ) : active.kind === "context" ? (
         // Context Studio 与书架**并列**，不在某本书里面：一条 context 可以来自任何一本书
         // （`CONTEXT-MAP.md`）。挂在阅读页里的话，层级又反了一次。
         <ContextStudioPage studio={contextStudio} onBack={() => setActive({ kind: "shelf" })} />
+      ) : active.kind === "loops" ? (
+        // Loop 那一列。**它与 Writer 并列**：写是你持笔，Loop 是没人持笔
+        // （`docs/workflow.md` §1.3），不是写的一个子功能。
+        <LoopsPage
+          reader={loops}
+          onOpen={(project) => {
+            setDesk(openLoopOnDesk(desk, project));
+            setActive({ kind: "loop", id: project });
+          }}
+        />
+      ) : active.kind === "loop" ? (
+        <LoopPage project={active.id} reader={loops} />
+      ) : active.kind === "publish" ? (
+        // 发布。**与 Writer 并列，不是它的一个按钮**：写是让稿子成型，发是让它离开
+        // 这台机器——后者要看的是「哪几篇发过、发到哪、那边现在是什么」，那是一整列。
+        <PublishPage blog={blog} publishing={publishing} />
       ) : active.kind === "writer" ? (
         // 稿子架：Writer 这一侧的根，与书架同一层（ADR-0004）。
-        <WriterPage writer={writer} onOpen={(id) => void openDraft(id)} />
+        <WriterPage writer={writer} blog={blog} onOpen={(id) => void openDraft(id)} />
       ) : isWriting(active, writing.openId) ? (
         <DraftPage
           writer={writer}
           talk={talk}
           progress={progress}
           contexts={contexts}
+          onUploadImage={(file) => blog.uploadImage(file)}
           onBack={() => {
             leave();
             setActive({ kind: "writer" });
           }}
         />
       ) : !isReading(active, state.docId) || state.docId === null ? (
-        <ShelfPage ws={ws} state={state} onOpen={openDoc} />
+        <ShelfPage ws={ws} state={state} onOpen={openDoc} onOpenUrl={(url) => void openUrl(url)} />
       ) : (
-        <div className="book">
+        <div className="book-view">
           <div className="topbar">
             <button className="btn" onClick={() => {
               leave();
@@ -499,6 +635,23 @@ export function App({
               <button className="btn" title="放大" onClick={() => zoom(1)}>
                 +
               </button>
+              {/* 右栏的把手。**跟左栏那个把手同一条规矩**：收起前后在同一个位置——
+                  把手跟着状态跑的话，收起来之后得先找到它才能展开。方向记号也统一，
+                  `«` 往左折、`»` 往右折。
+
+                  **右栏是整条收掉，不是收成图标。** 左栏收成图标还成立，因为它是一列
+                  去处，每一项收完还点得到；右栏装的是内容（摘录、对话），收成一条
+                  56px 的图标带只会留下两个「把我展开」按钮——代价留着，好处没有。
+                  而收它的唯一理由就是把宽度还给 PDF。 */}
+              <button
+                className="btn"
+                title={sideOpen ? "收起右栏，把宽度让给页面" : "展开右栏"}
+                aria-label={sideOpen ? "收起右栏" : "展开右栏"}
+                aria-expanded={sideOpen}
+                onClick={toggleSide}
+              >
+                {sideOpen ? "»" : "«"}
+              </button>
             </div>
           </div>
 
@@ -520,7 +673,7 @@ export function App({
                   setMenuAt(at ?? null);
                   if (id !== null) {
                     // 划完就展开摘录那栏：读者的下一个动作是看译文，不该还要自己切。
-                    setPane("clips");
+                    showPane("clips");
                     // 看过一次就重新计时（ADR-0012）。代价是读操作也要写盘。
                     void ws.viewClip(id);
                   }
@@ -540,7 +693,7 @@ export function App({
                     onAddBookmark={(title) => {
                       void ws.saveOutline(bookmark(sections, page, title));
                       // 切到摘录栏：刚加的那条要么已经有名字、要么是空的等着起名。
-                      setPane("clips");
+                      showPane("clips");
                     }}
                   />
                 )}
@@ -565,13 +718,14 @@ export function App({
                         note: clip.note ?? undefined,
                       });
                       setMenuAt(null);
-                      setPane("chat");
+                      showPane("chat");
                     }}
                   />
                 )}
               </PageView>
             </div>
 
+            {sideOpen && (
             <div className="side">
               <div className="seg">
                 <button className={pane === "clips" ? "on" : undefined} onClick={() => setPane("clips")}>
@@ -624,6 +778,7 @@ export function App({
                 <ChatPanel conversation={conversation} progress={progress} onJump={setPage} />
               )}
             </div>
+            )}
           </div>
         </div>
       )}

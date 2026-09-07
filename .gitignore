@@ -13,11 +13,6 @@ node_modules/
 # testing
 /coverage
 
-# next.js
-/.next/
-/.vinext/
-/out/
-
 # typescript
 *.tsbuildinfo
 
@@ -34,16 +29,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
-# vercel
-.vercel
-
 /dist/
-/.wrangler/
 /outputs/
 /work/
 
 # local issue tracker (see docs/agents/issue-tracker.md)
-/.scratch/
+.scratch/
 
 # real model credentials (ADR-0005: key never enters source or build output)
 /pdfstudio/config.json

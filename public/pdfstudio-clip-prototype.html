@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PDF Studio · 摘录状态机原型</title>
+<meta name="description" content="摘录（Clip）生命周期状态机逻辑原型：框选→识别中→待编辑→已入库。">
+<style>
+:root {
+  color-scheme: light dark;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-serif: "Songti SC", "Source Han Serif SC", Georgia, "Times New Roman", serif;
+
+  --bg: #fbfbfc;
+  --card: #ffffff;
+  --sunken: #f2f3f5;
+  --border: #e3e5e8;
+  --border-strong: #cdd0d5;
+  --text: #16181c;
+  --dim: #5c6370;
+  --faint: #8b919b;
+
+  --accent: #2f6feb;
+  --accent-hover: #2860d3;
+  --accent-bg: #eaf1fe;
+  --accent-border: #b9d0fb;
+
+  --danger: #ce3a3a;
+  --danger-bg: #fdeded;
+  --danger-border: #f5c2c2;
+
+  --warn: #a37a08;
+  --warn-bg: #fcf6e0;
+  --warn-border: #ecd9a0;
+
+  --ok: #1a7f45;
+  --ok-bg: #e7f6ec;
+  --ok-border: #b4e0c4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1114; --card: #16191d; --sunken: #1b1f24; --border: #272c33; --border-strong: #383f48;
+    --text: #e6e9ed; --dim: #9aa2ad; --faint: #6c757f;
+    --accent: #5b93f5; --accent-hover: #74a4f7; --accent-bg: #16233c; --accent-border: #2c4573;
+    --danger: #e56b6b; --danger-bg: #2a1618; --danger-border: #4d2529;
+    --warn: #d3aa3f; --warn-bg: #262013; --warn-border: #4d3b1d;
+    --ok: #47b877; --ok-bg: #12241a; --ok-border: #24462f;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-sans); color: var(--text); background: var(--bg); line-height: 1.55; font-size: 15px; }
+.wrap { max-width: 980px; margin: 0 auto; padding: 36px 24px 120px; }
+.kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; color: var(--faint); margin: 0 0 8px; }
+h1 { font-size: 26px; margin: 0 0 14px; letter-spacing: -.01em; }
+h2 { font-size: 18px; margin: 40px 0 12px; }
+h3 { font-size: 15px; margin: 0 0 8px; }
+.question { font-size: 16px; color: var(--dim); background: var(--sunken); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 16px; margin: 0; }
+.question b { color: var(--text); }
+
+.open-cases { background: var(--warn-bg); border: 1px solid var(--warn-border); border-radius: 10px; padding: 16px 18px; }
+.open-cases h2 { margin: 0 0 10px; color: var(--warn); font-size: 16px; }
+.open-cases ol { margin: 0 0 8px; padding-left: 20px; }
+.open-cases li { margin: 6px 0; }
+.open-cases .note { margin: 8px 0 0; font-size: 13px; color: var(--dim); }
+
+.legend { font-size: 13px; color: var(--dim); margin: 6px 0 0; }
+
+table { border-collapse: collapse; width: 100%; font-size: 13px; margin-top: 6px; }
+th, td { border: 1px solid var(--border); padding: 6px 8px; text-align: center; }
+th { background: var(--sunken); font-weight: 600; }
+td:first-child, th:first-child { text-align: left; }
+td.yes { color: var(--ok); }
+td.no { color: var(--danger); }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin: 12px 0; }
+.clip.card { cursor: pointer; }
+.clip.card:hover { border-color: var(--border-strong); }
+.clip.card.selected, .ctx.card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.card-head .muted { font-size: 13px; }
+
+.fields { margin: 0; }
+.fields .f { display: grid; grid-template-columns: 150px 1fr; gap: 4px 16px; padding: 5px 0; border-top: 1px solid var(--border); }
+.fields .f:first-child { border-top: none; }
+.fields dt { color: var(--faint); font-size: 13px; }
+.fields dd { margin: 0; }
+.fields .f.changed dt { color: var(--accent); font-weight: 600; }
+.fields .f.changed dd { background: var(--accent-bg); border-radius: 4px; padding: 0 6px; margin: 0 -6px; }
+
+.chip { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--sunken); color: var(--dim); }
+.chip-capturing { background: var(--sunken); color: var(--dim); border-color: var(--border-strong); }
+.chip-recognizing { background: var(--warn-bg); color: var(--warn); border-color: var(--warn-border); }
+.chip-ready { background: var(--accent-bg); color: var(--accent); border-color: var(--accent-border); }
+.chip-promoted { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-border); }
+.chip-danger { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); }
+
+.serif { font-family: var(--font-serif); }
+.muted { color: var(--faint); }
+.empty { color: var(--faint); }
+
+.last { border-radius: 10px; padding: 12px 14px; margin: 12px 0; border: 1px solid var(--border); background: var(--card); }
+.last.ok { border-left: 4px solid var(--accent); }
+.last.blocked { border-left: 4px solid var(--danger); background: var(--danger-bg); }
+.last.warn { border-left: 4px solid var(--warn); background: var(--warn-bg); }
+.last-action { font-weight: 600; margin-right: 8px; }
+.last-blocked { color: var(--danger); font-weight: 600; }
+.last-msg { margin: 6px 0 0; color: var(--dim); }
+.changed-tags { display: inline-block; margin-left: 8px; font-size: 12px; color: var(--accent); }
+
+button { font-family: inherit; font-size: 14px; padding: 7px 12px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text); cursor: pointer; }
+button:hover { background: var(--sunken); }
+button:disabled { opacity: .45; cursor: default; }
+button:disabled:hover { background: var(--card); }
+.chip-btn { border-radius: 999px; }
+.chip-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.start { background: var(--accent); border-color: var(--accent); color: #fff; margin-bottom: 12px; }
+.start:hover { background: var(--accent-hover); }
+
+.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 12px 0; border-top: 1px solid var(--border); }
+.group-label { font-size: 13px; color: var(--faint); min-width: 96px; }
+.group.edits { flex-direction: column; align-items: stretch; gap: 8px; }
+.group.edits .edit-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.group.edits label { min-width: 150px; font-size: 13px; color: var(--dim); }
+.group input { font-family: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--card); color: var(--text); flex: 1; min-width: 220px; }
+.hint { color: var(--dim); font-size: 14px; margin: 4px 0 0; }
+
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.scenario-desc { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+.scenario-desc p { margin: 4px 0; color: var(--dim); }
+.scenario-desc b { color: var(--text); }
+.steps { display: flex; flex-direction: column; gap: 8px; }
+.step { text-align: left; display: flex; gap: 10px; align-items: center; }
+.step-n { display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--sunken); color: var(--dim); align-items: center; justify-content: center; font-size: 12px; flex: none; }
+.step.current { border-color: var(--accent); }
+.step.current .step-n { background: var(--accent); color: #fff; }
+.step.done { opacity: .6; }
+.step.done .step-n { background: var(--ok-bg); color: var(--ok); }
+
+.snapshot { background: var(--sunken); border: 1px dashed var(--border-strong); border-radius: 6px; padding: 8px 10px; font-size: 13px; }
+.snapshot div { margin: 2px 0; }
+
+footer { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--faint); font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <p class="kicker">PDF Studio · 逻辑原型 · throwaway（不进入生产）</p>
+  <h1>摘录（Clip）生命周期状态机</h1>
+  <p class="question"><b>设计问题：</b>「摘录的生命周期状态机（框选 → 识别中 → 待编辑 → 已入库，标签 圆点 ⇄ 小窗）推过边界 case 后还站得住吗？哪些动作应该合法、哪些应该被禁止？」</p>
+</header>
+
+<section class="open-cases">
+  <h2>⚠ 未定 · 四个边界 case 的暂定默认</h2>
+  <ol>
+    <li><b>同一区域重复截图</b> → 默认 <b>合并进已有标签</b>（备选：新建第二个摘录）。</li>
+    <li><b>入库后再改原文</b> → 默认 <b>禁止</b>（原文已是 context 的 evidence）。</li>
+    <li><b>摘录入 chat 后又被编辑</b> → 默认 <b>快照</b>（chat 里是贴入那一刻的快照，之后的编辑不回写）。</li>
+    <li><b>删除已入库的摘录</b> → 默认 <b>摘录删、context 保留</b>，并标记「来源摘录已删」。</li>
+  </ol>
+  <p class="note">这四个默认都是<b>暂定</b>，随时可推翻 —— 原型的目的就是让你在看到它们被触发时说「不对，我想要的是……」。其余规则（原文只准修 OCR 错字、译文/笔记自由编辑、入库生成 context 等）是已定的领域决策，不改。</p>
+</section>
+
+<section>
+  <h2>状态机一览（动作 × 状态 · 合法性）</h2>
+  <div id="legality"></div>
+  <p class="legend">✓ 合法 / ✗ 被禁止。此表由下方状态机的 <code>can()</code> 实时生成，不是手写贴图。未列出「截图」（框选是造新摘录的入口，与摘录状态无关）与「标立场 / AI 补 claim」（context 层动作，摘录入库后可用）。</p>
+</section>
+
+<section>
+  <h2>当前状态</h2>
+  <div id="last"></div>
+  <div id="clips"></div>
+  <div id="contexts"></div>
+</section>
+
+<section>
+  <h2>自由把玩</h2>
+  <p class="hint">先点「截图」造一个摘录；点摘录卡片可选中它，之后每个动作作用于<b>选中的摘录</b>。任何动作随时可点 —— 不合法的会被拦下并解释为什么。</p>
+
+  <div class="group">
+    <span class="group-label">框选区域</span>
+    <button id="reg-text" class="chip-btn" onclick="Shell.pickRegion('text')">第 3 页 · 文本区</button>
+    <button id="reg-image" class="chip-btn" onclick="Shell.pickRegion('image')">第 5 页 · 图/公式区</button>
+  </div>
+
+  <div class="group">
+    <span class="group-label">生命周期</span>
+    <button onclick="Shell.do({type:'截图', regionKey: Shell.selRegion})">截图</button>
+    <button onclick="Shell.do({type:'识别', clipId: Shell.selClipId})">识别</button>
+    <button onclick="Shell.do({type:'识别完成', clipId: Shell.selClipId})">识别完成</button>
+    <button onclick="Shell.do({type:'入库', clipId: Shell.selClipId})">入库</button>
+    <button onclick="Shell.do({type:'删除摘录', clipId: Shell.selClipId})">删除摘录</button>
+    <button onclick="Shell.do({type:'重复截图', clipId: Shell.selClipId})">重复截图</button>
+    <button onclick="Shell.do({type:'切换标签', clipId: Shell.selClipId})">切换标签（圆点⇄小窗）</button>
+    <button onclick="Shell.do({type:'选取入chat', clipId: Shell.selClipId})">选取入 chat</button>
+  </div>
+
+  <div class="group edits">
+    <span class="group-label">编辑</span>
+    <div class="edit-row"><label>修原文（只修错字）</label><input id="in-source" type="text"><button onclick="Shell.do({type:'修原文', clipId: Shell.selClipId, text: document.getElementById('in-source').value})">修原文</button></div>
+    <div class="edit-row"><label>改译文</label><input id="in-trans" type="text"><button onclick="Shell.do({type:'改译文', clipId: Shell.selClipId, text: document.getElementById('in-trans').value})">改译文</button></div>
+    <div class="edit-row"><label>加笔记</label><input id="in-note" type="text"><button onclick="Shell.do({type:'加笔记', clipId: Shell.selClipId, text: document.getElementById('in-note').value})">加笔记</button></div>
+  </div>
+
+  <div class="group">
+    <span class="group-label">context</span>
+    <button id="btn-stance" onclick="Shell.cycleStance()">标立场</button>
+    <button onclick="Shell.do({type:'补claim', ctxId: Shell.currentCtxId()})">AI 补 claim</button>
+  </div>
+</section>
+
+<section>
+  <h2>场景走查</h2>
+  <div class="tabs" id="tabs"></div>
+  <div id="walkthrough"></div>
+</section>
+
+<footer>
+  这是 PDF Studio「摘录」状态机的<b>逻辑原型</b>：纯前端单文件、无框架、无服务器、无持久化。第 1 个 &lt;script&gt; 块是可直接搬进真实代码的纯状态机（零 DOM 访问），页面只是它的薄壳。点开走查和自由把玩，看哪些动作被拦下 —— 那些「等等，这里不对」的时刻就是本原型要挖出来的东西。
+</footer>
+
+</div>
+
+<script>
+/* ============================================================
+   PDF Studio · 摘录状态机 —— 纯逻辑模块（可整体搬进真实代码）
+   本块内零 DOM 访问：不出现 document / window / 按钮。
+   页面是它的薄壳；这里才是回答「设计问题」的部分。
+   ============================================================ */
+const ClipMachine = (() => {
+  'use strict';
+
+  // ---------- 领域常量 ----------
+  const REGIONS = {
+    text:  { key: 'p3-text', label: '第 3 页 · 文本区',   kind: 'text',  page: 3, x: 120, y: 340, w: 320, h: 96 },
+    image: { key: 'p5-fig',  label: '第 5 页 · 图/公式区', kind: 'image', page: 5, x: 180, y: 210, w: 260, h: 180 },
+  };
+
+  // 识别结果（OCR）：文本区带一个演示用的错字「单立」（应为「单位」）。
+  const OCR = {
+    'p3-text': {
+      sourceText: '摘录是 PDF Studio 的原子单立，读者框选一块区域，系统同时做 OCR 与翻译。',
+      translation: 'A clip is the atomic unit of PDF Studio: the reader frames a region, and the system OCRs and translates it in one pass.',
+    },
+    'p5-fig': {
+      multimodal: '一张散点图：横轴为模型参数量，纵轴为准确率；参数超过阈值后准确率不再提升。',
+    },
+  };
+
+  const CLIP_STATE_LABELS = { capturing: '框选中', recognizing: '识别中', ready: '待编辑', promoted: '已入库' };
+  const TAG_LABELS = { collapsed: '圆点', expanded: '小窗' };
+  const STANCE_LABELS = { support: '支持', refute: '反驳', background: '背景' };
+  const STATUS_LABELS = { pending: '待处理', approved: '已采纳', rejected: '已驳回', disputed: '有争议' };
+  const STANCE_ORDER = ['support', 'refute', 'background'];
+
+  const ACTION_LABELS = {
+    '截图': '截图（框选）',
+    '识别': '识别（开始 OCR+翻译）',
+    '识别完成': '识别完成（结果落定）',
+    '修原文': '修原文（只修错字）',
+    '改译文': '改译文',
+    '加笔记': '加笔记（批注）',
+    '选取入chat': '选取入 chat',
+    '入库': '入库（promote）',
+    '删除摘录': '删除摘录',
+    '重复截图': '重复截图（同一区域）',
+    '切换标签': '切换标签（圆点⇄小窗）',
+    '标立场': '标立场',
+    '补claim': 'AI 补 claim',
+  };
+
+  // ---------- 初始状态 ----------
+  function createInitialState() {
+    return {
+      docTitle: '《示例论文》',
+      nextId: 1,
+      clips: [],
+      contexts: [],
+      last: { type: null, action: '（初始）', outcome: 'ok', message: '还没有摘录。点「截图」开始。', changed: [] },
+    };
+  }
+
+  // ---------- 工具 ----------
+  function findClip(state, id) { return state.clips.find((c) => c.id === id) || null; }
+  function findContext(state, id) { return state.contexts.find((c) => c.id === id) || null; }
+  function replaceClip(state, clip) { return state.clips.map((c) => (c.id === clip.id ? clip : c)); }
+  function ok() { return { ok: true, reason: '' }; }
+  function no(reason) { return { ok: false, reason }; }
+  function withLast(state, last) { return { ...state, last: { ...last } }; }
+
+  function levenshtein(a, b) {
+    const m = a.length, n = b.length;
+    const d = [];
+    for (let i = 0; i <= m; i++) d[i] = [i];
+    for (let j = 0; j <= n; j++) d[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+    }
+    return d[m][n];
+  }
+
+  // ---------- 合法性：动作 × 状态（状态机核心） ----------
+  function can(state, action) {
+    switch (action.type) {
+      case '截图': return ok();
+      case '识别': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'capturing') return ok();
+        if (c.state === 'recognizing') return no('已经在识别中，无需重复。');
+        if (c.state === 'ready') return no('已经识别完成，不需要再识别。');
+        return no('已入库的摘录不能再重新识别。');
+      }
+      case '识别完成': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'recognizing') return ok();
+        if (c.state === 'capturing') return no('还没开始识别，先点「识别」。');
+        return no('已经识别完成，不需要再落定。');
+      }
+      case '修原文': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'promoted') return no('⚠ 未定 · 默认禁止：已入库后，原文已是 context 的 evidence，不能再改。');
+        if (c.state !== 'ready') return no('还没识别完成，原文还没出来。');
+        if (c.kind !== 'text') return no('纯图区域没有原文，谈不上修错字。');
+        const dist = levenshtein(c.sourceText, action.text || '');
+        if (dist === 0) return no('没有改动。');
+        if (dist > 2) return no('这不是修 OCR 错字，是在改写原文 —— 原文只准修错字，不得改写措辞。');
+        return ok();
+      }
+      case '改译文': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'capturing' || c.state === 'recognizing') return no('还没识别完成，译文还没出来。');
+        if (c.kind !== 'text') return no('纯图区域没有译文。');
+        return ok();
+      }
+      case '加笔记': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'capturing' || c.state === 'recognizing') return no('还没识别完成，先识别再加笔记。');
+        return ok();
+      }
+      case '选取入chat': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'capturing' || c.state === 'recognizing') return no('还没识别完成，不能贴进 chat。');
+        return ok();
+      }
+      case '入库': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'promoted') return no('已入库，无需重复。');
+        if (c.state !== 'ready') return no('还没识别完成，不能入库。');
+        if (c.kind !== 'text' || !c.sourceText) return no('纯图摘录没有原文，无法作为 evidence 入库。');
+        return ok();
+      }
+      case '删除摘录': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        return ok();
+      }
+      case '重复截图': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        if (c.state === 'promoted') return no('已入库的摘录原文已冻结为 evidence，不能重拍覆盖。');
+        return ok();
+      }
+      case '切换标签': {
+        const c = findClip(state, action.clipId);
+        if (!c) return no('没有选中的摘录。');
+        return ok();
+      }
+      case '标立场': {
+        if (!findContext(state, action.ctxId)) return no('还没有 context，先「入库」。');
+        return ok();
+      }
+      case '补claim': {
+        if (!findContext(state, action.ctxId)) return no('还没有 context，先「入库」。');
+        return ok();
+      }
+      default:
+        return no('未知动作：' + action.type);
+    }
+  }
+
+  // ---------- 执行 ----------
+  function reduce(state, action) {
+    const verdict = can(state, action);
+    if (!verdict.ok) {
+      return withLast(state, {
+        type: action.type, action: ACTION_LABELS[action.type] || action.type,
+        outcome: 'blocked', message: verdict.reason, changed: [],
+      });
+    }
+    switch (action.type) {
+      case '截图': return screenshot(state, action);
+      case '识别': return recognize(state, action);
+      case '识别完成': return recognizeDone(state, action);
+      case '修原文': return fixSource(state, action);
+      case '改译文': return editTranslation(state, action);
+      case '加笔记': return addNote(state, action);
+      case '选取入chat': return sendToChat(state, action);
+      case '入库': return promote(state, action);
+      case '删除摘录': return deleteClip(state, action);
+      case '重复截图': return rescreenshot(state, action);
+      case '切换标签': return toggleTag(state, action);
+      case '标立场': return setStance(state, action);
+      case '补claim': return addClaim(state, action);
+      default: return withLast(state, { type: action.type, action: action.type, outcome: 'blocked', message: '未知动作：' + action.type, changed: [] });
+    }
+  }
+
+  // 开放 case 1：同一区域重复截图 → 默认「合并进已有标签」。
+  function mergeRescreenshot(state, clip) {
+    const m = clip.screenshot.match(/#(\d+)$/);
+    const n = m ? parseInt(m[1], 10) + 1 : 2;
+    const next = {
+      ...clip,
+      state: 'recognizing',
+      screenshot: clip.screenshot.replace(/#\d+$/, '#' + n),
+      sourceText: '', translation: '', multimodal: '',
+      ocrFixes: [],
+    };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '重复截图', clipId: clip.id, action: ACTION_LABELS['重复截图'], outcome: 'ok',
+      message: `⚠ 未定 · 同一区域重复截图：默认 = 合并进已有标签（不新建第二个摘录）。已重拍并重新识别「${clip.regionLabel}」；之前的修原文改动不保留、笔记保留。备选：新建第二个摘录。`,
+      changed: ['截图', '状态'],
+    });
+  }
+
+  function screenshot(state, action) {
+    const region = REGIONS[action.regionKey] || REGIONS.text;
+    const existing = state.clips.find((c) => c.regionKey === region.key);
+    if (existing) return mergeRescreenshot(state, existing); // 开放 case 1 默认：合并
+    const clip = {
+      id: 'c' + state.nextId,
+      regionKey: region.key, regionLabel: region.label, kind: region.kind,
+      page: region.page, x: region.x, y: region.y, w: region.w, h: region.h,
+      state: 'capturing', tag: 'expanded',
+      screenshot: region.key + ' #1',
+      sourceText: '', translation: '', multimodal: '', note: '',
+      ocrFixes: [], inChat: false, chatSnapshot: null,
+    };
+    return withLast({ ...state, nextId: state.nextId + 1, clips: [...state.clips, clip] }, {
+      type: '截图', clipId: clip.id, action: ACTION_LABELS['截图'], outcome: 'ok',
+      message: `已在「${region.label}」框选，原图截图已存，摘录进入「框选中」。`,
+      changed: ['状态'],
+    });
+  }
+
+  function recognize(state, action) {
+    const clip = findClip(state, action.clipId);
+    const next = { ...clip, state: 'recognizing' };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '识别', clipId: clip.id, action: ACTION_LABELS['识别'], outcome: 'ok',
+      message: `正在对「${clip.regionLabel}」做 OCR + 翻译（识别中）…`,
+      changed: ['状态'],
+    });
+  }
+
+  function recognizeDone(state, action) {
+    const clip = findClip(state, action.clipId);
+    let next, message, changed;
+    if (clip.kind === 'text') {
+      const ocr = OCR[clip.regionKey];
+      next = { ...clip, state: 'ready', sourceText: ocr.sourceText, translation: ocr.translation, multimodal: '' };
+      message = '识别完成：原文与译文已填入。注意原文含 OCR 错字「单立」（应为「单位」），可用「修原文」修正。';
+      changed = ['状态', '原文', '译文'];
+    } else {
+      const ocr = OCR[clip.regionKey];
+      next = { ...clip, state: 'ready', sourceText: '', translation: '', multimodal: ocr.multimodal };
+      message = '识别完成：该区域没有文字层，只有「多模态描述」—— 无原文、无译文。';
+      changed = ['状态', '多模态描述'];
+    }
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '识别完成', clipId: clip.id, action: ACTION_LABELS['识别完成'], outcome: 'ok', message, changed,
+    });
+  }
+
+  function fixSource(state, action) {
+    const clip = findClip(state, action.clipId);
+    const next = { ...clip, sourceText: action.text, ocrFixes: [...clip.ocrFixes, { from: clip.sourceText, to: action.text }] };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '修原文', clipId: clip.id, action: ACTION_LABELS['修原文'], outcome: 'ok',
+      message: '已修正 OCR 错字。原文只准修错字、不得改写措辞。',
+      changed: ['原文'],
+    });
+  }
+
+  function editTranslation(state, action) {
+    const clip = findClip(state, action.clipId);
+    const next = { ...clip, translation: action.text };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '改译文', clipId: clip.id, action: ACTION_LABELS['改译文'], outcome: 'ok',
+      message: '译文已更新（译文可自由编辑）。',
+      changed: ['译文'],
+    });
+  }
+
+  function addNote(state, action) {
+    const clip = findClip(state, action.clipId);
+    const next = { ...clip, note: action.text };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '加笔记', clipId: clip.id, action: ACTION_LABELS['加笔记'], outcome: 'ok',
+      message: '笔记（批注）已更新。',
+      changed: ['笔记'],
+    });
+  }
+
+  function sendToChat(state, action) {
+    const clip = findClip(state, action.clipId);
+    const snapshot = {
+      at: '贴入 chat 的时刻',
+      sourceText: clip.sourceText, translation: clip.translation,
+      multimodal: clip.multimodal, note: clip.note,
+    };
+    const next = { ...clip, inChat: true, chatSnapshot: snapshot };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '选取入chat', clipId: clip.id, action: ACTION_LABELS['选取入chat'], outcome: 'ok',
+      message: '已贴进 chat。⚠ 未定 · 默认 = 快照：chat 里是贴入那一刻的原文/译文/笔记，之后的编辑不回写。',
+      changed: ['chat 快照'],
+    });
+  }
+
+  function promote(state, action) {
+    const clip = findClip(state, action.clipId);
+    const ctx = {
+      id: 'ctx-' + clip.id,
+      clipId: clip.id,
+      source: `${state.docTitle} · ${clip.regionLabel}`,
+      claim: null,
+      evidence: clip.sourceText,      // 入库时的原文快照
+      stance: null,
+      status: 'pending',
+      sourceClipDeleted: false,
+    };
+    const next = { ...clip, state: 'promoted' };
+    return withLast({ ...state, clips: replaceClip(state, next), contexts: [...state.contexts, ctx] }, {
+      type: '入库', clipId: clip.id, ctxId: ctx.id, action: ACTION_LABELS['入库'], outcome: 'ok',
+      message: '已入库：原文成为 context 的 evidence，进入知识库（status=pending）。接下来由读者「标立场」、AI 按需「补 claim」。',
+      changed: ['状态', 'context'],
+    });
+  }
+
+  function deleteClip(state, action) {
+    const clip = findClip(state, action.clipId);
+    if (clip.state === 'promoted') {
+      // 开放 case 4：摘录删、context 保留，并标记「来源摘录已删」。
+      const contexts = state.contexts.map((ctx) =>
+        ctx.clipId === clip.id ? { ...ctx, sourceClipDeleted: true, source: ctx.source + '（来源摘录已删）' } : ctx
+      );
+      return withLast({ ...state, clips: state.clips.filter((c) => c.id !== clip.id), contexts }, {
+        type: '删除摘录', clipId: clip.id, action: ACTION_LABELS['删除摘录'], outcome: 'ok',
+        message: '⚠ 未定 · 默认：摘录删掉、context 保留，并标记「来源摘录已删」。',
+        changed: ['摘录', 'context'],
+      });
+    }
+    return withLast({ ...state, clips: state.clips.filter((c) => c.id !== clip.id) }, {
+      type: '删除摘录', clipId: clip.id, action: ACTION_LABELS['删除摘录'], outcome: 'ok',
+      message: '摘录已删（尚未入库，没有 context）。',
+      changed: ['摘录'],
+    });
+  }
+
+  function rescreenshot(state, action) {
+    const clip = findClip(state, action.clipId);
+    return mergeRescreenshot(state, clip);
+  }
+
+  function toggleTag(state, action) {
+    const clip = findClip(state, action.clipId);
+    const next = { ...clip, tag: clip.tag === 'expanded' ? 'collapsed' : 'expanded' };
+    return withLast({ ...state, clips: replaceClip(state, next) }, {
+      type: '切换标签', clipId: clip.id, action: ACTION_LABELS['切换标签'], outcome: 'ok',
+      message: next.tag === 'collapsed' ? '标签已收起为「圆点」。' : '标签已展开为「小窗」。',
+      changed: ['标签'],
+    });
+  }
+
+  function setStance(state, action) {
+    const contexts = state.contexts.map((ctx) => (ctx.id === action.ctxId ? { ...ctx, stance: action.stance } : ctx));
+    const msg = action.stance
+      ? `已把 context 的立场标为「${STANCE_LABELS[action.stance] || action.stance}」。`
+      : '已清空 context 的立场（回到未标）。';
+    return withLast({ ...state, contexts }, {
+      type: '标立场', ctxId: action.ctxId, action: ACTION_LABELS['标立场'], outcome: 'ok',
+      message: msg, changed: ['立场'],
+    });
+  }
+
+  function addClaim(state, action) {
+    const ctx = findContext(state, action.ctxId);
+    const snippet = (ctx.evidence || '').slice(0, 16);
+    const claim = `证据「${snippet}…」支撑：摘录是 PDF Studio 阅读流程的原子单位。`;
+    const contexts = state.contexts.map((c) => (c.id === action.ctxId ? { ...c, claim } : c));
+    return withLast({ ...state, contexts }, {
+      type: '补claim', ctxId: action.ctxId, action: ACTION_LABELS['补claim'], outcome: 'ok',
+      message: 'AI 已按 evidence 补上 claim。',
+      changed: ['claim'],
+    });
+  }
+
+  return {
+    createInitialState, reduce, can, REGIONS,
+    CLIP_STATE_LABELS, TAG_LABELS, STANCE_LABELS, STATUS_LABELS, STANCE_ORDER, ACTION_LABELS,
+  };
+})();
+</script>
+
+<script>
+/* ============================================================
+   页面壳（throwaway）：只负责渲染 + 派发动作给上面的纯状态机。
+   ============================================================ */
+(() => {
+  'use strict';
+  const M = ClipMachine;
+
+  const TYPO_SOURCE = '摘录是 PDF Studio 的原子单立，读者框选一块区域，系统同时做 OCR 与翻译。';
+  const FIXED_SOURCE = '摘录是 PDF Studio 的原子单位，读者框选一块区域，系统同时做 OCR 与翻译。';
+  const REWORD = '摘录是 PDF Studio 里最基本的一块内容，相当于一个可以反复取用的片段。';
+
+  const scenarios = [
+    {
+      id: 'a', title: '(a) 主流程',
+      desc: '从零开始：框选一块文字区域，识别，修掉 OCR 错字，加一句笔记，入库 —— 看到 context 出现在知识库。',
+      watch: '状态徽章按 框选中 → 识别中 → 待编辑 → 已入库 走；修原文只准修错字；入库后 context 的 status=pending。',
+      setup: [{ type: '截图', regionKey: 'text' }],
+      steps: [
+        { label: '识别（开始 OCR+翻译）', action: { type: '识别', clipId: 'c1' } },
+        { label: '识别完成（结果落定）', action: { type: '识别完成', clipId: 'c1' } },
+        { label: '修原文（错字「单立」→「单位」）', action: { type: '修原文', clipId: 'c1', text: FIXED_SOURCE } },
+        { label: '加笔记（写一句批注）', action: { type: '加笔记', clipId: 'c1', text: '这段是全文的核心定义。' } },
+        { label: '入库（promote → 生成 context）', action: { type: '入库', clipId: 'c1' } },
+      ],
+    },
+    {
+      id: 'b', title: '(b) 纯图区域',
+      desc: '框选一张图/公式区域（没有文字层）。识别完成后没有原文、没有译文，只有多模态描述。',
+      watch: '修原文 / 改译文 / 入库 都会被禁止，并解释为什么。',
+      setup: [{ type: '截图', regionKey: 'image' }],
+      steps: [
+        { label: '识别（开始 OCR+翻译）', action: { type: '识别', clipId: 'c1' } },
+        { label: '识别完成（结果落定）', action: { type: '识别完成', clipId: 'c1' } },
+        { label: '试着修原文（应被禁止）', action: { type: '修原文', clipId: 'c1', text: FIXED_SOURCE } },
+        { label: '试着入库（应被禁止）', action: { type: '入库', clipId: 'c1' } },
+      ],
+    },
+    {
+      id: 'c', title: '(c) 重复截图同一区域',
+      desc: '已经有一个文字摘录后，对同一区域再截一次图。',
+      watch: '摘录列表始终只有 1 个标签（默认 = 合并），不新建第二个；触发 ⚠ 未定 note。',
+      setup: [
+        { type: '截图', regionKey: 'text' },
+        { type: '识别', clipId: 'c1' },
+        { type: '识别完成', clipId: 'c1' },
+      ],
+      steps: [
+        { label: '重复截图（同一区域）', action: { type: '重复截图', clipId: 'c1' } },
+        { label: '识别完成（重新落定）', action: { type: '识别完成', clipId: 'c1' } },
+      ],
+    },
+    {
+      id: 'd', title: '(d) 入库后改原文',
+      desc: '摘录已入库（原文已成为 context 的 evidence），此时试着改原文。',
+      watch: '修原文被禁止并给出理由；但改译文仍允许（译文不是 evidence）。',
+      setup: [
+        { type: '截图', regionKey: 'text' },
+        { type: '识别', clipId: 'c1' },
+        { type: '识别完成', clipId: 'c1' },
+        { type: '入库', clipId: 'c1' },
+      ],
+      steps: [
+        { label: '修原文（试图改写措辞）', action: { type: '修原文', clipId: 'c1', text: REWORD } },
+        { label: '改译文（仍允许）', action: { type: '改译文', clipId: 'c1', text: 'A clip is the atomic unit of PDF Studio: frame a region, OCR + translate in one pass.' } },
+      ],
+    },
+    {
+      id: 'e', title: '(e) 删除已入库摘录',
+      desc: '摘录已入库后删除它。',
+      watch: '摘录消失，但 context 保留，并标记「来源摘录已删」；触发 ⚠ 未定 note。',
+      setup: [
+        { type: '截图', regionKey: 'text' },
+        { type: '识别', clipId: 'c1' },
+        { type: '识别完成', clipId: 'c1' },
+        { type: '入库', clipId: 'c1' },
+      ],
+      steps: [
+        { label: '删除摘录（context 应保留）', action: { type: '删除摘录', clipId: 'c1' } },
+      ],
+    },
+  ];
+
+  let state = M.createInitialState();
+  let selRegion = 'text';
+  let selClipId = null;
+  let selCtxId = null;
+  let activeScenarioId = null;
+  let stepIndex = 0;
+
+  function runActions(actions) {
+    return actions.reduce((s, a) => M.reduce(s, a), M.createInitialState());
+  }
+
+  function dispatch(action) {
+    state = M.reduce(state, action);
+    afterDispatch();
+  }
+  function afterDispatch() {
+    if (state.last && state.last.clipId) {
+      if (state.clips.some((c) => c.id === state.last.clipId)) selClipId = state.last.clipId;
+      else selClipId = state.clips.length ? state.clips[0].id : null;
+    }
+    if (state.last && state.last.ctxId && state.contexts.some((c) => c.id === state.last.ctxId)) selCtxId = state.last.ctxId;
+    render();
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+  }
+
+  function field(label, value, changedKey, changedFields) {
+    const cls = changedFields.has(changedKey) ? ' changed' : '';
+    return `<div class="f${cls}"><dt>${esc(label)}</dt><dd>${value}</dd></div>`;
+  }
+
+  function renderLast() {
+    const el = document.getElementById('last');
+    const L = state.last;
+    const cls = L.outcome === 'blocked' ? 'blocked' : (L.message.indexOf('⚠') >= 0 ? 'warn' : 'ok');
+    const changed = L.changed && L.changed.length
+      ? `<span class="changed-tags">变动：${L.changed.map((c) => '<b>' + esc(c) + '</b>').join('、')}</span>`
+      : '';
+    el.className = 'last ' + cls;
+    el.innerHTML = `<span class="last-action">${esc(L.action)}</span>${L.outcome === 'blocked' ? ' <span class="last-blocked">已禁止</span>' : ''}${changed}<p class="last-msg">${esc(L.message)}</p>`;
+  }
+
+  function clipCard(c) {
+    const sel = c.id === selClipId ? ' selected' : '';
+    const changedFields = new Set(state.last.changed || []);
+    const rows = [];
+    rows.push(field('状态', `<span class="chip chip-${c.state}">${M.CLIP_STATE_LABELS[c.state]}</span>`, '状态', changedFields));
+    rows.push(field('标签', `<span class="chip">${M.TAG_LABELS[c.tag]}</span>`, '标签', changedFields));
+    rows.push(field('锚点', `第 ${c.page} 页 · (${c.x}, ${c.y}) ${c.w}×${c.h}`, '锚点', changedFields));
+    rows.push(field('原图截图', `原图截图 · ${esc(c.screenshot)}`, '截图', changedFields));
+
+    let src;
+    if (c.kind === 'text') {
+      src = c.sourceText ? `<span class="serif">“${esc(c.sourceText)}”</span>` : '<span class="muted">（尚未识别）</span>';
+    } else {
+      src = '<span class="muted">无文字层 —— 该区域只有多模态描述</span>';
+    }
+    rows.push(field('原文', src, '原文', changedFields));
+
+    const tr = c.kind === 'text'
+      ? (c.translation ? esc(c.translation) : '<span class="muted">（尚未识别）</span>')
+      : '<span class="muted">无译文（纯图区域）</span>';
+    rows.push(field('译文', tr, '译文', changedFields));
+
+    rows.push(field('多模态描述', c.multimodal ? esc(c.multimodal) : '<span class="muted">—</span>', '多模态描述', changedFields));
+    rows.push(field('笔记（批注）', c.note ? esc(c.note) : '<span class="muted">—</span>', '笔记', changedFields));
+    rows.push(field('OCR 错字修正', c.ocrFixes.length ? `${c.ocrFixes.length} 处` : '<span class="muted">0 处</span>', '原文', changedFields));
+
+    if (c.inChat && c.chatSnapshot) {
+      const s = c.chatSnapshot;
+      rows.push(field('chat 快照',
+        `<div class="snapshot"><span class="muted">${esc(s.at)} · 之后编辑不回写</span>` +
+        `<div class="serif">原文：${s.sourceText ? '“' + esc(s.sourceText) + '”' : '—'}</div>` +
+        `<div>译文：${s.translation ? esc(s.translation) : '—'}</div>` +
+        `<div>笔记：${s.note ? esc(s.note) : '—'}</div></div>`,
+        'chat 快照', changedFields));
+    } else {
+      rows.push(field('chat 快照', '<span class="muted">未贴入 chat</span>', 'chat 快照', changedFields));
+    }
+
+    return `<div class="clip card${sel}" data-id="${c.id}">
+      <div class="card-head"><span class="dot"></span><strong>摘录 ${esc(c.id)}</strong><span class="muted">${esc(c.regionLabel)}</span></div>
+      <dl class="fields">${rows.join('')}</dl>
+    </div>`;
+  }
+
+  function renderClips() {
+    const el = document.getElementById('clips');
+    el.innerHTML = state.clips.length
+      ? state.clips.map(clipCard).join('')
+      : '<p class="empty">还没有摘录 —— 在下方自由把玩区点「截图」，或跑一个场景。</p>';
+  }
+
+  function ctxCard(ctx) {
+    const sel = ctx.id === selCtxId ? ' selected' : '';
+    const changedFields = new Set(state.last.changed || []);
+    const stance = ctx.stance ? `<span class="chip">${M.STANCE_LABELS[ctx.stance]}</span>` : '<span class="muted">未标（读者标）</span>';
+    const claim = ctx.claim ? esc(ctx.claim) : '<span class="muted">未补（AI 按需）</span>';
+    const deleted = ctx.sourceClipDeleted ? '<span class="chip chip-danger">来源摘录已删</span>' : '';
+    return `<div class="ctx card${sel}" data-id="${ctx.id}">
+      <div class="card-head"><span class="dot"></span><strong>context ${esc(ctx.id)}</strong><span class="muted">${M.STATUS_LABELS[ctx.status]}</span>${deleted}</div>
+      <dl class="fields">
+        ${field('来源', esc(ctx.source), 'context', changedFields)}
+        ${field('证据（= 入库时的原文）', `<span class="serif">“${esc(ctx.evidence)}”</span>`, 'context', changedFields)}
+        ${field('断言（claim）', claim, 'claim', changedFields)}
+        ${field('立场（stance）', stance, '立场', changedFields)}
+        ${field('状态', M.STATUS_LABELS[ctx.status], 'context', changedFields)}
+      </dl>
+    </div>`;
+  }
+
+  function renderContexts() {
+    const el = document.getElementById('contexts');
+    el.innerHTML = state.contexts.length
+      ? state.contexts.map(ctxCard).join('')
+      : '<p class="empty">知识库里还没有 context —— 摘录「入库」后会出现。</p>';
+  }
+
+  function syncInputs() {
+    const c = state.clips.find((x) => x.id === selClipId) || null;
+    const srcEl = document.getElementById('in-source');
+    const trEl = document.getElementById('in-trans');
+    const noteEl = document.getElementById('in-note');
+    if (srcEl) srcEl.value = c ? c.sourceText : '';
+    if (trEl) trEl.value = c ? c.translation : '';
+    if (noteEl) noteEl.value = c ? c.note : '';
+
+    const stanceBtn = document.getElementById('btn-stance');
+    if (stanceBtn) {
+      const id = currentCtxId();
+      const ctx = id ? state.contexts.find((x) => x.id === id) : null;
+      stanceBtn.textContent = ctx
+        ? `标立场（当前：${ctx.stance ? M.STANCE_LABELS[ctx.stance] : '未标'}）`
+        : '标立场（还没有 context）';
+    }
+    const rt = document.getElementById('reg-text');
+    const ri = document.getElementById('reg-image');
+    if (rt) rt.classList.toggle('active', selRegion === 'text');
+    if (ri) ri.classList.toggle('active', selRegion === 'image');
+  }
+
+  function renderWalkthrough() {
+    const tabsEl = document.getElementById('tabs');
+    tabsEl.innerHTML = scenarios.map((s) =>
+      `<button class="tab${s.id === activeScenarioId ? ' active' : ''}" onclick="Shell.selectScenario('${s.id}')">${esc(s.title)}</button>`
+    ).join('');
+
+    const wEl = document.getElementById('walkthrough');
+    if (!activeScenarioId) {
+      wEl.innerHTML = '<p class="empty">点上方一个场景标签开始走查。</p>';
+      return;
+    }
+    const sc = scenarios.find((s) => s.id === activeScenarioId);
+    const stepsHtml = sc.steps.map((st, i) => {
+      let cls = 'step';
+      if (i < stepIndex) cls += ' done';
+      else if (i === stepIndex) cls += ' current';
+      const disabled = i === stepIndex ? '' : ' disabled';
+      return `<button class="${cls}"${disabled} onclick="Shell.step(${i})"><span class="step-n">${i + 1}</span>${esc(st.label)}${i < stepIndex ? ' ✓' : ''}</button>`;
+    }).join('');
+    wEl.innerHTML = `
+      <div class="scenario-desc">
+        <h3>${esc(sc.title)}</h3>
+        <p><b>场景：</b>${esc(sc.desc)}</p>
+        <p><b>观察点：</b>${esc(sc.watch)}</p>
+      </div>
+      <button class="start" onclick="Shell.startScenario()">重新开始走查（重置到初始状态）</button>
+      <div class="steps">${stepsHtml}</div>`;
+  }
+
+  function renderLegality() {
+    const el = document.getElementById('legality');
+    const states = ['capturing', 'recognizing', 'ready', 'promoted'];
+    const defs = [
+      { label: '识别', build: () => ({ type: '识别', clipId: 'x' }) },
+      { label: '识别完成', build: () => ({ type: '识别完成', clipId: 'x' }) },
+      { label: '修原文（修错字）', build: () => ({ type: '修原文', clipId: 'x', text: FIXED_SOURCE }) },
+      { label: '改译文', build: () => ({ type: '改译文', clipId: 'x', text: 't' }) },
+      { label: '加笔记', build: () => ({ type: '加笔记', clipId: 'x', text: 'n' }) },
+      { label: '选取入 chat', build: () => ({ type: '选取入chat', clipId: 'x' }) },
+      { label: '入库', build: () => ({ type: '入库', clipId: 'x' }) },
+      { label: '重复截图', build: () => ({ type: '重复截图', clipId: 'x' }) },
+      { label: '切换标签', build: () => ({ type: '切换标签', clipId: 'x' }) },
+      { label: '删除摘录', build: () => ({ type: '删除摘录', clipId: 'x' }) },
+    ];
+    const head = `<tr><th>动作</th>${states.map((s) => `<th>${M.CLIP_STATE_LABELS[s]}</th>`).join('')}</tr>`;
+    const rows = defs.map((d) => {
+      const cells = states.map((st) => {
+        const clip = { id: 'x', regionKey: 'p3-text', kind: 'text', state: st, sourceText: TYPO_SOURCE };
+        const s = { ...M.createInitialState(), clips: [clip] };
+        const verdict = M.can(s, d.build());
+        return `<td class="${verdict.ok ? 'yes' : 'no'}">${verdict.ok ? '✓' : '✗'}</td>`;
+      }).join('');
+      return `<tr><td>${d.label}</td>${cells}</tr>`;
+    }).join('');
+    el.innerHTML = `<table><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+  }
+
+  function currentCtxId() {
+    if (selCtxId && state.contexts.some((c) => c.id === selCtxId)) return selCtxId;
+    const byClip = state.contexts.find((c) => c.clipId === selClipId);
+    if (byClip) return byClip.id;
+    return state.contexts.length ? state.contexts[0].id : null;
+  }
+
+  function pickRegion(key) { selRegion = key; render(); }
+
+  function cycleStance() {
+    const id = currentCtxId();
+    if (!id) { dispatch({ type: '标立场', ctxId: null }); return; }
+    const ctx = state.contexts.find((c) => c.id === id);
+    const order = [null, ...M.STANCE_ORDER];
+    const idx = order.indexOf(ctx.stance);
+    const next = order[(idx + 1) % order.length];
+    dispatch({ type: '标立场', ctxId: id, stance: next });
+  }
+
+  function selectScenario(id) { activeScenarioId = id; startScenario(); }
+
+  function startScenario() {
+    const sc = scenarios.find((s) => s.id === activeScenarioId);
+    if (!sc) return;
+    state = runActions(sc.setup);
+    stepIndex = 0;
+    selClipId = state.clips.length ? state.clips[state.clips.length - 1].id : null;
+    selCtxId = state.contexts.length ? state.contexts[state.contexts.length - 1].id : null;
+    render();
+  }
+
+  function step(i) {
+    const sc = scenarios.find((s) => s.id === activeScenarioId);
+    if (!sc || i !== stepIndex) return;
+    state = M.reduce(state, sc.steps[i].action);
+    stepIndex++;
+    afterDispatch();
+  }
+
+  function render() {
+    renderLast();
+    renderClips();
+    renderContexts();
+    syncInputs();
+    renderWalkthrough();
+  }
+
+  document.getElementById('clips').addEventListener('click', (e) => {
+    const card = e.target.closest('.clip');
+    if (card) { selClipId = card.dataset.id; render(); }
+  });
+  document.getElementById('contexts').addEventListener('click', (e) => {
+    const card = e.target.closest('.ctx');
+    if (card) { selCtxId = card.dataset.id; render(); }
+  });
+
+  window.Shell = {
+    get selRegion() { return selRegion; },
+    get selClipId() { return selClipId; },
+    get selCtxId() { return selCtxId; },
+    pickRegion,
+    do: dispatch,
+    cycleStance,
+    currentCtxId,
+    selectScenario,
+    startScenario,
+    step,
+  };
+
+  renderLegality();
+  render();
+})();
+</script>
+
+</body>
+</html>

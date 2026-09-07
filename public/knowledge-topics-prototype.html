@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>主题会不会漂 · 入库模拟器（PROTOTYPE）</title>
+<meta name="description" content="throwaway 逻辑原型：四种主题产生规则，各自会让知识图漏多少边、连多少假边。">
+<!--
+  PROTOTYPE — throwaway。对应 .scratch/knowledge-graph/issues/04。
+
+  下面 <script> 里 `第一段：纯模块` 那一块是**要留下来的**（可整块搬进 contextstudio/src/），
+  页面部分是一次性的。纯模块不碰 DOM，页面只向它单向调用。
+-->
+<style>
+:root {
+  color-scheme: light dark;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg: #fbfbfc; --card: #ffffff; --sunken: #f2f3f5;
+  --border: #e3e5e8; --border-strong: #cdd0d5;
+  --text: #16181c; --dim: #5c6370; --faint: #8b919b;
+  --accent: #2f6feb; --accent-bg: #eaf1fe; --accent-border: #b9d0fb;
+  --danger: #ce3a3a; --danger-bg: #fdeded; --danger-border: #f5c2c2;
+  --warn: #a37a08; --warn-bg: #fcf6e0; --warn-border: #ecd9a0;
+  --ok: #1a7f45; --ok-bg: #e7f6ec; --ok-border: #b4e0c4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1114; --card: #16191d; --sunken: #1b1f24;
+    --border: #272c33; --border-strong: #383f48;
+    --text: #e6e9ed; --dim: #9aa2ad; --faint: #6c757f;
+    --accent: #5b93f5; --accent-bg: #16233c; --accent-border: #2c4573;
+    --danger: #e56b6b; --danger-bg: #2a1618; --danger-border: #4d2529;
+    --warn: #d3aa3f; --warn-bg: #262013; --warn-border: #4d3b1d;
+    --ok: #47b877; --ok-bg: #12241a; --ok-border: #24462f;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-sans); color: var(--text); background: var(--bg); line-height: 1.6; font-size: 15px; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 36px 24px 90px; }
+.kicker { text-transform: uppercase; letter-spacing: .09em; font-size: 11px; color: var(--faint); margin: 0 0 8px; font-family: var(--font-mono); }
+h1 { font-size: 25px; margin: 0 0 14px; letter-spacing: -.01em; }
+h2 { font-size: 16px; margin: 0 0 12px; }
+h3 { font-size: 13px; margin: 0 0 8px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; font-family: var(--font-mono); font-weight: 600; }
+p { margin: 0 0 12px; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--sunken); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+.intro { background: var(--sunken); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 16px 18px; margin: 0 0 26px; color: var(--dim); }
+.intro b { color: var(--text); }
+.intro p:last-child { margin: 0; }
+
+.panel { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; margin-bottom: 16px; }
+
+/* 规则选择 */
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(224px, 1fr)); gap: 10px; }
+.rule { text-align: left; font: inherit; background: var(--sunken); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; cursor: pointer; color: var(--text); }
+.rule:hover { border-color: var(--border-strong); }
+.rule[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent-border); }
+.rule .rname { font-weight: 600; font-size: 14px; display: block; margin-bottom: 2px; }
+.rule .rdesc { font-size: 12px; color: var(--dim); line-height: 1.45; }
+
+/* 状态 */
+.scores { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 9px; overflow: hidden; margin-bottom: 14px; }
+.score { background: var(--card); padding: 11px 13px; }
+.score .k { font-size: 11px; color: var(--faint); font-family: var(--font-mono); }
+.score .v { font-size: 22px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.score.bad .v { color: var(--danger); }
+.score.good .v { color: var(--ok); }
+.score .k small { display: block; text-transform: none; font-family: var(--font-sans); color: var(--faint); font-size: 10.5px; letter-spacing: 0; }
+
+.pool { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+.chip { font-size: 12.5px; font-family: var(--font-mono); background: var(--sunken); border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; }
+.chip .n { color: var(--faint); margin-left: 5px; }
+.chip.dup { background: var(--danger-bg); border-color: var(--danger-border); }
+.chip.empty { color: var(--faint); font-family: var(--font-sans); border-style: dashed; }
+
+.synos { margin-top: 12px; font-size: 13px; }
+.syno { background: var(--danger-bg); border: 1px solid var(--danger-border); border-radius: 7px; padding: 8px 11px; margin-bottom: 6px; }
+.syno b { font-family: var(--font-mono); }
+
+/* 入库面板 */
+.material { background: var(--sunken); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; margin-bottom: 12px; }
+.material .mclaim { font-size: 14.5px; margin-bottom: 4px; }
+.material .msrc { font-size: 11.5px; color: var(--faint); font-family: var(--font-mono); }
+.offer { margin-top: 12px; }
+.offer-hint { font-size: 12.5px; color: var(--dim); margin-bottom: 8px; }
+.opts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.opt { font: inherit; font-size: 12.5px; font-family: var(--font-mono); background: var(--card); border: 1px solid var(--border-strong); border-radius: 999px; padding: 4px 12px; cursor: pointer; color: var(--text); }
+.opt:hover { border-color: var(--accent); }
+.opt[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.opt.fromPool::after { content: " ·已有"; color: var(--ok); font-size: 10px; }
+.opt[aria-pressed="true"].fromPool::after { color: #cfe9d9; }
+input[type=text] { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--card); color: var(--text); width: 190px; }
+
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+button.act { font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 7px; border: 1px solid var(--border-strong); background: var(--card); color: var(--text); cursor: pointer; }
+button.act:hover { border-color: var(--accent); }
+button.act.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.act.primary:disabled { opacity: .45; cursor: not-allowed; }
+button.act.ghost { border-style: dashed; color: var(--dim); }
+
+/* 演练 */
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 14px; }
+.tab { font: inherit; font-size: 13px; background: transparent; border: 0; border-bottom: 2px solid transparent; padding: 7px 12px; cursor: pointer; color: var(--dim); }
+.tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.walk-desc { font-size: 13.5px; color: var(--dim); background: var(--sunken); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+.walk-desc b { color: var(--text); }
+.steps { display: flex; flex-direction: column; gap: 6px; }
+.step { display: flex; gap: 10px; align-items: center; }
+.step .idx { font-family: var(--font-mono); font-size: 11px; color: var(--faint); width: 20px; flex: 0 0 20px; }
+.step button { font: inherit; font-size: 13px; text-align: left; flex: 1; padding: 8px 13px; border-radius: 7px; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+.step button:hover:not(:disabled) { border-color: var(--accent); }
+.step.done button { color: var(--faint); background: var(--sunken); }
+.step.next button { border-color: var(--accent); background: var(--accent-bg); }
+.step button:disabled { cursor: not-allowed; }
+
+.log { font-size: 12.5px; font-family: var(--font-mono); color: var(--dim); max-height: 168px; overflow-y: auto; background: var(--sunken); border-radius: 8px; padding: 10px 12px; }
+.log div { padding: 1px 0; }
+.log .hl { color: var(--danger); }
+.log .ok { color: var(--ok); }
+
+details.detail { margin-top: 12px; font-size: 13px; }
+details.detail summary { cursor: pointer; color: var(--dim); font-size: 12.5px; }
+details.detail ul { margin: 8px 0 0; padding-left: 20px; color: var(--dim); }
+details.detail li { margin-bottom: 3px; }
+details.detail b { font-family: var(--font-mono); color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">prototype · throwaway · issue 04</p>
+  <h1>主题会不会漂：入库模拟器</h1>
+
+  <div class="intro">
+    <p><b>要回答的问题：</b>知识图的边是「共享主题」算出来的，所以<b>主题的质量就是图的质量</b>。
+    但主题是读者一条条手打的。四种产生规则——自由填、带补全、AI 提议、AI 提议且看池——
+    哪一种能让主题池在读了一百条之后仍然不散？</p>
+
+    <p><b>怎么量：</b>这里每条材料都带一个<b>隐藏的真值概念</b>（真实产品里没有这东西，
+    只有模拟器知道）。于是「漂没漂」就能算出两个数：</p>
+
+    <p style="margin-bottom:6px"><b style="color:var(--danger)">漏边</b> —— 两条讲的是同一件事，
+    却因为你一次打了 <code>eval</code>、一次打了 <code>评测</code> 而没连上。
+    <b>同义词造成的，图上完全看不见，也不会报错。</b></p>
+
+    <p><b style="color:var(--danger)">假边</b> —— 两条根本不相干，却因为都挂了一个过于笼统的主题
+    （比如 <code>agent</code>）而连上了。<b>笼统主题造成的。</b></p>
+
+    <p style="margin:0"><b>怎么玩：</b>你就是那个读者。选一种规则，然后一条条入库——
+    你自己决定每条打什么主题。下面的「引导演练」把最难在纸上想清楚的几种情形排好了，
+    一步一个按钮。</p>
+  </div>
+
+  <div class="panel">
+    <h3>① 主题产生规则</h3>
+    <div class="rules" id="rules"></div>
+  </div>
+
+  <div class="panel">
+    <h3>② 当前状态</h3>
+    <div class="scores" id="scores"></div>
+    <h3 style="margin-top:14px">主题池</h3>
+    <div class="pool" id="pool"></div>
+    <div class="synos" id="synos"></div>
+    <details class="detail" id="detail"></details>
+  </div>
+
+  <div class="panel">
+    <h3>③ 自由入库 —— 你来当读者</h3>
+    <div id="ingest"></div>
+  </div>
+
+  <div class="panel">
+    <h3>④ 引导演练</h3>
+    <div class="tabs" id="tabs"></div>
+    <div class="walk-desc" id="walkDesc"></div>
+    <div class="steps" id="steps"></div>
+  </div>
+
+  <div class="panel">
+    <h3>⑤ 刚刚发生了什么</h3>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   第一段：纯模块 —— 这一块是要留下来的，可整块搬进 contextstudio/src/
+   不碰 DOM、不读页面状态。页面只向它单向调用。
+   ========================================================================== */
+
+/** 与 contextstudio/src/graph.ts 同一条规则：判定相等只做 trim + lowercase。 */
+const normalizeTopic = (topic) => topic.trim().toLowerCase();
+
+/** 入库。`concepts` 是模拟器的真值，真实产品里 context 上没有这个字段。 */
+function reduce(state, action) {
+  switch (action.type) {
+    case "ingest":
+      return { ...state, contexts: [...state.contexts, {
+        id: action.id, claim: action.claim, concepts: action.concepts,
+        topics: [...new Set(action.topics.map(normalizeTopic))].filter((t) => t !== ""),
+      }] };
+
+    // 事后补救：把一个主题并进另一个。**它会改写所有引用它的 context**，
+    // 这正是要在原型里看见的代价。
+    case "merge-topic": {
+      const from = normalizeTopic(action.from), into = normalizeTopic(action.into);
+      return { ...state, contexts: state.contexts.map((c) => ({
+        ...c,
+        topics: [...new Set(c.topics.map((t) => (normalizeTopic(t) === from ? into : t)))],
+      })) };
+    }
+
+    case "reset":
+      return { contexts: [] };
+
+    default:
+      return state;
+  }
+}
+
+/** 主题 → 挂了几条。按条数降序，同数按字典序——定序，否则每次渲染顺序都在跳。 */
+function topicPool(state) {
+  const counts = new Map();
+  for (const c of state.contexts) {
+    for (const t of new Set(c.topics.map(normalizeTopic))) {
+      counts.set(t, (counts.get(t) || 0) + 1);
+    }
+  }
+  return [...counts.entries()]
+    .map(([topic, count]) => ({ topic, count }))
+    .sort((a, b) => b.count - a.count || a.topic.localeCompare(b.topic));
+}
+
+/**
+ * 入库时给读者提供什么。**这是四种规则的全部差别**，也是这个原型真正在设计的东西。
+ *
+ * `aiRead` 是「AI 读完这条材料认为它讲什么」，模拟器直接从真值概念给出——
+ * 真实产品里这一步是模型调用，会有它自己的误差，这里先当它是准的：
+ * 我们要分辨的是**规则**的差别，不是模型的准确率。
+ */
+function offer(rule, state, aiRead) {
+  const pool = topicPool(state);
+  const poolSet = new Set(pool.map((p) => p.topic));
+
+  switch (rule) {
+    // 什么也不给。读者凭记忆打字——记忆就是漂移的来源。
+    case "free":
+      return { suggestions: [], allowFree: true,
+        hint: "没有任何提示。你得自己想起上次是怎么写的。" };
+
+    // 把已有主题池摊开。抑制同义词，但也在诱惑读者随手选一个不太贴的。
+    case "autocomplete":
+      return { suggestions: pool.slice(0, 12).map((p) => p.topic), allowFree: true,
+        hint: "池子里已有的主题列在这儿，可以点，也可以自己打新的。" };
+
+    // AI 读材料给候选，但不看池子——所以它一致，却可能和读者已经用惯的词分叉。
+    case "ai":
+      return { suggestions: aiRead, allowFree: true,
+        hint: "AI 读完这条给出的候选。它前后一致，但它不知道你池子里已经有什么。" };
+
+    // AI 给候选，但每个候选先在池里找同义的已有主题；找到就用池里那个。
+    case "ai-pool": {
+      const mapped = aiRead.map((t) => {
+        const hit = SYNONYM_GROUPS.find((g) => g.includes(normalizeTopic(t)));
+        const existing = hit && hit.find((form) => poolSet.has(form));
+        return existing || t;
+      });
+      return { suggestions: [...new Set(mapped)], allowFree: true,
+        hint: "AI 给候选，但先在你已有的主题池里找同义的——有就用你已经在用的那个词。" };
+    }
+
+    default:
+      return { suggestions: [], allowFree: true, hint: "" };
+  }
+}
+
+/**
+ * 诊断。**真值图**按共享概念连边，**实际图**按共享主题连边（与 buildGraph 同规则）。
+ * 两者的差就是漂移的代价。
+ */
+function diagnose(state) {
+  const cs = state.contexts;
+  const shareBy = (a, b, key) => a[key].some((x) => b[key].map(normalizeTopic).includes(normalizeTopic(x)));
+
+  const truth = [], actual = [], missed = [], wrong = [];
+  for (let i = 0; i < cs.length; i++) {
+    for (let j = i + 1; j < cs.length; j++) {
+      const t = shareBy(cs[i], cs[j], "concepts");
+      const a = shareBy(cs[i], cs[j], "topics");
+      if (t) truth.push([cs[i], cs[j]]);
+      if (a) actual.push([cs[i], cs[j]]);
+      if (t && !a) missed.push([cs[i], cs[j]]);
+      if (a && !t) wrong.push([cs[i], cs[j]]);
+    }
+  }
+
+  // 同义组：池里同时存在同一概念的两种写法——漏边的直接成因。
+  const poolSet = new Set(topicPool(state).map((p) => p.topic));
+  const splits = SYNONYM_GROUPS
+    .map((g) => g.filter((form) => poolSet.has(form)))
+    .filter((present) => present.length > 1);
+
+  return {
+    truth: truth.length, actual: actual.length,
+    missed, wrong, splits,
+    orphans: cs.filter((c) => c.topics.length === 0).length,
+  };
+}
+
+/**
+ * 同一个概念在现实里会被写成哪几种。中英混写在这个仓库是常态而非边缘情况
+ * （`CLAUDE.md`：人话中文、术语英文），所以它是主要的漂移来源。
+ */
+const SYNONYM_GROUPS = [
+  ["eval", "评测", "evaluation", "评估"],
+  ["rag", "检索", "retrieval", "召回"],
+  ["agent-design", "agent 设计", "agent架构", "agent-architecture"],
+  ["context-window", "上下文长度", "长上下文"],
+  ["provenance", "出处", "溯源"],
+  ["本地模型", "local-model", "端侧模型"],
+  ["prompt-cache", "缓存", "提示缓存"],
+  ["知识图", "knowledge-graph", "图谱"],
+];
+
+/* ============================================================================
+   第二段：页面 —— 一次性的
+   ========================================================================== */
+
+const CONCEPTS = {
+  evaluation:  { forms: ["eval", "评测", "evaluation", "评估"], ai: ["eval"] },
+  retrieval:   { forms: ["rag", "检索", "retrieval", "召回"], ai: ["rag"] },
+  agent:       { forms: ["agent-design", "agent 设计", "agent架构"], ai: ["agent-design"] },
+  ctxwindow:   { forms: ["context-window", "上下文长度", "长上下文"], ai: ["context-window"] },
+  provenance:  { forms: ["provenance", "出处", "溯源"], ai: ["provenance"] },
+  localmodel:  { forms: ["本地模型", "local-model", "端侧模型"], ai: ["本地模型"] },
+};
+
+const MATERIALS = [
+  ["evaluation", "judge 没有参照物就只会给趋中的安全分。", "Constitutional AI, p.12"],
+  ["evaluation", "evaluator 看过生成过程就会去辩护而不是挑刺。", "内部 eval 报告 v3"],
+  ["evaluation", "分数不再提升就该停，最后一轮不一定是最好的一轮。", "自己的博客草稿 #14"],
+  ["evaluation", "「可以更具体一些」这种意见等于没有，revise 拿到它只能瞎改。", "读书笔记"],
+  ["retrieval", "纯 tag 匹配在库大了以后召回率显著下降。", "RAG survey, §3.1"],
+  ["retrieval", "空块不命中任何查询，却会把背景分布的中位数拉低。", "本地实验记录 2026-07"],
+  ["retrieval", "RRF 融合下短而密的块会系统性压过长正文块。", "内部 eval 报告 v3"],
+  ["agent", "多 agent 讨论的字数一定多于文章本身。", "自己的博客草稿 #14"],
+  ["agent", "节点类型开放自定义，写作工具就变成了编排平台。", "读书笔记"],
+  ["agent", "工具返回的错误文本本身就是 prompt。", "SWE-bench, table 3"],
+  ["ctxwindow", "模型在超过一定长度后，中段信息的召回明显低于首尾。", "Lost in the Middle, §4.2"],
+  ["ctxwindow", "塞得进比找得到更硬——prompt 预算是有限的。", "本地实验记录 2026-07"],
+  ["provenance", "不存在既无出处又未标记 authored 的断言。", "自己的博客草稿 #14"],
+  ["provenance", "一旦在入库阶段就转述，幻觉就在最上游进来了。", "读书笔记"],
+  ["localmodel", "跨语检索需要专门的多语模型，通用英文模型直接归零。", "BGE-M3 技术报告, §2"],
+  ["localmodel", "视觉模型读公式比 OCR 稳，但会悄悄补全看不清的下标。", "本地实验记录 2026-07"],
+];
+
+const RULES = [
+  ["free", "自由填", "什么提示都不给。读者凭记忆打字。"],
+  ["autocomplete", "带补全", "把已有主题池摊开供选，也能自己打新的。"],
+  ["ai", "AI 提议", "AI 读材料给候选，读者确认。但 AI 不看池子。"],
+  ["ai-pool", "AI 提议 + 看池", "AI 给候选，但先在已有池里找同义的，有就复用。"],
+];
+
+let state = { contexts: [] };
+let rule = "free";
+let cursor = 0;          // 下一条材料
+let picked = new Set();  // 当前这条选中的主题
+let custom = "";
+let logLines = [];
+let walk = 0, walkStep = 0;
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+function log(text, cls) {
+  logLines.unshift('<div class="' + (cls || "") + '">' + text + "</div>");
+  logLines = logLines.slice(0, 60);
+}
+
+/* ---- 动作（页面调纯模块）---- */
+
+function ingest(concepts, topics, note) {
+  const material = MATERIALS[cursor % MATERIALS.length];
+  state = reduce(state, {
+    type: "ingest", id: "ctx_" + (state.contexts.length + 1),
+    claim: material[1], concepts, topics,
+  });
+  const before = diagnose(state);
+  log("入库 ctx_" + state.contexts.length + " · 主题 " +
+      (topics.length ? topics.map((t) => "#" + esc(t)).join(" ") : "（无 → 孤儿）") +
+      (note ? " · " + note : ""),
+      before.missed.length ? "hl" : "");
+  cursor++;
+  picked = new Set(); custom = "";
+  render();
+}
+
+function ingestNext(topics, note) {
+  const material = MATERIALS[cursor % MATERIALS.length];
+  ingest([material[0]], topics, note);
+}
+
+/** 定向入库：指定概念，用于演练里「再来一条讲评测的」。 */
+function ingestConcept(conceptId, topics, note) {
+  const found = MATERIALS.findIndex((m, i) => m[0] === conceptId && i >= cursor);
+  cursor = found >= 0 ? found : MATERIALS.findIndex((m) => m[0] === conceptId);
+  ingest([conceptId], topics, note);
+}
+
+function reset(newRule) {
+  state = reduce(state, { type: "reset" });
+  cursor = 0; picked = new Set(); custom = ""; logLines = [];
+  if (newRule) rule = newRule;
+  log("重置 · 规则 = " + RULES.find((r) => r[0] === rule)[1], "ok");
+  render();
+}
+
+/* ---- 渲染 ---- */
+
+function renderRules() {
+  $("rules").innerHTML = RULES.map(([key, name, desc]) =>
+    '<button class="rule" data-rule="' + key + '" aria-pressed="' + (rule === key) + '">' +
+    '<span class="rname">' + name + '</span><span class="rdesc">' + desc + "</span></button>").join("");
+  $("rules").querySelectorAll(".rule").forEach((el) => {
+    el.onclick = () => { reset(el.dataset.rule); };
+  });
+}
+
+function renderState() {
+  const d = diagnose(state);
+  $("scores").innerHTML = [
+    ["入库条数", state.contexts.length, ""],
+    ["主题数", topicPool(state).length, ""],
+    ["实际边", d.actual, ""],
+    ["漏边<small>该连没连</small>", d.missed.length, d.missed.length ? "bad" : "good"],
+    ["假边<small>不该连却连了</small>", d.wrong.length, d.wrong.length ? "bad" : "good"],
+    ["孤儿", d.orphans, ""],
+  ].map(([k, v, cls]) =>
+    '<div class="score ' + cls + '"><div class="k">' + k + '</div><div class="v">' + v + "</div></div>").join("");
+
+  const splitForms = new Set(d.splits.flat());
+  const pool = topicPool(state);
+  $("pool").innerHTML = pool.length
+    ? pool.map((p) => '<span class="chip ' + (splitForms.has(p.topic) ? "dup" : "") + '">' +
+        esc(p.topic) + '<span class="n">' + p.count + "</span></span>").join("")
+    : '<span class="chip empty">还没有任何主题</span>';
+
+  $("synos").innerHTML = d.splits.length
+    ? d.splits.map((g) => '<div class="syno">同一个概念在池里分成了 ' + g.length + " 种写法：" +
+        g.map((x) => "<b>" + esc(x) + "</b>").join(" / ") +
+        " —— 用这几个词的 context 之间的边<b>全部丢了</b>。</div>").join("")
+    : "";
+
+  $("detail").innerHTML = "<summary>看具体是哪些边（真值 " + d.truth + " 条 · 实际 " + d.actual + " 条）</summary>" +
+    "<ul>" +
+    (d.missed.length ? d.missed.slice(0, 8).map(([a, b]) =>
+      "<li><b>漏</b> " + a.id + " ↔ " + b.id + "：都讲 " + a.concepts.join("/") +
+      "，但主题是 " + (a.topics.map((t) => "#" + esc(t)).join(" ") || "无") + " vs " +
+      (b.topics.map((t) => "#" + esc(t)).join(" ") || "无") + "</li>").join("") : "") +
+    (d.wrong.length ? d.wrong.slice(0, 8).map(([a, b]) =>
+      "<li><b>假</b> " + a.id + " ↔ " + b.id + "：讲的是 " + a.concepts.join("/") + " 和 " +
+      b.concepts.join("/") + "，却都挂了同一个主题</li>").join("") : "") +
+    (!d.missed.length && !d.wrong.length ? "<li>目前每条边都对。</li>" : "") +
+    "</ul>";
+}
+
+function renderIngest() {
+  const material = MATERIALS[cursor % MATERIALS.length];
+  const conceptId = material[0];
+  const aiRead = CONCEPTS[conceptId].ai;
+  const off = offer(rule, state, aiRead);
+  const poolSet = new Set(topicPool(state).map((p) => p.topic));
+
+  // 自由填与带补全下，读者要自己想词，所以把这个概念现实中会被写成的几种摆出来
+  // 让人点——这不是产品里的东西，是模拟器代替「打字」的手段。
+  const forms = (rule === "free" || rule === "autocomplete") ? CONCEPTS[conceptId].forms : [];
+  const options = [...new Set([...off.suggestions, ...forms])];
+
+  $("ingest").innerHTML =
+    '<div class="material"><div class="mclaim">' + esc(material[1]) + '</div>' +
+    '<div class="msrc">' + esc(material[2]) + " · 待入库</div></div>" +
+    '<div class="offer"><div class="offer-hint">' + off.hint + "</div>" +
+    '<div class="opts">' +
+    options.map((t) =>
+      '<button class="opt ' + (poolSet.has(normalizeTopic(t)) ? "fromPool" : "") +
+      '" data-t="' + esc(t) + '" aria-pressed="' + picked.has(t) + '">' + esc(t) + "</button>").join("") +
+    '<input type="text" id="customTopic" placeholder="或者自己打一个…" value="' + esc(custom) + '">' +
+    "</div>" +
+    '<div class="row">' +
+    '<button class="act primary" id="doIngest">入库这一条</button>' +
+    '<button class="act ghost" id="skipTopic">不填主题就入库（成为孤儿）</button>' +
+    '<button class="act" id="nextMaterial">换一条材料</button>' +
+    "</div></div>";
+
+  $("ingest").querySelectorAll(".opt").forEach((el) => {
+    el.onclick = () => {
+      const t = el.dataset.t;
+      picked.has(t) ? picked.delete(t) : picked.add(t);
+      renderIngest();
+    };
+  });
+  const input = $("customTopic");
+  input.oninput = () => { custom = input.value; };
+  $("doIngest").disabled = picked.size === 0 && custom.trim() === "";
+  $("doIngest").onclick = () => {
+    const topics = [...picked];
+    if (custom.trim()) topics.push(custom.trim());
+    ingestNext(topics);
+  };
+  $("skipTopic").onclick = () => ingestNext([]);
+  $("nextMaterial").onclick = () => { cursor++; picked = new Set(); custom = ""; render(); };
+}
+
+/* ---- 引导演练 ---- */
+
+const WALKS = [
+  {
+    name: "① 同义词漂移",
+    desc: "<b>最要命的一种，因为它完全没有症状。</b>你连着入库三条讲评测的材料，都打 <code>eval</code>——" +
+      "一切正常。过两周再读到一条，这次你打了 <code>评测</code>。" +
+      "<b>盯着「漏边」那个数：它会从 0 直接跳上去。</b>而图上什么也不会提示你。",
+    steps: [
+      ["重置，规则设为「自由填」", () => reset("free")],
+      ["入库第 1 条评测材料，打 eval", () => ingestConcept("evaluation", ["eval"])],
+      ["入库第 2 条评测材料，打 eval", () => ingestConcept("evaluation", ["eval"])],
+      ["入库第 3 条评测材料，打 eval", () => ingestConcept("evaluation", ["eval"])],
+      ["两周后 —— 入库第 4 条，这次打「评测」", () => ingestConcept("evaluation", ["评测"], "漂了")],
+    ],
+  },
+  {
+    name: "② 补全能不能救",
+    desc: "同样的四条材料，同样的顺序，只是这次入库时能看见池子里已经有 <code>eval</code>。" +
+      "<b>看漏边是不是还会涨。</b>这一步几乎不用讨论就能看出胜负——真正的问题在下一个演练里。",
+    steps: [
+      ["重置，规则设为「带补全」", () => reset("autocomplete")],
+      ["入库第 1 条评测材料，打 eval", () => ingestConcept("evaluation", ["eval"])],
+      ["入库第 2 条，池里已有 eval，点它", () => ingestConcept("evaluation", ["eval"])],
+      ["入库第 3 条，点 eval", () => ingestConcept("evaluation", ["eval"])],
+      ["两周后 —— 池里仍然摆着 eval，点它", () => ingestConcept("evaluation", ["eval"], "池子接住了")],
+    ],
+  },
+  {
+    name: "③ 补全的副作用：假边",
+    desc: "补全解决了同义词，但它带来一个新毛病：<b>池子摆在眼前，人会偷懒。</b>" +
+      "四条讲的是四件完全不同的事，但每条都能勉强算「和 agent 有关」，于是你每条都顺手点了 " +
+      "<code>agent-design</code>。<b>盯着「假边」。</b>这四条之间会连出 6 条边，没有一条是真的。",
+    steps: [
+      ["重置，规则设为「带补全」", () => reset("autocomplete")],
+      ["入库一条讲 agent 的，打 agent-design", () => ingestConcept("agent", ["agent-design"])],
+      ["入库一条讲检索的 —— 顺手也点 agent-design", () => ingestConcept("retrieval", ["agent-design"], "偷懒")],
+      ["入库一条讲上下文长度的 —— 又点 agent-design", () => ingestConcept("ctxwindow", ["agent-design"], "偷懒")],
+      ["入库一条讲本地模型的 —— 还是 agent-design", () => ingestConcept("localmodel", ["agent-design"], "偷懒")],
+    ],
+  },
+  {
+    name: "④ AI 不看池会分叉",
+    desc: "AI 提议的好处是它<b>前后一致</b>——不会像人一样两周后换个词。" +
+      "但它不看你的池子。你自己先手打了两条 <code>评测</code>，然后开始用 AI，" +
+      "AI 一直提议 <code>eval</code>。<b>两半各自都很整齐，中间断开。</b>" +
+      "这说明「一致」不等于「对齐」。",
+    steps: [
+      ["重置，规则设为「AI 提议」", () => reset("ai")],
+      ["你自己先打了一条「评测」", () => ingestConcept("evaluation", ["评测"])],
+      ["再打一条「评测」", () => ingestConcept("evaluation", ["评测"])],
+      ["开始用 AI —— 它提议 eval", () => ingestConcept("evaluation", ["eval"], "AI 不知道你在用「评测」")],
+      ["再来一条，AI 还是 eval", () => ingestConcept("evaluation", ["eval"])],
+    ],
+  },
+  {
+    name: "⑤ AI + 看池",
+    desc: "同样的开局：你先用「评测」打了两条。但这次 AI 在提议前<b>先去池子里找同义的</b>，" +
+      "发现你已经在用「评测」，于是它提议「评测」而不是它自己偏好的 eval。" +
+      "<b>一致性来自 AI，对齐来自池子。</b>",
+    steps: [
+      ["重置，规则设为「AI 提议 + 看池」", () => reset("ai-pool")],
+      ["你自己先打了一条「评测」", () => ingestConcept("evaluation", ["评测"])],
+      ["再打一条「评测」", () => ingestConcept("evaluation", ["评测"])],
+      ["开始用 AI —— 它查了池子，提议「评测」", () => ingestConcept("evaluation", ["评测"], "AI 让步了")],
+      ["再来一条，仍然「评测」", () => ingestConcept("evaluation", ["评测"])],
+    ],
+  },
+  {
+    name: "⑥ 事后合并救得回来吗",
+    desc: "假设已经漂了（演练 ① 的结局）。现在把 <code>评测</code> 合并进 <code>eval</code>。" +
+      "<b>漏边确实归零了</b>——所以补救是可行的。但注意合并这一步<b>改写了所有引用它的 context</b>：" +
+      "主题是自由词、没有注册表，所以改名不可能像 PDF Studio 的标记那样只动一个文件。",
+    steps: [
+      ["重置，规则设为「自由填」", () => reset("free")],
+      ["打三条 eval", () => { ingestConcept("evaluation", ["eval"]); ingestConcept("evaluation", ["eval"]); ingestConcept("evaluation", ["eval"]); }],
+      ["再打一条「评测」—— 漏边出现", () => ingestConcept("evaluation", ["评测"], "漂了")],
+      ["把「评测」合并进 eval", () => {
+        state = reduce(state, { type: "merge-topic", from: "评测", into: "eval" });
+        log("合并主题 评测 → eval，改写了引用它的 context", "ok");
+        render();
+      }],
+    ],
+  },
+];
+
+function renderWalks() {
+  $("tabs").innerHTML = WALKS.map((w, i) =>
+    '<button class="tab" data-i="' + i + '" aria-selected="' + (i === walk) + '">' + w.name + "</button>").join("");
+  $("tabs").querySelectorAll(".tab").forEach((el) => {
+    el.onclick = () => { walk = Number(el.dataset.i); walkStep = 0; render(); };
+  });
+
+  const w = WALKS[walk];
+  $("walkDesc").innerHTML = w.desc;
+  $("steps").innerHTML = w.steps.map((s, i) =>
+    '<div class="step ' + (i < walkStep ? "done" : i === walkStep ? "next" : "") + '">' +
+    '<span class="idx">' + (i + 1) + "</span>" +
+    '<button data-i="' + i + '"' + (i !== walkStep ? " disabled" : "") + ">" + s[0] + "</button></div>").join("");
+  $("steps").querySelectorAll("button").forEach((el) => {
+    el.onclick = () => { w.steps[Number(el.dataset.i)][1](); walkStep++; render(); };
+  });
+}
+
+function render() {
+  renderRules();
+  renderState();
+  renderIngest();
+  renderWalks();
+  $("log").innerHTML = logLines.join("") || '<div style="color:var(--faint)">还没有动作。</div>';
+}
+
+reset();
+</script>
+</body>
+</html>

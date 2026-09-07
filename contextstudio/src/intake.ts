@@ -1,4 +1,4 @@
-import type { Graph, TopicStat } from "./graph";
+import { normalizeTopic, topicIndex, type Graph, type TopicStat } from "./graph";
 
 /**
  * 最多提议几个。**这个数就是 ADR-0003 的胜负手**：原型量过，把整个主题池摊给读者挑
@@ -51,27 +51,28 @@ export function proposeTopics(
   aiRead: string[],
   options: ProposeOptions = {},
 ): Proposal {
-  const spelling = new Map(graph.topics.map((stat: TopicStat) => [stat.topic, stat.topic]));
+  const index = topicIndex(graph);
 
   const aligned = new Map<string, string>();
   for (const raw of aiRead) {
-    const normalized = raw.trim().toLowerCase();
-    if (normalized === "") continue;
+    const key = normalizeTopic(raw);
+    if (key === "") continue;
     // 先按归一化去重，再取写法：模型给 "rag" 和 "RAG" 是同一个主题，不该占两个名额。
-    if (!aligned.has(normalized)) aligned.set(normalized, spelling.get(normalized) ?? raw.trim());
+    // **池里有就用池里的写法**——`display` 是读者原样写下的那份，不是归一化后的小写。
+    if (!aligned.has(key)) aligned.set(key, index.get(key)?.display ?? raw.trim());
   }
 
   // 保留模型给的先后。它按相关度排的，而我们没有能力重排——按稀有度重排会
   // 系统性地把新主题顶到前面，那恰好是漂移的入口，与「对齐」的目标相反。
-  const topics = [...aligned.values()].slice(0, MAX_SUGGESTIONS);
+  const keys = [...aligned.keys()].slice(0, MAX_SUGGESTIONS);
+  const topics = keys.map((key) => aligned.get(key)!);
 
   // 只看已经在池里的：一个刚出现的新主题当然「不笼统」，但那是因为它还没被用过，
   // 不是因为它精确。拿它触发提醒会让每条新主题都被质疑一遍。
   const ceiling = (options.vagueAbove ?? DEFAULT_VAGUE_ABOVE) * graph.nodes.length;
-  const size = new Map(graph.topics.map((stat) => [stat.topic, stat.size]));
-  const vague = topics
-    .map((topic) => ({ topic, size: size.get(topic.toLowerCase()) ?? 0 }))
-    .filter((stat) => stat.size > ceiling);
+  const vague = keys
+    .map((key) => index.get(key))
+    .filter((stat): stat is TopicStat => stat !== undefined && stat.size > ceiling);
 
   return { topics, vague };
 }

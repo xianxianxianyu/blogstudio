@@ -1,7 +1,5 @@
 import { apiFetch } from "./api-base";
-import type { Draft, DraftSummary } from "../../blogstudio/src/draft";
-import type { DraftStore } from "../../blogstudio/src/draft-store";
-import type { Revision, RevisionInfo, RevisionStore } from "../../blogstudio/src/revisions";
+import type { Draft, DraftStore, DraftSummary } from "../../blogstudio/src/draft";
 
 /**
  * 浏览器侧的稿子读写，转交本机 API（ADR-0014 共用那一份实现）。
@@ -39,41 +37,6 @@ export function createHttpDraftStore(route: string): DraftStore {
     async remove(id: string): Promise<void> {
       const response = await apiFetch(one(id), { method: "DELETE" });
       if (!response.ok) throw new Error(`删稿子失败：HTTP ${response.status}`);
-    },
-  };
-}
-
-/**
- * 历史版本，同一条路。
- *
- * 与稿子分成两个适配器而不是一个大的：它们在领域上就是两个 store（`DraftStore` 只管
- * 「现在这一份」，`RevisionStore` 只管「留过的那些」），合成一个的话，将来 agent 那条线
- * 要往版本里加东西时，会连带动到日常保存那条路。
- */
-export function createHttpRevisionStore(route: string): RevisionStore {
-  const of = (draftId: string) => `${route}/${encodeURIComponent(draftId)}/revisions`;
-
-  return {
-    async list(draftId: string): Promise<RevisionInfo[]> {
-      const response = await apiFetch(of(draftId));
-      if (!response.ok) throw new Error(`读版本列表失败：HTTP ${response.status}`);
-      return (await response.json()) as RevisionInfo[];
-    },
-
-    async read(draftId: string, n: number): Promise<Revision | null> {
-      const response = await apiFetch(`${of(draftId)}/${n}`);
-      if (!response.ok) throw new Error(`读第 ${n} 版失败：HTTP ${response.status}`);
-      return (await response.json()) as Revision | null;
-    },
-
-    async append(draftId, revision): Promise<Revision> {
-      const response = await apiFetch(of(draftId), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(revision),
-      });
-      if (!response.ok) throw new Error(`留这一版失败：HTTP ${response.status} ${await response.text()}`);
-      return (await response.json()) as Revision;
     },
   };
 }

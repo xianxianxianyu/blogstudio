@@ -45,7 +45,9 @@ type ReaderPatch = Partial<Pick<Context, "topics" | "stance" | "status">>;
 
 > **覆盖不是整条替换。** 导入进来的 `topics` 是空的（导出层不填，见 ADR-0002），
 > 无脑覆盖会把读者上次定的主题抹掉。所以：
-> - `evidence` / `source` / `sourceClipId` —— 以导入的为准，上游是真相
+> - `source` / `sourceClipId` —— 以导入的为准，上游是真相
+> - `evidence` —— **冻结在第一次入库那一刻**，重导不覆盖（`docs/adr/0002` ③）。逐字引文
+>   一旦被 draft 引用，悄悄改掉它没有任何东西会报错。原文要改就产出新的一条 context
 > - `topics` / `stance` / `status` —— **保留库里已有的**，导入的空值不覆盖非空
 
 这条规则只要漏到调用方一次，就会有一次静默的数据丢失。放在 store 里 = locality。
@@ -73,6 +75,6 @@ type ReaderPatch = Partial<Pick<Context, "topics" | "stance" | "status">>;
 
 - **`buildGraph`**。它是纯函数，吃 `Context[]` 吐 `Graph`。把它塞进 store 会让它没法单独测。
   调用方自己组合：`buildGraph(await store.all())`。
-- **主题的提议**（ADR-0003 的 `offer`）。那是导入口的策略，不是存储。
+- **主题的提议**（ADR-0003 的 `proposeTopics`）。那是导入口的策略，不是存储。
 - **`pdfstudio/src/knowledge/context.ts` 的 `ContextSink`**。ADR-0002 之后 PDF Studio
   不写这个库了，那个端口的 `publish` 已经没有对应物——**它是死的，该删**。

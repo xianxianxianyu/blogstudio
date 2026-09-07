@@ -13,8 +13,20 @@
  *    按组回退就得把 url 和 key 再抄一遍。
  */
 
-/** 需要模型的功能。embedding 的形状与其余四个不同（文本进、向量出），但配置项一样。 */
-export type Capability = "recognition" | "translation" | "chat" | "embedding" | "claim";
+/**
+ * 需要模型的功能。**这份清单同时就是设置页要画的清单**——两者必须是同一个东西。
+ *
+ * 判据只有一条：**配了就真的生效**。此前这里还有 `embedding` 和 `claim`，两个都不满足
+ * ——`embedding` 写死了本地 embeddinggemma（`main.tsx` 的 `createHttpEmbedder` 压根不读
+ * 配置），`claim` 从来没接过线。它们在设置里摆着三栏可填，读者填进去的东西无声失效。
+ * 而反过来 `chat` 明明在用（问文档），设置里却没有它，于是它永远只能跟随默认组。
+ *
+ * **加回来的条件是「接线的同时加」**，不是「先留个位」——留位的那一版已经证明了它会
+ * 一直留着。
+ */
+export const CAPABILITIES = ["recognition", "translation", "chat", "writing"] as const;
+
+export type Capability = (typeof CAPABILITIES)[number];
 
 export interface EndpointConfig {
   baseURL: string;
@@ -65,7 +77,9 @@ export function parseConfig(raw: unknown): AppConfig {
 
   return {
     default: fallback,
-    capabilities: source.capabilities ?? {},
+    // **只留认识的能力。** 退休掉一个能力时，旧 config.json 里残留的那一段必须一起走
+    // ——留着它，下次谁打开这个文件都会以为那一段还管用，而它已经不接任何线了。
+    capabilities: knownOnly(source.capabilities),
     // 逐字段回退：旧文件根本没有这一段，落到 undefined 的话回收器那边
     // `ttlDays` 会算出 NaN，而 `now - lastViewedAt > NaN` 永远是 false
     // ——回收静默失效，不报任何错。
@@ -74,6 +88,16 @@ export function parseConfig(raw: unknown): AppConfig {
     localRecognition: source.localRecognition ?? false,
   };
 }
+
+const knownOnly = (
+  raw: AppConfig["capabilities"] | undefined,
+): AppConfig["capabilities"] =>
+  Object.fromEntries(
+    CAPABILITIES.filter((capability) => raw?.[capability] !== undefined).map((capability) => [
+      capability,
+      raw![capability]!,
+    ]),
+  );
 
 /** 某个功能实际用哪个端点。逐字段回退到默认组。 */
 export function resolveEndpoint(config: AppConfig, capability: Capability): EndpointConfig {

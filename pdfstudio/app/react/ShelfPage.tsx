@@ -11,10 +11,19 @@ export function ShelfPage({
   ws,
   state,
   onOpen,
+  onOpenUrl,
 }: {
   ws: Workspace;
   state: WorkspaceState;
   onOpen: (docId: string) => Promise<void>;
+  /**
+   * 打开一个网页。
+   *
+   * **这个入口暂时放在书架上，而它并不属于这里**——网页不是书（ADR-0006 的代价 1）。
+   * 等「网页阅读该放哪」定下来就搬走；现在放这儿是为了先把通路打通，
+   * 而不是为了它属于这儿。
+   */
+  onOpenUrl: (url: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [over, setOver] = useState(false);
@@ -50,6 +59,28 @@ export function ShelfPage({
       <header>
         <h1 className="grow">书架</h1>
       </header>
+
+      {/* 暂居于此，见 `onOpenUrl` 的注释。 */}
+      <form
+        className="row"
+        style={{ marginBottom: 18 }}
+        onSubmit={(event) => {
+          event.preventDefault();
+          const url = new FormData(event.currentTarget).get("url");
+          if (typeof url === "string" && url.trim() !== "") onOpenUrl(url.trim());
+          event.currentTarget.reset();
+        }}
+      >
+        <input
+          name="url"
+          className="grow"
+          placeholder="打开一个网页（https://…）"
+          style={{ font: "inherit", padding: "7px 11px", border: "1px solid var(--line)", borderRadius: 8 }}
+        />
+        <button className="btn" type="submit">
+          打开
+        </button>
+      </form>
 
       <div className="books">
         {state.docs.map((doc) => (

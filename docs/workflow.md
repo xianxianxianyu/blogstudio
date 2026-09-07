@@ -31,9 +31,9 @@ session 只是执行器。session 可以随时丢弃重开，artifact 不能。
 |---|---|---|---|
 | **Talk** | 一场对话 | 没人 | 一条 Decision |
 | **Studio** | 文章本身 | **你** | 你的 commit |
-| **Loop** | review 列表 | write agent | agent 的 commit |
+| **Review** | review 列表 | write agent | agent 的 commit |
 
-Talk 和 Loop 都是**在谈论文章**，Studio 是**在文章里**。
+Talk 和 Review 都是**在谈论文章**，Studio 是**在文章里**。
 
 ### 1.3 agent 写文本的唯一规则
 
@@ -42,7 +42,7 @@ Talk 和 Loop 都是**在谈论文章**，Studio 是**在文章里**。
 
 - Talk 里你盯着对话框，agent 改正文你看不见 → **禁止写**
 - Studio 里你盯着正文，agent 改一个词你立刻看到 → **这本身就是 review**，不需要 Diff
-- Loop 里没人在场 → 必须留下可审阅的 Diff
+- Review 里没人在场 → 必须留下可审阅的 Diff
 
 这条规则解释了为什么 Talk 的 agent 不能写、Studio 的 agent 反而应该能写。
 
@@ -134,10 +134,10 @@ Revision 是**线性追加**的，不覆盖。任何一轮都能被取回。
 
 不碰文本。唯一产出物是一条 **Decision**。
 
-Decision 写进 issue 时间线，由 Loop 异步执行。
+Decision 写进 issue 时间线，由 Review 异步执行。
 现实里也是这样：Slack 讨论架构，结论写进 issue，然后有人去实现 —— Slack 不能改代码。
 
-Talk 不是独立入口，是**从 Loop 升级上来的**：
+Talk 不是独立入口，是**从 Review 升级上来的**：
 在 review 某条意见时觉得"文字说不清楚"，带着那条意见的上下文开 Talk，
 聊完产出的 Decision 自动回填成那条意见的 resolution。
 
@@ -146,8 +146,8 @@ Talk 不是独立入口，是**从 Loop 升级上来的**：
 Studio 就是 Draft 页加上一把锁。
 
 ```
-┌ Loop 持笔 ─────────────────┐      ┌ 你持笔（Studio）──────────┐
-│ agent 可以 commit          │ 接管 │ Loop 暂停（run paused）    │
+┌ Review 持笔 ───────────────┐      ┌ 你持笔（Studio）──────────┐
+│ agent 可以 commit          │ 接管 │ Review 暂停（run paused）  │
 │ 你只能留 review comment    │ ───► │ 你直接编辑                 │
 │                            │ ◄─── │ agent 随叫随到，可当面改   │
 └────────────────────────────┘ 提交 └────────────────────────────┘
@@ -165,16 +165,20 @@ Studio 就是 Draft 页加上一把锁。
 （沿用 concepts 文档的 Answer / Diff / Thread / Artifact 四种形态）。
 chat 是个动词，不是个地方 —— 做成常驻面板它就会变成第二个文档。
 
-### 3.3 Loop（改）
+### 3.3 Review（改）
+
+> **这个模式原来叫 Loop。** 改名是因为 Loop 这个词后来被另一样东西占住了：
+> 定时跑的三阶段流水线（plan → work → wrap），那个是真代码，见
+> `blogstudio/src/loop/`。同一个 context 里两个 Loop 只会让人一直分辨。
 
 无人在场时运行。eval 产出 judgement，revise 按 judgement 改 branch。
 
-**Submit review 是 Loop 的唯一触发器。** 先攒一批 pending comment，
+**Submit review 是它的唯一触发器。** 先攒一批 pending comment，
 点 Submit 才发出去 —— 否则写了半条 review 去吃饭，agent 立刻拿半成品去改。
 
 ### 3.4 权限表
 
-| | Talk | Studio | Loop |
+| | Talk | Studio | Review |
 |---|---|---|---|
 | 人能做 | 讨论、决定删/换/补 | 编辑正文、commit、指挥 agent 当面改 | review、accept/dismiss、批量处理 |
 | 人不能做 | 编辑正文、commit | — | 直接改（要先接管） |
@@ -221,7 +225,7 @@ eval 产出的 anchored comment 是**一批对象**，出现在两个地方：
 
 聊出 TOC → 创建选题 issue → 从它开 branch。
 
-### ② 研究 · Loop
+### ② 研究 · Review
 
 输入 topic + TOC，产出 context items。
 
@@ -238,7 +242,7 @@ eval 产出的 anchored comment 是**一批对象**，出现在两个地方：
 
 TOC 在这一步允许被改。先定死 TOC 再硬填，写出来会很勉强。
 
-### ④ 生成 · Loop
+### ④ 生成 · Review
 
 按 TOC 逐节生成。
 
@@ -565,7 +569,7 @@ Draft（主页面）      正文 + TOC + composer，别的什么都没有
   └─ 点 Loom 按钮 → 抽屉滑出     预设图 / 执行图 / 重构记录
 ```
 
-写作（§3.2 Studio）和 Git（§3.3 Loop）**显式分离成两个页面**，
+写作（§3.2 Studio）和 Git（§3.3 Review）**显式分离成两个页面**，
 但底子是同一件事：人、多 agent 和文章用 git 协同。
 branch 名本身就是这两个模式之间的开关。
 

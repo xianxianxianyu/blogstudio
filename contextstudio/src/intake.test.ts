@@ -67,7 +67,7 @@ describe("proposeTopics", () => {
     const proposal = proposeTopics(graph, ["agent-design"]);
 
     expect(proposal.topics).toEqual(["agent-design"]);
-    expect(proposal.vague).toEqual([{ topic: "agent-design", size: 40 }]);
+    expect(proposal.vague).toEqual([{ topic: "agent-design", display: "agent-design", size: 40 }]);
   });
 
   it("挂得不多的主题不提醒", () => {
@@ -89,7 +89,20 @@ describe("proposeTopics", () => {
     const graph = library({ "agent-design": 40, rag: 5, eval: 5 });
 
     expect(proposeTopics(graph, ["rag"], { vagueAbove: 0.05 }).vague).toEqual([
-      { topic: "rag", size: 5 },
+      { topic: "rag", display: "rag", size: 5 },
     ]);
+  });
+
+  // code review 抓到的：`spelling` 曾是个恒等 Map，「对齐到池里在用的写法」拿到的是
+  // 归一化后的小写。读者写「Agent Design」，第二次入库就被系统改成「agent design」。
+  // 旧测试的 fixture 池全是小写，正好遮住了它。
+  it("对齐到的是读者写的那份，不是归一化后的小写", () => {
+    const graph = buildGraph([context("a", ["Agent Design"]), context("b", ["Agent Design"])]);
+
+    expect(proposeTopics(graph, ["AGENT DESIGN"]).topics).toEqual(["Agent Design"]);
+  });
+
+  it("池里没有的新主题，保留模型给的写法", () => {
+    expect(proposeTopics(library({}), ["Agent Design"]).topics).toEqual(["Agent Design"]);
   });
 });

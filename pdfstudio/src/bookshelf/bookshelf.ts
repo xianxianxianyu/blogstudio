@@ -76,6 +76,14 @@ export function createBookshelf(root: string): Bookshelf {
 
       // 与 ClipStore 同样的落盘姿势：先写临时目录再 rename（同一文件系统上原子），
       // 崩溃不会在架上留下一本只有元数据、没有 PDF 的书。
+      //
+      // **临时目录必须与目标同父目录**，两个理由，第二个不显眼：
+      // 1. rename 只在同一文件系统内原子。挪去系统临时目录就跨盘了，那时 rename 直接抛
+      //    ——炸得响，反倒不是最坏的。
+      // 2. 下面这句 `mkdir(staging, { recursive: true })` **顺带把 `<root>` 也建了出来**，
+      //    于是书架根中途没了也能自愈。这是副产品，不是有人特意写的：只挪 staging 路径
+      //    而不改 rename 的话，自愈会跟着**静默**消失。`tag-store` / `outline-store`
+      //    是显式 `mkdir` 的，这里靠的是这一句，所以把它钉在这儿。
       const staging = `${target}.tmp`;
       await rm(staging, { recursive: true, force: true });
       await mkdir(staging, { recursive: true });

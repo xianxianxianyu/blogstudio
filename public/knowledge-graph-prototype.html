@@ -1,0 +1,894 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>知识图 · 密度原型（PROTOTYPE）</title>
+<meta name="description" content="throwaway 原型：断言级粒度下，共享主题两两连边的图还看不看得下去。">
+<!--
+  PROTOTYPE — throwaway。三个变体挂在同一个页面，用 ?variant=A|B|C 切换。
+
+  它要回答的问题（见 .scratch/knowledge-graph/spec.md）：
+    1. 节点是「一条断言」而不是「一篇文档」，图会碎成几百个点——人还看得下去吗？
+    2. ADR-0002 接受了 O(n²) 的边，聚焦视图是不是因此从「一个功能」变成「唯一主视图」？
+    3. 孤儿（没有任何共享主题）长什么样才算「显式可见」而不是被当成噪声过滤掉？
+
+  数据是假的。buildGraph 的规则与 .scratch/knowledge-graph/issues/02 一致，
+  这样图上看到的密度就是真实实现会得到的密度。
+-->
+<style>
+:root {
+  color-scheme: light dark;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --bg: #fbfbfc;
+  --card: #ffffff;
+  --sunken: #f2f3f5;
+  --border: #e3e5e8;
+  --border-strong: #cdd0d5;
+  --text: #16181c;
+  --dim: #5c6370;
+  --faint: #8b919b;
+
+  --accent: #2f6feb;
+  --accent-bg: #eaf1fe;
+  --accent-border: #b9d0fb;
+
+  --danger: #ce3a3a;
+  --danger-bg: #fdeded;
+  --danger-border: #f5c2c2;
+
+  --warn: #a37a08;
+  --warn-bg: #fcf6e0;
+  --warn-border: #ecd9a0;
+
+  --ok: #1a7f45;
+  --ok-bg: #e7f6ec;
+  --ok-border: #b4e0c4;
+
+  --edge: rgba(90, 100, 115, .30);
+  --edge-hot: rgba(47, 111, 235, .55);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1114; --card: #16191d; --sunken: #1b1f24; --border: #272c33; --border-strong: #383f48;
+    --text: #e6e9ed; --dim: #9aa2ad; --faint: #6c757f;
+    --accent: #5b93f5; --accent-bg: #16233c; --accent-border: #2c4573;
+    --danger: #e56b6b; --danger-bg: #2a1618; --danger-border: #4d2529;
+    --warn: #d3aa3f; --warn-bg: #262013; --warn-border: #4d3b1d;
+    --ok: #47b877; --ok-bg: #12241a; --ok-border: #24462f;
+    --edge: rgba(150, 162, 178, .26);
+    --edge-hot: rgba(91, 147, 245, .60);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-sans); color: var(--text); background: var(--bg); line-height: 1.55; font-size: 15px; }
+.wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 140px; }
+.kicker { text-transform: uppercase; letter-spacing: .09em; font-size: 11px; color: var(--faint); margin: 0 0 8px; font-family: var(--font-mono); }
+h1 { font-size: 25px; margin: 0 0 14px; letter-spacing: -.01em; }
+h2 { font-size: 17px; margin: 34px 0 10px; }
+p { margin: 0 0 12px; }
+code { font-family: var(--font-mono); font-size: .88em; background: var(--sunken); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+.question { font-size: 15px; color: var(--dim); background: var(--sunken); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 8px; padding: 14px 16px; margin: 0 0 24px; }
+.question b { color: var(--text); }
+
+/* ---- 控制条 ---- */
+.controls { display: flex; flex-wrap: wrap; gap: 18px; align-items: center; padding: 12px 16px; background: var(--card); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; }
+.ctl-label { font-size: 12px; color: var(--faint); text-transform: uppercase; letter-spacing: .06em; font-family: var(--font-mono); }
+.seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 7px; overflow: hidden; }
+.seg button { font: inherit; font-size: 13px; padding: 5px 13px; background: var(--card); color: var(--dim); border: 0; border-right: 1px solid var(--border); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent-bg); color: var(--accent); font-weight: 600; }
+
+/* ---- 状态面板：每次操作后把全量状态摊开 ---- */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 18px; }
+.stat { background: var(--card); padding: 11px 14px; }
+.stat .k { font-size: 11px; color: var(--faint); font-family: var(--font-mono); letter-spacing: .04em; }
+.stat .v { font-size: 21px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; margin-top: 2px; }
+.stat .v small { font-size: 12px; color: var(--dim); font-variant-numeric: normal; letter-spacing: 0; }
+.stat.alarm .v { color: var(--danger); }
+
+/* ---- 舞台 ---- */
+.stage { background: var(--card); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+.stage-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 11px 16px; border-bottom: 1px solid var(--border); background: var(--sunken); }
+.stage-head h3 { margin: 0; font-size: 14px; }
+.stage-head .hint { font-size: 12px; color: var(--faint); }
+canvas { display: block; width: 100%; height: 520px; cursor: crosshair; }
+
+/* ---- 孤儿带 ---- */
+.orphans { border-top: 1px dashed var(--border-strong); padding: 12px 16px; background: var(--sunken); }
+.orphans h4 { margin: 0 0 8px; font-size: 12px; color: var(--warn); text-transform: uppercase; letter-spacing: .06em; font-family: var(--font-mono); }
+.orphan-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.orphan { font-size: 12px; background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--text); border-radius: 999px; padding: 3px 10px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---- 变体 B ---- */
+.focus-layout { display: grid; grid-template-columns: 290px 1fr; min-height: 520px; }
+.focus-list { border-right: 1px solid var(--border); overflow-y: auto; max-height: 520px; }
+.focus-item { padding: 9px 14px; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 13px; }
+.focus-item:hover { background: var(--sunken); }
+.focus-item[aria-selected="true"] { background: var(--accent-bg); border-left: 3px solid var(--accent); padding-left: 11px; }
+.focus-item .fid { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+.focus-item .fclaim { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.focus-pane { position: relative; }
+.focus-pane canvas { height: 520px; }
+.focus-empty { display: flex; align-items: center; justify-content: center; height: 520px; color: var(--faint); font-size: 14px; }
+
+/* ---- 变体 C ---- */
+.cols { display: flex; gap: 14px; overflow-x: auto; padding: 16px; align-items: flex-start; }
+.col { flex: 0 0 268px; background: var(--sunken); border: 1px solid var(--border); border-radius: 9px; }
+.col-head { padding: 9px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: baseline; }
+.col-head .tname { font-family: var(--font-mono); font-size: 13px; color: var(--accent); }
+.col-head .tcount { font-size: 11px; color: var(--faint); font-variant-numeric: tabular-nums; }
+.col-body { max-height: 470px; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 7px; }
+.ccard { background: var(--card); border: 1px solid var(--border); border-radius: 7px; padding: 9px 10px; font-size: 12.5px; }
+.ccard .cid { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+.ccard .cclaim { margin: 3px 0 5px; line-height: 1.45; }
+.ccard .calso { font-size: 11px; color: var(--dim); }
+.ccard .calso b { color: var(--accent); font-weight: 500; font-family: var(--font-mono); }
+.ccard .calso.none { color: var(--warn); }
+
+/* ---- tooltip ---- */
+.tip { position: fixed; z-index: 40; max-width: 340px; background: var(--card); border: 1px solid var(--border-strong); border-radius: 8px; padding: 10px 12px; font-size: 12.5px; box-shadow: 0 8px 24px rgba(0,0,0,.16); pointer-events: none; display: none; }
+.tip .tid { font-family: var(--font-mono); font-size: 10px; color: var(--faint); }
+.tip .tclaim { margin: 3px 0 6px; line-height: 1.45; }
+.tip .tev { color: var(--dim); font-size: 11.5px; border-left: 2px solid var(--border-strong); padding-left: 8px; margin-bottom: 6px; }
+.tip .ttopics b { font-family: var(--font-mono); color: var(--accent); font-weight: 500; margin-right: 6px; font-size: 11px; }
+
+/* ---- 每个变体底下的「它想证明什么」---- */
+.verdict { margin-top: 14px; padding: 13px 16px; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--border-strong); border-radius: 8px; font-size: 13.5px; color: var(--dim); }
+.verdict b { color: var(--text); }
+
+/* ---- 切换条 ---- */
+.switcher { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 2px; background: #16181c; color: #f2f3f5; border-radius: 999px; padding: 5px 6px; box-shadow: 0 6px 26px rgba(0,0,0,.34); font-size: 13px; }
+@media (prefers-color-scheme: dark) { .switcher { background: #e6e9ed; color: #0f1114; } }
+.switcher button { font: inherit; background: transparent; border: 0; color: inherit; cursor: pointer; padding: 6px 11px; border-radius: 999px; line-height: 1; }
+.switcher button:hover { background: rgba(127,127,127,.28); }
+.switcher .cur { padding: 0 13px; white-space: nowrap; }
+.switcher .cur b { font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <p class="kicker">prototype · throwaway · 假数据</p>
+  <h1>知识图：断言级粒度的密度原型</h1>
+  <p class="question">
+    <b>问题：</b>节点是「一条断言」而不是「一篇文档」（ADR-0001），边是共享主题的 context
+    两两相连（ADR-0002，明确接受了 O(n²)）。这样一张图，人还看得下去吗？
+    <b>拉动下面的密度</b>，看它在几条 context 的时候开始糊。
+  </p>
+
+  <div class="controls">
+    <span class="ctl-label">密度</span>
+    <span class="seg" id="density">
+      <button data-n="24" aria-pressed="false">24 条<br></button>
+      <button data-n="60" aria-pressed="true">60 条</button>
+      <button data-n="140" aria-pressed="false">140 条</button>
+      <button data-n="320" aria-pressed="false">320 条</button>
+    </span>
+    <span class="ctl-label" style="margin-left:8px">热门主题</span>
+    <span class="seg" id="skew">
+      <button data-skew="flat" aria-pressed="false">均匀</button>
+      <button data-skew="skewed" aria-pressed="true">有热门</button>
+    </span>
+    <span style="font-size:12px;color:var(--faint)">「有热门」= 一个主题吃掉三成 context，这是真实读法的常态</span>
+  </div>
+
+  <div class="stats" id="stats"></div>
+
+  <div id="stage"></div>
+  <div class="verdict" id="verdict"></div>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<div class="switcher">
+  <button id="prev" title="上一个（←）">←</button>
+  <span class="cur"><b id="curKey">A</b> — <span id="curName"></span></span>
+  <button id="next" title="下一个（→）">→</button>
+</div>
+
+<script>
+"use strict";
+
+/* ==========================================================================
+   1. 假数据
+   ========================================================================== */
+
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// 权重是「有多少 context 会挂上这个主题」。真实读法一定是偏斜的——
+// 你在集中读一个方向，所以有一个主题会吃掉一大块。
+const TOPIC_POOL = [
+  { name: "agent-design",    hot: 30, flat: 8 },
+  { name: "eval",            hot: 12, flat: 8 },
+  { name: "rag",             hot: 11, flat: 8 },
+  { name: "context-window",  hot: 8,  flat: 8 },
+  { name: "provenance",      hot: 7,  flat: 8 },
+  { name: "tool-use",        hot: 7,  flat: 8 },
+  { name: "prompt-cache",    hot: 5,  flat: 8 },
+  { name: "本地模型",         hot: 5,  flat: 8 },
+  { name: "多模态",           hot: 4,  flat: 8 },
+  { name: "知识图",           hot: 4,  flat: 8 },
+  { name: "写作流程",         hot: 4,  flat: 8 },
+  { name: "成本",             hot: 3,  flat: 8 },
+];
+
+const CLAIMS = [
+  ["纯 tag 匹配在库大了以后召回率显著下降，tag 体系本身还会漂移。",
+   "Tag-based retrieval degrades as the corpus grows; the taxonomy itself drifts."],
+  ["evaluator 看过生成过程就会去辩护而不是挑刺。",
+   "An evaluator that has seen the generation trace defends it instead of attacking it."],
+  ["只收集支持性材料写出来的东西，读着像宣传稿。",
+   "Corpora assembled only from supporting evidence read like marketing copy."],
+  ["一旦在入库阶段就转述，幻觉就在最上游进来了，后面全是复利。",
+   "Paraphrasing at ingestion admits hallucination upstream, and it compounds."],
+  ["judge 没有参照物就只会给趋中的安全分。",
+   "Without an anchor, an LLM judge regresses to safe middling scores."],
+  ["线性覆盖的思路默认「最新 = 最好」，但迭代是会退步的。",
+   "Linear revision assumes latest is best; iteration frequently regresses."],
+  ["散文的自动 merge 无解，只能用持笔锁绕开。",
+   "Prose has no viable auto-merge; an explicit write lock is the workaround."],
+  ["把状态藏在对话历史里，第 3 轮就回不到第 1 轮的版本。",
+   "State kept in conversation history cannot be rolled back to round one."],
+  ["agent 讨论的字数一定多于文章本身，默认折叠成结论才划算。",
+   "Agent deliberation always outweighs the artifact; collapse it to conclusions."],
+  ["模型在超过一定上下文长度后，中段信息的召回明显低于首尾。",
+   "Recall of mid-context material falls off sharply past a threshold length."],
+  ["工具返回的错误文本本身就是 prompt，写得含糊模型就会瞎试。",
+   "Tool error strings are prompts; vague ones make the model guess."],
+  ["本地 embedding 的中英跨语检索需要专门的多语模型，通用英文模型直接归零。",
+   "Cross-lingual retrieval needs a multilingual embedder; English-only models score zero."],
+  ["prompt cache 的命中率取决于前缀稳定性，把变量放前面等于关掉缓存。",
+   "Cache hit rate hinges on prefix stability; leading variables disable it."],
+  ["视觉模型读公式比 OCR 稳，但会悄悄补全它看不清的下标。",
+   "Vision models beat OCR on formulas but silently invent unclear subscripts."],
+  ["检索的 abstention 阈值必须按背景分布标定，不能取固定分数。",
+   "Abstention thresholds must be calibrated to the background distribution."],
+  ["空块不命中任何查询，却会把背景分布的中位数拉低。",
+   "Empty chunks match nothing yet depress the background median."],
+  ["RRF 融合下短而密的块会系统性压过长正文块。",
+   "Under RRF, short dense chunks systematically outrank long body chunks."],
+  ["双栏 PDF 的阅读顺序不能按 y 坐标排，必须先归栏。",
+   "Two-column PDFs need column assignment before any reading-order sort."],
+  ["让浏览器做命中测试，比自己按 width 均分猜字符位置准得多。",
+   "Browser hit-testing beats guessing glyph positions from average width."],
+  ["截图作为地面真值就不能重渲染，渲染参数一变它就不是真值了。",
+   "A screenshot used as ground truth cannot be re-rendered; parameters drift."],
+  ["默认放行的守卫表会一直长出新的洞。",
+   "A guard table that defaults to allow keeps growing new holes."],
+  ["纯函数的 reducer 里取 Date.now() 会让同一组动作算出不同结果。",
+   "Calling Date.now() inside a pure reducer makes identical actions diverge."],
+  ["不自动删除无法再生的用户内容——笔记删了就永远没了。",
+   "Never auto-delete irreproducible user content; notes cannot be regenerated."],
+  ["保留期从最后一次查看起算，而不是从创建起算。",
+   "Retention should start from last view, not from creation."],
+  ["驳回必须填理由，理由要沉淀，否则每次都吵一样的架。",
+   "Dismissals need recorded reasons, or the same argument recurs every time."],
+  ["「可以更具体一些」这种评审意见等于没有，revise 拿到它只能瞎改。",
+   "Feedback like 'be more specific' is null; the reviser can only flail."],
+  ["相关性判定不是二元的，该问的是它能支撑哪一句断言。",
+   "Relevance is not binary; ask which claim the material can support."],
+  ["不属于任何一节的材料往往是新章节的种子。",
+   "Material that fits no section is usually the seed of a new one."],
+  ["闸门放在材料入库后，比第 3 轮才发现问题便宜一个数量级。",
+   "A gate after ingestion is an order of magnitude cheaper than one at round three."],
+  ["一篇文章正常两次 Talk，超过三次说明选题没想清楚。",
+   "More than three deliberations means the topic itself is unresolved."],
+  ["图重构不记录 cause，事后就解释不了执行图为什么偏离预设图。",
+   "Without a recorded cause, graph drift becomes inexplicable after the fact."],
+  ["定时任务不是另一套东西，就是一个 cron 触发的图。",
+   "Scheduled work is not a separate system; it is a cron-triggered graph."],
+  ["节点类型开放自定义，写作工具就变成了附赠博客功能的编排平台。",
+   "Open-ended node types turn a writing tool into an orchestration platform."],
+  ["颜色是阅读态，主题是内容，两者跨文档复用的价值完全不同。",
+   "Highlight color is reading state; topic is content. They reuse differently."],
+  ["五个值的分类按相同性连边，只会把库塌成五个巨型连通块。",
+   "Linking on a five-valued category collapses the corpus into five blobs."],
+  ["文件是唯一真相，数据库是可重建的缓存；反过来不成立。",
+   "Files are the source of truth; the index is a rebuildable cache, not vice versa."],
+  ["markdown 不是为存储发明的格式，它本来就是这个领域里的形状。",
+   "Markdown was not invented for storage; it is the domain's native shape."],
+  ["索引落后可以靠重建修复，所以先落文件再更新索引，顺序不能反。",
+   "Write files before the index: a stale index is repairable, a lost file is not."],
+  ["local-first 的个人工具里，文件可被手改更像特性而非缺陷。",
+   "In a local-first personal tool, hand-editable files are a feature."],
+  ["读者是先认出「这段要留」才框的，不该等模型回答完才准标。",
+   "The reader recognizes salience before capture; don't gate marking on the model."],
+];
+
+const SOURCES = [
+  "Lost in the Middle, §4.2", "attention is all you need, p.6", "本地实验记录 2026-07",
+  "RAG survey, §3.1", "Constitutional AI, p.12", "内部 eval 报告 v3",
+  "Chain-of-Thought, §5", "pdf.js 文档 · TextLayer", "BGE-M3 技术报告, §2",
+  "读书笔记 · 认知负荷", "SWE-bench, table 3", "自己的博客草稿 #14",
+];
+
+function generate(n, skew) {
+  const rnd = mulberry32(20260817);
+  const key = skew === "hot" ? "hot" : "flat";
+  const weighted = [];
+  for (const t of TOPIC_POOL) {
+    for (let i = 0; i < t[key]; i++) weighted.push(t.name);
+  }
+
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    // 主题个数：0 / 1 / 2 / 3，其中 0 是孤儿——必须真的存在，spec 要求它显式可见。
+    const roll = rnd();
+    const count = roll < 0.09 ? 0 : roll < 0.42 ? 1 : roll < 0.85 ? 2 : 3;
+    const topics = [];
+    for (let k = 0; k < count; k++) {
+      const t = weighted[Math.floor(rnd() * weighted.length)];
+      if (!topics.includes(t)) topics.push(t);
+    }
+    const claim = CLAIMS[i % CLAIMS.length];
+    const s = rnd();
+    out.push({
+      id: "ctx_" + String(i + 1).padStart(3, "0"),
+      claim: claim[0],
+      evidence: claim[1],
+      source: SOURCES[Math.floor(rnd() * SOURCES.length)],
+      topics,
+      // 大部分 pending，少量已判。rejected 仍然进图（issue 02 的规则），只是画得暗。
+      status: s < 0.55 ? "pending" : s < 0.82 ? "approved" : s < 0.93 ? "disputed" : "rejected",
+      recycled: i >= CLAIMS.length,
+    });
+  }
+  return out;
+}
+
+/* ==========================================================================
+   2. buildGraph —— 规则与 .scratch/knowledge-graph/issues/02 一致
+   ========================================================================== */
+
+const normalizeTopic = (t) => t.trim().toLowerCase();
+
+function buildGraph(contexts) {
+  const nodes = contexts.map((c) => ({
+    id: c.id, claim: c.claim, evidence: c.evidence, source: c.source,
+    topics: c.topics, status: c.status, recycled: c.recycled, degree: 0,
+  }));
+
+  // 主题 → 成员。共享主题的成员两两连边（ADR-0002）。
+  const byTopic = new Map();
+  for (const c of contexts) {
+    for (const t of c.topics) {
+      const k = normalizeTopic(t);
+      if (!byTopic.has(k)) byTopic.set(k, []);
+      byTopic.get(k).push(c.id);
+    }
+  }
+
+  // (a,b) 与 (b,a) 是同一条边，且共享两个主题只算一条边、topics 有两项。
+  const edgeMap = new Map();
+  for (const [topic, members] of byTopic) {
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        const [a, b] = members[i] < members[j] ? [members[i], members[j]] : [members[j], members[i]];
+        const key = a + "|" + b;
+        if (!edgeMap.has(key)) edgeMap.set(key, { a, b, topics: [] });
+        edgeMap.get(key).topics.push(topic);
+      }
+    }
+  }
+
+  const edges = [...edgeMap.values()].sort((x, y) => (x.a + x.b).localeCompare(y.a + y.b));
+  const index = new Map(nodes.map((nd) => [nd.id, nd]));
+  for (const e of edges) { index.get(e.a).degree++; index.get(e.b).degree++; }
+
+  const topicSizes = [...byTopic.entries()]
+    .map(([name, m]) => ({ name, size: m.length, edges: (m.length * (m.length - 1)) / 2 }))
+    .sort((x, y) => y.edges - x.edges);
+
+  // 主题 → 挂了几条。稀有度排序（变体 D）要用它，而它本来就在手边。
+  const topicSize = new Map(topicSizes.map((t) => [t.name, t.size]));
+
+  return { nodes, edges, index, topicSizes, topicSize };
+}
+
+/* ==========================================================================
+   3. 力导向：自己写一个，别引依赖——原型不该有构建步骤
+   ========================================================================== */
+
+function layout(nodes, edges, w, h, iterations) {
+  const n = nodes.length;
+  if (n === 0) return;
+  const rnd = mulberry32(7);
+  const R = Math.min(w, h) * 0.38;
+  nodes.forEach((nd, i) => {
+    const a = (i / n) * Math.PI * 2;
+    nd.x = w / 2 + Math.cos(a) * R * (0.6 + rnd() * 0.5);
+    nd.y = h / 2 + Math.sin(a) * R * (0.6 + rnd() * 0.5);
+    nd.vx = 0; nd.vy = 0;
+  });
+
+  const idx = new Map(nodes.map((nd, i) => [nd.id, i]));
+  const springs = edges.map((e) => [idx.get(e.a), idx.get(e.b)]).filter(([a, b]) => a != null && b != null);
+
+  // 边多的时候单条弹簧要弱下来，否则枢纽节点会把整张图拽塌成一个点。
+  const springK = 0.0022 * Math.min(1, 220 / Math.max(1, springs.length / Math.max(1, n)));
+  const repel = 1600 + n * 6;
+  const rest = Math.max(28, Math.min(w, h) / Math.sqrt(n) * 0.9);
+
+  for (let step = 0; step < iterations; step++) {
+    const alpha = 1 - step / iterations;
+
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 1; j < n; j++) {
+        const a = nodes[i], b = nodes[j];
+        let dx = b.x - a.x, dy = b.y - a.y;
+        let d2 = dx * dx + dy * dy;
+        if (d2 < 1) { dx = (i - j) * 0.01 + 0.1; dy = 0.1; d2 = 1; }
+        const f = repel / d2;
+        const d = Math.sqrt(d2);
+        const fx = (dx / d) * f, fy = (dy / d) * f;
+        a.vx -= fx; a.vy -= fy; b.vx += fx; b.vy += fy;
+      }
+    }
+
+    for (const [i, j] of springs) {
+      const a = nodes[i], b = nodes[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const f = (d - rest) * springK;
+      const fx = (dx / d) * f * d, fy = (dy / d) * f * d;
+      a.vx += fx; a.vy += fy; b.vx -= fx; b.vy -= fy;
+    }
+
+    for (const nd of nodes) {
+      nd.vx += (w / 2 - nd.x) * 0.004;
+      nd.vy += (h / 2 - nd.y) * 0.004;
+      const speed = Math.hypot(nd.vx, nd.vy);
+      const cap = 14 * alpha + 1;
+      const scale = speed > cap ? cap / speed : 1;
+      nd.x += nd.vx * scale; nd.y += nd.vy * scale;
+      nd.vx *= 0.72; nd.vy *= 0.72;
+      nd.x = Math.max(14, Math.min(w - 14, nd.x));
+      nd.y = Math.max(14, Math.min(h - 14, nd.y));
+    }
+  }
+}
+
+/* ==========================================================================
+   4. 画布
+   ========================================================================== */
+
+const STATUS_COLOR = {
+  pending:  { fill: "#8b919b", ring: "#5c6370" },
+  approved: { fill: "#1a7f45", ring: "#0f5c30" },
+  disputed: { fill: "#a37a08", ring: "#7a5c06" },
+  rejected: { fill: "#ce3a3a", ring: "#9c2c2c" },
+};
+
+function fitCanvas(cv) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = cv.getBoundingClientRect();
+  cv.width = Math.max(1, Math.round(rect.width * dpr));
+  cv.height = Math.max(1, Math.round(rect.height * dpr));
+  const ctx = cv.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w: rect.width, h: rect.height };
+}
+
+function radius(nd) { return 3.2 + Math.min(7, Math.sqrt(nd.degree) * 1.25); }
+
+function drawGraph(ctx, w, h, nodes, edges, opts) {
+  const o = opts || {};
+  ctx.clearRect(0, 0, w, h);
+  const pos = new Map(nodes.map((nd) => [nd.id, nd]));
+
+  ctx.lineWidth = o.thickEdges ? 1.4 : 0.7;
+  for (const e of edges) {
+    const a = pos.get(e.a), b = pos.get(e.b);
+    if (!a || !b) continue;
+    ctx.strokeStyle = e.hot ? getVar("--edge-hot") : getVar("--edge");
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+  }
+
+  for (const nd of nodes) {
+    const c = STATUS_COLOR[nd.status] || STATUS_COLOR.pending;
+    const r = radius(nd);
+    ctx.beginPath();
+    ctx.arc(nd.x, nd.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = nd.status === "rejected" ? c.fill + "66" : c.fill;
+    ctx.fill();
+    if (nd.hi) { ctx.strokeStyle = getVar("--accent"); ctx.lineWidth = 2.4; ctx.stroke(); ctx.lineWidth = 0.7; }
+    if (nd.degree === 0) {
+      ctx.strokeStyle = getVar("--warn");
+      ctx.lineWidth = 1.6;
+      ctx.setLineDash([2, 2]);
+      ctx.beginPath(); ctx.arc(nd.x, nd.y, r + 3.2, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.lineWidth = 0.7;
+    }
+  }
+
+  if (o.labels) {
+    ctx.font = "11px " + getComputedStyle(document.body).fontFamily;
+    ctx.fillStyle = getVar("--text");
+    ctx.textAlign = "center";
+    for (const nd of nodes) {
+      if (!nd.showLabel) continue;
+      const text = nd.claim.length > 22 ? nd.claim.slice(0, 21) + "…" : nd.claim;
+      const wid = ctx.measureText(text).width;
+      ctx.fillStyle = getVar("--card");
+      ctx.globalAlpha = 0.86;
+      ctx.fillRect(nd.x - wid / 2 - 4, nd.y + radius(nd) + 3, wid + 8, 15);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = getVar("--text");
+      ctx.fillText(text, nd.x, nd.y + radius(nd) + 14);
+    }
+  }
+}
+
+function getVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function hitTest(nodes, x, y) {
+  let best = null, bestD = 1e9;
+  for (const nd of nodes) {
+    const d = Math.hypot(nd.x - x, nd.y - y);
+    if (d < radius(nd) + 5 && d < bestD) { best = nd; bestD = d; }
+  }
+  return best;
+}
+
+/* ==========================================================================
+   5. 三个变体
+   ========================================================================== */
+
+const tip = document.getElementById("tip");
+
+function showTip(nd, ev) {
+  tip.innerHTML =
+    '<div class="tid">' + nd.id + " · " + nd.source + " · " + nd.status +
+    (nd.degree === 0 ? ' · <span style="color:var(--warn)">孤儿</span>' : " · " + nd.degree + " 邻居") + "</div>" +
+    '<div class="tclaim">' + nd.claim + "</div>" +
+    '<div class="tev">' + nd.evidence + "</div>" +
+    '<div class="ttopics">' + (nd.topics.length ? nd.topics.map((t) => "<b>#" + t + "</b>").join("") : '<span style="color:var(--warn)">无主题 —— 新主题的种子</span>') + "</div>";
+  tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(window.innerWidth - r.width - 10, ev.clientX + 14) + "px";
+  tip.style.top = Math.min(window.innerHeight - r.height - 10, ev.clientY + 14) + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+
+function orphanStrip(graph) {
+  const orphans = graph.nodes.filter((nd) => nd.degree === 0);
+  if (!orphans.length) return '<div class="orphans"><h4>孤儿 0 条</h4><div style="font-size:12px;color:var(--dim)">这一批里每条 context 都至少和另一条共享一个主题。</div></div>';
+  return '<div class="orphans"><h4>孤儿 ' + orphans.length + " 条 —— 不是噪声，是新主题的种子</h4>" +
+    '<div class="orphan-row">' +
+    orphans.slice(0, 24).map((nd) => '<span class="orphan" title="' + nd.claim + '">' + nd.id + " · " + nd.claim + "</span>").join("") +
+    (orphans.length > 24 ? '<span class="orphan" style="background:var(--sunken);border-style:dashed">…还有 ' + (orphans.length - 24) + " 条</span>" : "") +
+    "</div></div>";
+}
+
+/* ---- A：全局图（照抄 Obsidian 的做法）---- */
+const variantA = {
+  name: "全局图 —— 照抄 Obsidian",
+  verdict: "<b>它想证明的是它自己不成立。</b>Obsidian 的全局图之所以能看，是因为节点是「一篇笔记」——一本书读完几十个。断言级粒度下同样的读量是几百个节点，再叠上共享主题的两两连边，60 条就开始糊，140 条以上只剩一团毛线的美学价值。<b>把这个当主视图，等于把知识库做成一张海报。</b>",
+  render(host, graph) {
+    host.innerHTML =
+      '<div class="stage"><div class="stage-head"><h3>全部 ' + graph.nodes.length + " 个节点、" + graph.edges.length + ' 条边一次画出</h3><span class="hint">悬停看一条 context；黄色虚线圈 = 孤儿</span></div>' +
+      "<canvas></canvas>" + orphanStrip(graph) + "</div>";
+    const cv = host.querySelector("canvas");
+    const { ctx, w, h } = fitCanvas(cv);
+    layout(graph.nodes, graph.edges, w, h, graph.nodes.length > 200 ? 130 : 220);
+    drawGraph(ctx, w, h, graph.nodes, graph.edges, {});
+    cv.onmousemove = (ev) => {
+      const r = cv.getBoundingClientRect();
+      const nd = hitTest(graph.nodes, ev.clientX - r.left, ev.clientY - r.top);
+      nd ? showTip(nd, ev) : hideTip();
+    };
+    cv.onmouseleave = hideTip;
+  },
+};
+
+/* ---- B：聚焦（选中节点 + 一跳邻居）---- */
+const variantB = {
+  name: "聚焦 —— 一个节点和它的邻居",
+  verdict: "<b>这才是主视图。</b>不管库里是 24 条还是 320 条，屏幕上永远只有一个节点和它的一跳邻居——读者的注意力本来就是这个形状（「我正在看这条，旁边还有什么」）。边上标着共享的主题，所以「为什么连」当场可读，这正是 ADR-0002 要求边记住 <code>topics</code> 的理由。<b>O(n²) 的代价被局部化了：只有枢纽节点的邻居列表会长，而那是可以排序和截断的。</b>",
+  render(host, graph) {
+    const sorted = [...graph.nodes].sort((a, b) => b.degree - a.degree);
+    host.innerHTML =
+      '<div class="stage"><div class="stage-head"><h3>聚焦视图</h3><span class="hint">左栏点一条 context（按邻居数排序）；右侧只画它和它的一跳邻居</span></div>' +
+      '<div class="focus-layout"><div class="focus-list">' +
+      sorted.map((nd, i) =>
+        '<div class="focus-item" data-id="' + nd.id + '" aria-selected="' + (i === 0) + '">' +
+        '<div class="fid">' + nd.id + " · " + (nd.degree === 0 ? '<span style="color:var(--warn)">孤儿</span>' : nd.degree + " 邻居") + "</div>" +
+        '<div class="fclaim">' + nd.claim + "</div></div>").join("") +
+      '</div><div class="focus-pane"><canvas></canvas></div></div>' +
+      orphanStrip(graph) + "</div>";
+
+    const cv = host.querySelector("canvas");
+    const pane = host.querySelector(".focus-pane");
+
+    function focusOn(id) {
+      const center = graph.index.get(id);
+      const near = graph.edges.filter((e) => e.a === id || e.b === id);
+      const ids = new Set([id]);
+      near.forEach((e) => { ids.add(e.a); ids.add(e.b); });
+
+      if (near.length === 0) {
+        pane.innerHTML = '<div class="focus-empty" style="flex-direction:column;gap:10px;text-align:center;padding:0 40px">' +
+          '<div style="font-size:34px">◌</div><div><b style="color:var(--warn)">孤儿</b> —— 它不与任何 context 共享主题。</div>' +
+          '<div style="max-width:430px;line-height:1.6">' + center.claim + "</div>" +
+          '<div style="font-size:12px">这不是错误。它要么是新主题的种子，要么说明入库时该给它补一个主题。</div></div>';
+        return;
+      }
+
+      pane.innerHTML = "<canvas></canvas>";
+      const c2 = pane.querySelector("canvas");
+      const { ctx, w, h } = fitCanvas(c2);
+      const sub = graph.nodes.filter((nd) => ids.has(nd.id)).map((nd) => ({ ...nd }));
+      const subEdges = graph.edges.filter((e) => ids.has(e.a) && ids.has(e.b));
+      layout(sub, subEdges, w, h, 240);
+
+      // 把中心拽到正中，其余围绕它——聚焦图的读法是「中心 + 一圈」，不是自由漂浮。
+      const c = sub.find((nd) => nd.id === id);
+      const dx = w / 2 - c.x, dy = h / 2 - c.y;
+      sub.forEach((nd) => { nd.x += dx; nd.y += dy; });
+      c.hi = true;
+      sub.forEach((nd) => { nd.showLabel = sub.length <= 26; });
+      subEdges.forEach((e) => { e.hot = e.a === id || e.b === id; });
+
+      drawGraph(ctx, w, h, sub, subEdges, { labels: true, thickEdges: true });
+
+      // 边上标共享的主题——「为什么连」必须当场可读。
+      ctx.font = "10px " + getComputedStyle(document.body).fontFamily;
+      ctx.textAlign = "center";
+      const posMap = new Map(sub.map((nd) => [nd.id, nd]));
+      for (const e of subEdges) {
+        if (!e.hot) continue;
+        const a = posMap.get(e.a), b = posMap.get(e.b);
+        const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+        const text = e.topics.map((t) => "#" + t).join(" ");
+        const wid = ctx.measureText(text).width;
+        ctx.fillStyle = getVar("--card");
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(mx - wid / 2 - 3, my - 7, wid + 6, 13);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = getVar("--accent");
+        ctx.fillText(text, mx, my + 3);
+      }
+
+      c2.onmousemove = (ev) => {
+        const r = c2.getBoundingClientRect();
+        const nd = hitTest(sub, ev.clientX - r.left, ev.clientY - r.top);
+        nd ? showTip(nd, ev) : hideTip();
+      };
+      c2.onmouseleave = hideTip;
+    }
+
+    host.querySelectorAll(".focus-item").forEach((el) => {
+      el.onclick = () => {
+        host.querySelectorAll(".focus-item").forEach((x) => x.setAttribute("aria-selected", "false"));
+        el.setAttribute("aria-selected", "true");
+        focusOn(el.dataset.id);
+      };
+    });
+    focusOn(sorted[0].id);
+  },
+};
+
+/* ---- C：不画图，按主题分栏 ---- */
+const variantC = {
+  name: "不画图 —— 按主题分栏",
+  verdict: "<b>对照组：也许图根本不是对的形态。</b>共享主题就是边，那么把同主题的 context 并排放在一栏里，「边」这个概念就不用画出来了——共栏即相连，一条挂两个主题的 context 出现在两栏里，天然就是枢纽。<b>它比图更适合真的读材料</b>（能看见 claim 全文），但丢掉了图唯一给得起的东西：一眼看出哪里密、哪里空、哪里断开。孤儿在这里只能塞进一个「无主题」栏，而在图上它是视觉上就跳出来的。",
+  render(host, graph) {
+    const orphans = graph.nodes.filter((nd) => nd.topics.length === 0);
+    const cols = graph.topicSizes.map((t) => ({
+      name: t.name,
+      members: graph.nodes.filter((nd) => nd.topics.some((x) => normalizeTopic(x) === t.name)),
+    }));
+    host.innerHTML =
+      '<div class="stage"><div class="stage-head"><h3>' + cols.length + ' 个主题栏</h3><span class="hint">共栏 = 相连。一条 context 出现在多栏里，就是图上的枢纽</span></div>' +
+      '<div class="cols">' +
+      cols.map((c) =>
+        '<div class="col"><div class="col-head"><span class="tname">#' + c.name + '</span><span class="tcount">' + c.members.length + " 条 · " + ((c.members.length * (c.members.length - 1)) / 2) + " 边</span></div>" +
+        '<div class="col-body">' + c.members.map((nd) => {
+          const also = nd.topics.filter((t) => normalizeTopic(t) !== c.name);
+          return '<div class="ccard"><div class="cid">' + nd.id + " · " + nd.status + "</div>" +
+            '<div class="cclaim">' + nd.claim + "</div>" +
+            '<div class="calso' + (also.length ? "" : " none") + '">' +
+            (also.length ? "也在 " + also.map((t) => "<b>#" + t + "</b>").join(" ") : "只在这一栏") + "</div></div>";
+        }).join("") + "</div></div>").join("") +
+      (orphans.length ? '<div class="col" style="border-style:dashed;border-color:var(--warn-border)"><div class="col-head"><span class="tname" style="color:var(--warn)">无主题</span><span class="tcount">' + orphans.length + " 条</span></div>" +
+        '<div class="col-body">' + orphans.map((nd) => '<div class="ccard"><div class="cid">' + nd.id + '</div><div class="cclaim">' + nd.claim + '</div><div class="calso none">孤儿 —— 新主题的种子</div></div>').join("") + "</div></div>" : "") +
+      "</div></div>";
+  },
+};
+
+/* ---- D：枢纽节点的邻居到底该怎么排（issue 05）---- */
+
+/**
+ * 主题的稀有度，就是 IDF。共享一个只挂了 3 条 context 的主题，
+ * 比共享一个挂了 123 条的主题信息量大得多——后者几乎等于没说。
+ */
+function idf(graph, topic) {
+  const size = graph.topicSize.get(topic) || 1;
+  return Math.log(graph.nodes.length / size);
+}
+
+const STATUS_RANK = { approved: 3, pending: 2, disputed: 1, rejected: 0 };
+
+const ORDERINGS = [
+  { key: "count", name: "共享主题数", desc: "共享得越多越相关",
+    score: (n) => n.edge.topics.length,
+    fmt: (n) => n.edge.topics.length + " 个" },
+  { key: "rarity", name: "主题稀有度（IDF）", desc: "共享一个冷门主题，比共享热门主题有信息量",
+    score: (n, g) => n.edge.topics.reduce((sum, t) => sum + idf(g, t), 0),
+    fmt: (n, g) => n.edge.topics.reduce((sum, t) => sum + idf(g, t), 0).toFixed(2) },
+  { key: "status", name: "审核状态", desc: "approved 的排前面",
+    score: (n) => STATUS_RANK[n.other.status] ?? 0,
+    fmt: (n) => n.other.status },
+  { key: "recent", name: "入库顺序", desc: "最近入库的排前面",
+    score: (n) => Number(n.other.id.slice(4)),
+    fmt: (n) => "#" + Number(n.other.id.slice(4)) },
+];
+
+function neighborsOf(graph, id) {
+  return graph.edges
+    .filter((e) => e.a === id || e.b === id)
+    .map((e) => ({ edge: e, other: graph.index.get(e.a === id ? e.b : e.a) }));
+}
+
+let cutoff = 8;
+
+const variantD = {
+  name: "邻居排序 —— 四种排法对比",
+  verdict: "<b>稀有度赢，但赢的理由和我预想的不一样。</b>320 条时 <b>94.4% 的边只共享 1 个主题</b>——所以「共享主题数」对绝大多数邻居给出<b>同一个分数</b>，它压根排不出名次，剩下的顺序是数组下标决定的。稀有度的价值就在这里：它能给这 94.4% 排出先后，而 count 不能。<b>但要诚实：</b>在这份只有 12 个主题的假数据里，两者的前 8 只差 2 个——优势没充分展开，因为真实知识库的主题数是几百，IDF 的分布会宽得多。「审核状态」和「入库顺序」各自的前 8 有 7 个是独有的，那不是「排得更好」，是<b>它们在回答完全不同的问题</b>（可信度、我最近在读什么），混进相关度排序会骗人——该做成筛选器，不是排序。<b>白送的副产品：同一个 IDF 能识别笼统主题</b>（<code>#agent-design</code> 挂了 123 条，idf=0.96；冷门主题 idf 高一倍），正好补上 ADR-0003 留下的那个洞——假边没有药。",
+  render(host, graph) {
+    const hubs = [...graph.nodes].sort((a, b) => b.degree - a.degree).slice(0, 6);
+    const hub = graph.index.get(variantD.hubId) && variantD.hubId
+      ? graph.index.get(variantD.hubId) : hubs[0];
+    const near = neighborsOf(graph, hub.id);
+
+    // 每种排法各自的前 K，然后标出「只有这一栏把它排进来了」的那些——
+    // 四个长得差不多的列表看不出胜负，差异才看得出。
+    const ranked = ORDERINGS.map((o) => ({
+      ...o,
+      list: [...near].sort((x, y) => o.score(y, graph) - o.score(x, graph)).slice(0, cutoff),
+    }));
+    const appearances = new Map();
+    for (const r of ranked) {
+      for (const n of r.list) appearances.set(n.other.id, (appearances.get(n.other.id) || 0) + 1);
+    }
+
+    host.innerHTML =
+      '<div class="stage"><div class="stage-head"><h3>枢纽节点 ' + hub.id + " 有 " + hub.degree +
+      " 个邻居，一屏放不下</h3><span class=\"hint\">★ = 只有这一栏把它排进了前 " + cutoff + "</span></div>" +
+      '<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;gap:16px;flex-wrap:wrap;align-items:center">' +
+      '<span class="ctl-label">聚焦在</span><span class="seg" id="hubPick">' +
+      hubs.map((n) => '<button data-id="' + n.id + '" aria-pressed="' + (n.id === hub.id) + '">' +
+        n.id + " · " + n.degree + "</button>").join("") + "</span>" +
+      '<span class="ctl-label">截断</span><span class="seg" id="cut">' +
+      [5, 8, 15].map((k) => '<button data-k="' + k + '" aria-pressed="' + (k === cutoff) + '">前 ' + k + "</button>").join("") +
+      "</span></div>" +
+      '<div style="padding:10px 16px 4px;font-size:13px;color:var(--dim);border-bottom:1px solid var(--border)">' +
+      "它自己说的是：<b style=\"color:var(--text)\">" + hub.claim + "</b>　挂着 " +
+      hub.topics.map((t) => '<code style="font-size:11px">#' + t + "</code>").join(" ") + "</div>" +
+      '<div class="cols" style="align-items:stretch">' +
+      ranked.map((r) =>
+        '<div class="col" style="flex:0 0 296px"><div class="col-head" style="display:block">' +
+        '<div class="tname" style="color:var(--text);font-family:inherit;font-weight:600">' + r.name + "</div>" +
+        '<div style="font-size:11.5px;color:var(--faint);line-height:1.4;margin-top:2px">' + r.desc + "</div></div>" +
+        '<div class="col-body">' +
+        r.list.map((n, i) => {
+          const unique = appearances.get(n.other.id) === 1;
+          return '<div class="ccard"' + (unique ? ' style="border-color:var(--accent-border);background:var(--accent-bg)"' : "") + ">" +
+            '<div class="cid">' + (i + 1) + ". " + n.other.id + " · " + r.fmt(n, graph) +
+            (unique ? ' <b style="color:var(--accent)">★</b>' : "") + "</div>" +
+            '<div class="cclaim">' + n.other.claim + "</div>" +
+            '<div class="calso">共享 ' + n.edge.topics.map((t) => "<b>#" + t + "</b>").join(" ") + "</div></div>";
+        }).join("") +
+        '<div style="font-size:11.5px;color:var(--faint);text-align:center;padding:6px">另有 ' +
+        (near.length - r.list.length) + " 个邻居没进前 " + cutoff + "</div>" +
+        "</div></div>").join("") +
+      "</div></div>";
+
+    host.querySelector("#hubPick").onclick = (ev) => {
+      const b = ev.target.closest("button"); if (!b) return;
+      variantD.hubId = b.dataset.id; render();
+    };
+    host.querySelector("#cut").onclick = (ev) => {
+      const b = ev.target.closest("button"); if (!b) return;
+      cutoff = Number(b.dataset.k); render();
+    };
+  },
+};
+
+const VARIANTS = { A: variantA, B: variantB, C: variantC, D: variantD };
+
+/* ==========================================================================
+   6. 状态面板 + 装配
+   ========================================================================== */
+
+let state = { n: 60, skew: "hot", variant: "A" };
+
+function renderStats(graph) {
+  const orphans = graph.nodes.filter((nd) => nd.degree === 0).length;
+  const hottest = graph.topicSizes[0];
+  const maxDeg = graph.nodes.reduce((m, nd) => Math.max(m, nd.degree), 0);
+  const possible = (graph.nodes.length * (graph.nodes.length - 1)) / 2;
+  const density = possible ? ((graph.edges.length / possible) * 100).toFixed(1) : "0";
+  const heavy = graph.edges.length > 900;
+
+  document.getElementById("stats").innerHTML = [
+    ["节点 nodes", graph.nodes.length, ""],
+    ["边 edges", graph.edges.length, heavy ? "alarm" : ""],
+    ["图密度", density + "%", heavy ? "alarm" : ""],
+    ["最大度数", maxDeg, ""],
+    ["孤儿 orphans", orphans, ""],
+    ["最热主题", hottest ? "#" + hottest.name : "—", "", hottest ? hottest.size + " 条 → " + hottest.edges + " 条边" : ""],
+  ].map(([k, v, cls, sub]) =>
+    '<div class="stat ' + (cls || "") + '"><div class="k">' + k + '</div><div class="v">' + v +
+    (sub ? "<br><small>" + sub + "</small>" : "") + "</div></div>").join("");
+}
+
+function render() {
+  const contexts = generate(state.n, state.skew === "skewed" ? "hot" : "flat");
+  const graph = buildGraph(contexts);
+  renderStats(graph);
+
+  const v = VARIANTS[state.variant];
+  document.getElementById("curKey").textContent = state.variant;
+  document.getElementById("curName").textContent = v.name;
+  document.getElementById("verdict").innerHTML = v.verdict;
+  v.render(document.getElementById("stage"), graph);
+}
+
+function setVariant(key) {
+  state.variant = key;
+  const url = new URL(location.href);
+  url.searchParams.set("variant", key);
+  history.replaceState(null, "", url);
+  render();
+}
+
+document.getElementById("density").onclick = (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  state.n = Number(b.dataset.n);
+  document.querySelectorAll("#density button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  render();
+};
+document.getElementById("skew").onclick = (ev) => {
+  const b = ev.target.closest("button"); if (!b) return;
+  state.skew = b.dataset.skew;
+  document.querySelectorAll("#skew button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+  render();
+};
+
+const KEYS = ["A", "B", "C", "D"];
+const step = (d) => setVariant(KEYS[(KEYS.indexOf(state.variant) + d + KEYS.length) % KEYS.length]);
+document.getElementById("prev").onclick = () => step(-1);
+document.getElementById("next").onclick = () => step(1);
+document.addEventListener("keydown", (ev) => {
+  const t = ev.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+  if (ev.key === "ArrowLeft") step(-1);
+  if (ev.key === "ArrowRight") step(1);
+});
+
+state.variant = KEYS.includes(new URL(location.href).searchParams.get("variant"))
+  ? new URL(location.href).searchParams.get("variant") : "A";
+render();
+window.addEventListener("resize", () => { clearTimeout(window.__rt); window.__rt = setTimeout(render, 220); });
+</script>
+</body>
+</html>

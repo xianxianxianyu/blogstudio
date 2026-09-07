@@ -3,15 +3,16 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { appendFileSync } from "node:fs";
-import { app, BrowserWindow, dialog, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
+import { createWebView, type WebViewHandle } from "./web-view";
 import { createLocalApi } from "../src/server/local-api";
 import { errorChain } from "../src/app/error-chain";
 
 /**
  * **必须在模块顶层、任何 getPath 之前。**
  *
- * `getPath("userData")` 用 package.json 的 `name`，而这个仓库的 name 还是脚手架留下的
- * `site-creator-vinext-starter`——读者的书和摘录会落进一个叫这个的目录里。放在
+ * `getPath("userData")` 用 package.json 的 `name`（`pdf-studio`），而数据目录早已叫
+ * 「PDF Studio」——改了这一句，读者的书和摘录就会落进另一个目录。放在
  * `whenReady` 之后调用是没用的：那时 Electron 已经把 userData 定好了（试过一次）。
  */
 app.setName("PDF Studio");
@@ -140,11 +141,16 @@ async function createWindow(): Promise<void> {
     height: 900,
     title: "PDF Studio",
     webPreferences: {
-      // 渲染侧不需要 Node：它只通过本机 API 说话，与开发形态完全一致。
+      // 渲染侧不需要 Node：数据一律通过本机 API 说话，与开发形态完全一致。
       nodeIntegration: false,
       contextIsolation: true,
+      // 桥只为**浏览器视图**存在——那是原生能力，不是数据（见 shell-preload.ts 里
+      // 关于 ADR-0014 的那段）。桥面很窄，且不暴露 ipcRenderer 本身。
+      preload: path.join(import.meta.dirname, "shell-preload.js"),
     },
   });
+
+  wireWebView(window, api, token);
 
 
   /**
@@ -178,6 +184,70 @@ async function createWindow(): Promise<void> {
       search: `api=${encodeURIComponent(api)}&token=${token}`,
     });
   }
+}
+
+/**
+ * 浏览器视图的接线：开、摆位置、关，以及把事件推回渲染进程。
+ *
+ * **同一时刻只留一个视图。** 案头上可以有多个网页条目，但只有活着的那一个需要渲染
+ * ——切过去就 `load()` 到新地址。代价是**丢滚动位置**，这是这一版明确接受的：
+ * 多留几个视图意味着多份内存和多个后台在跑的页面（还会自己播视频、发请求），
+ * 而 `BaseWindow` 文档已经警告过不显式关就漏内存。
+ */
+function wireWebView(window: BrowserWindow, api: string, token: string): void {
+  let view: WebViewHandle | null = null;
+  let sites: string[] = [];
+
+  const send = (channel: string, payload: unknown) => {
+    if (!window.isDestroyed()) window.webContents.send(channel, payload);
+  };
+
+  /** 允许的站点在本机 API 那边（跟着配置走），每次开之前现取——读者随时会加。 */
+  async function loadSites(): Promise<void> {
+    try {
+      const response = await fetch(`${api}/__sites`, { headers: { "x-studio-token": token } });
+      sites = response.ok ? ((await response.json()) as string[]) : [];
+    } catch {
+      sites = [];
+    }
+  }
+
+  function ensure(): WebViewHandle {
+    view ??= createWebView(window, {
+      sites: () => sites,
+      preload: path.join(import.meta.dirname, "web-preload.js"),
+      onBlocked: (url) => send("studio:web:blocked", { url }),
+      onNavigated: (info) => send("studio:web:navigated", info),
+    });
+    return view;
+  }
+
+  ipcMain.handle("studio:web:open", async (_event, url: string) => {
+    await loadSites();
+    ensure().load(url);
+    return { ok: true };
+  });
+
+  // 高频：窗口缩放、侧栏折叠、切换案头条目都会发。用 send 不用 invoke。
+  ipcMain.on("studio:web:bounds", (_event, rect: Electron.Rectangle) => {
+    // 还没开过视图时忽略——不要为了「摆位置」把一个空视图创建出来，
+    // 那会在读者根本没打开网页时凭空多一个渲染进程。
+    view?.setBounds(rect);
+  });
+
+  ipcMain.on("studio:web:close", () => {
+    view?.close();
+    view = null;
+  });
+
+  // 选区从被打开的网页的 preload 直接来，原样转给渲染进程。
+  ipcMain.on("studio:selection", (_event, payload: unknown) => send("studio:web:selection", payload));
+
+  // 窗口没了要把视图一起收掉，否则它的 webContents 继续活着（同 llama-server 那类孤儿）。
+  window.on("closed", () => {
+    view?.close();
+    view = null;
+  });
 }
 
 app.whenReady()

@@ -11,8 +11,8 @@
  * 不落盘：它是「此刻手边有什么」，与筛选、折叠同一口径。
  */
 
-/** 案头上的一项是哪一侧的东西。书归 Book，稿子归 Writer。 */
-export type DeskKind = "doc" | "draft" | "page";
+/** 案头上的一项是哪一侧的东西。书归 Book，稿子归 Writer，loop 项目归 Loop。 */
+export type DeskKind = "doc" | "draft" | "page" | "loop";
 
 /**
  * 现在活着的是哪一样。**三个根与每一项打开的东西平级**——没有「模式」这一层。
@@ -27,9 +27,22 @@ export type Active =
   | { kind: "shelf" }
   | { kind: "context" }
   | { kind: "writer" }
+  /**
+   * Loop 那一列：有哪些 loop 项目。**它与「打开着的某一个项目」是两样东西**——
+   * 跟书架之于一本书一样。所以根叫 `loops`（那一列），案头上那一项叫 `loop`。
+   */
+  | { kind: "loops" }
+  /**
+   * 发布：把写完的稿子送到一个**去处**（`blogstudio/src/publish/`）。
+   *
+   * 它是一整列（有哪些去处、哪几篇发过），跟书架之于一本书一样——所以是根，不是
+   * 某一篇稿子上的一个按钮。读、想、写、发，四件事各占一根。
+   */
+  | { kind: "publish" }
   | { kind: "doc"; id: string }
   | { kind: "draft"; id: string }
   | { kind: "page"; id: string }
+  | { kind: "loop"; id: string }
   /**
    * 设置。**它记着自己是从哪一样打开的**，因为它不再是盖在内容上的一层。
    *
@@ -48,6 +61,15 @@ export type Active =
 export type Settled = Exclude<Active, { kind: "settings" }>;
 
 /**
+ * 活动栏上那几个根。
+ *
+ * **用排除法算出来，不是把那四个字符串再抄一遍。** 根的判据是「身上没有 id」——
+ * 它是一整列（书架、context、稿子架、loop 那一列），不是列里的某一项。抄一遍的话，
+ * 哪天添一个根却忘了补这一笔，活动栏上就少一个按钮，而 TS 一个字都不会说。
+ */
+export type RootKind = Exclude<Settled, { id: string }>["kind"];
+
+/**
  * 案头上的一项。
  *
  * **书要记住位置，稿子不用**：书的位置是「第几页、右栏开着哪一栏」，离开时不记住，
@@ -61,7 +83,14 @@ export type DeskItem =
    * 一个打开着的网页。`id` 是**归一化过的 `pageId`**（`web/page-id.ts`），不是
    * 地址栏里那一串——否则同一篇文章从不同渠道点进来会开成两个条目。
    */
-  | { kind: "page"; id: string; url: string; title: string };
+  | { kind: "page"; id: string; url: string; title: string }
+  /**
+   * 一个打开着的 loop 项目。`id` 就是项目名（磁盘上那个目录名）。
+   *
+   * **不记「看到第几轮」**：时间线永远最新在最上面，回来时该看到的就是最新那一轮，
+   * 而不是上次离开时停在的地方——那是一条一直在往前走的流水，不是一本书。
+   */
+  | { kind: "loop"; id: string };
 
 /**
  * 打开设置，记住来路。**已经在设置里就原样返回**——见 `Active` 上那段注释。
@@ -96,6 +125,7 @@ const ROOTS: Record<DeskKind, Active> = {
   doc: { kind: "shelf" },
   page: { kind: "shelf" },
   draft: { kind: "writer" },
+  loop: { kind: "loops" },
 };
 
 export const rootOf = (kind: DeskKind): Active => ROOTS[kind];
@@ -126,6 +156,10 @@ export const openPageOnDesk = (desk: DeskItem[], pageId: string, url: string, ti
 
 export const openDraftOnDesk = (desk: DeskItem[], draftId: string): DeskItem[] =>
   openOnDesk(desk, { kind: "draft", id: draftId });
+
+/** 打开一个 loop 项目。id 就是项目名。 */
+export const openLoopOnDesk = (desk: DeskItem[], project: string): DeskItem[] =>
+  openOnDesk(desk, { kind: "loop", id: project });
 
 /** 记住这本书的位置。不在案头上的当没发生——不为一次无害的调用凭空造一项出来。 */
 export function rememberOnDesk(
