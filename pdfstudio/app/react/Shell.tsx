@@ -42,8 +42,8 @@ const ROOT: Record<RootKind, { icon: string; label: string }> = {
    * Loop 是没人持笔（`docs/workflow.md` §1.3），所以自成一根。
    */
   loops: { icon: "🔁", label: "Loop" },
-  /** 写完之后送出门。跟 Writer 分开：写是让它成型，发是让它离开这台机器。 */
-  publish: { icon: "📤", label: "发布" },
+  /** 写完之后送出门。跟 Writer 分开：写是让它成型，Export 是让它离开这台机器。 */
+  export: { icon: "📤", label: "Export" },
 };
 
 /** 表的键序就是屏幕上的顺序：只有一处能改顺序，改了不会跟另一处对不上。 */

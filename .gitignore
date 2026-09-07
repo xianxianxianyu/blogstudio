@@ -39,6 +39,11 @@ yarn-error.log*
 # real model credentials (ADR-0005: key never enters source or build output)
 /pdfstudio/config.json
 
+# dev 形态的数据根就是 pdfstudio/（`vite.app.config.ts` 的 paths）。去处与同步账本
+# 是这台机器的东西：仓库路径、ssh 别名、往哪台服务器同步——不进仓库。
+/pdfstudio/destinations.json
+/pdfstudio/published.json
+
 # PDF Studio 的书架：是你的书和阅读记录，不是仓库内容
 pdfstudio/.library/
 

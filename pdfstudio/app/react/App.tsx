@@ -574,9 +574,9 @@ export function App({
         />
       ) : active.kind === "loop" ? (
         <LoopPage project={active.id} reader={loops} />
-      ) : active.kind === "publish" ? (
-        // 发布。**与 Writer 并列，不是它的一个按钮**：写是让稿子成型，发是让它离开
-        // 这台机器——后者要看的是「哪几篇发过、发到哪、那边现在是什么」，那是一整列。
+      ) : active.kind === "export" ? (
+        // Export。**与 Writer 并列，不是它的一个按钮**：写是让文章成型，Export 是让它
+        // 离开这台机器——后者要看的是「哪几篇在架、发到哪、那边现在是什么」，那是一整列。
         <PublishPage blog={blog} publishing={publishing} />
       ) : active.kind === "writer" ? (
         // 稿子架：Writer 这一侧的根，与书架同一层（ADR-0004）。

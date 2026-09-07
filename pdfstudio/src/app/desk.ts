@@ -33,12 +33,15 @@ export type Active =
    */
   | { kind: "loops" }
   /**
-   * 发布：把写完的稿子送到一个**去处**（`blogstudio/src/publish/`）。
+   * Export：把写完的文章送出这台机器（管线在 `blogstudio/src/publish/`）。
    *
-   * 它是一整列（有哪些去处、哪几篇发过），跟书架之于一本书一样——所以是根，不是
-   * 某一篇稿子上的一个按钮。读、想、写、发，四件事各占一根。
+   * 它是一整列（有哪些去处、哪几篇在架、那边现在是什么），跟书架之于一本书一样
+   * ——所以是根，不是某一篇文章上的一个按钮。读、想、写、发，四件事各占一根。
+   *
+   * **根叫 Export，管线仍叫 publish**：前者是那一列（去处、清单、干跑），后者是
+   * 「翻译 → 构建 → 同步」那三段。两个词各指一样东西，不是同一个词写了两遍。
    */
-  | { kind: "publish" }
+  | { kind: "export" }
   | { kind: "doc"; id: string }
   | { kind: "draft"; id: string }
   | { kind: "page"; id: string }
