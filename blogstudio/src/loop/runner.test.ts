@@ -15,6 +15,7 @@ const CONFIG: LoopConfig = {
   planPrompt: "把这周该查的事排成任务",
   wrapPrompt: "整理成一份周报",
   caps: { runUsd: 5 },
+  model: "opus",
 };
 
 /** 三个阶段的替身。每一阶段被喂了什么，都留在 `seen` 里。 */

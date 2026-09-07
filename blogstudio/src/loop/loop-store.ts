@@ -59,6 +59,13 @@ export interface LoopStore {
   setEnabled(project: string, on: boolean): Promise<void>;
   /** 每一轮一行，**最新在最上面**。 */
   runs(project: string): Promise<RunRecord[]>;
+  /**
+   * 只留最近 `keep` 轮，更老的整个目录删掉。返回删掉了哪几轮。
+   *
+   * runs 只增不减的话，一个每 6 小时跑一次的项目一年下来是一千多个目录。
+   * **按目录名算，不读成绩单**：一轮的 run.md 坏了它也该被数进去，否则永远清不掉。
+   */
+  prune(project: string, keep: number): Promise<number[]>;
   /** 一轮的产出：最终报告，加上每个 task 各自的那份。 */
   runDetail(project: string, n: number): Promise<RunDetail>;
   /** 记下这一轮的成绩单。每次状态变化都可以重写，最后一次写的算数。 */
@@ -198,6 +205,21 @@ export function createLoopStore(root: string): LoopStore {
       // 按**轮次**排，不是按目录名排。补零撑得住 9999 轮，撑不住第 10000 轮，
       // 而那时字典序会把 10000 排到 9999 前面——排序靠数字就不会有这一天。
       return records.filter((one): one is RunRecord => one !== null).sort((a, b) => b.n - a.n);
+    },
+
+    async prune(project, keep) {
+      const dir = path.join(root, safe("项目名", project), "runs");
+      const names = await readdir(dir).catch(() => []);
+      const numbered = names
+        .map((name) => ({ name, n: Number(name) }))
+        .filter((one) => Number.isInteger(one.n))
+        .sort((a, b) => b.n - a.n);
+      const gone: number[] = [];
+      for (const one of numbered.slice(Math.max(0, keep))) {
+        await rm(path.join(dir, one.name), { recursive: true, force: true });
+        gone.push(one.n);
+      }
+      return gone.sort((a, b) => a - b);
     },
 
     async saveReport(project, n, report) {

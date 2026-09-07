@@ -4,7 +4,13 @@ import { createRunner, type LoopAgents } from "./runner";
 import { due } from "./schedule";
 
 /**
- * 把到点的项目各跑一轮。
+ * 每个项目留多少轮。每 6 小时一轮的项目，这是十几天的历史；再往前的，
+ * 有用的东西早该进了文章或 context，没用的留着只是占地方。
+ */
+export const KEEP_RUNS = 50;
+
+/**
+ * 把到点的项目各跑一轮，跑完把太老的轮次清掉。
  *
  * 这是「定时启动」那一半：外面某个心跳按固定节奏叫它，它自己判断谁该跑。
  * **心跳快慢不影响结果**——该不该跑由 `due` 按上一轮的时间算，叫得勤只是多问几次。
@@ -19,6 +25,9 @@ export async function sweep(
    */
   agentsFor: (settings: LoopSettings) => LoopAgents,
   now: number,
+  /** 模型名，只为记进 `intent.json`。 */
+  model: string,
+  keep = KEEP_RUNS,
 ): Promise<{ project: string; n: number }[]> {
   const started: { project: string; n: number }[] = [];
 
@@ -43,11 +52,14 @@ export async function sweep(
         planPrompt: settings.planPrompt,
         wrapPrompt: settings.wrapPrompt,
         caps: { runUsd: settings.runCapUsd },
+        model,
       },
       n,
       now,
     );
     started.push({ project, n });
+    // 跑完再清，不是跑前：这一轮自己也算在「最近 N 轮」里。
+    await store.prune(project, keep);
   }
 
   return started;

@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { appendFileSync } from "node:fs";
+import { appendFileSync, renameSync, statSync } from "node:fs";
 import { app, BrowserWindow, dialog, ipcMain, shell } from "electron";
 import { createWebView, type WebViewHandle } from "./web-view";
 import { createLocalApi } from "../src/server/local-api";
@@ -131,7 +131,23 @@ function note(line: string): void {
   console.log(`[pdfstudio] ${line}`);
 }
 
+/**
+ * 启动日志超过 1 MB 就换一份：老的改名成 `.1`（只留一份），新的从头写。
+ *
+ * `note` 是只追加的，不轮转的话它会一直长——两周就是两千行。放在启动时做而不是
+ * 每次 `note` 时查，是因为一次启动写不了几行，够不着这个上限。
+ */
+function rotateLog(): void {
+  const file = path.join(app.getPath("userData"), "startup.log");
+  try {
+    if (statSync(file).size > 1024 * 1024) renameSync(file, `${file}.1`);
+  } catch {
+    // 还没有日志，或者读不到——都不值得为此不启动。
+  }
+}
+
 async function createWindow(): Promise<void> {
+  rotateLog();
   note("createWindow 开始");
   const { api, token } = await startApi();
   note(`本机 API ${api}`);

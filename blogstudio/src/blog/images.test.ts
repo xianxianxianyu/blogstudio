@@ -97,3 +97,25 @@ describe("ImageStore", () => {
     expect(await createImageStore(root, "site/static/images").list()).toEqual([]);
   });
 });
+
+describe("ImageStore.remove", () => {
+  it("删一张；名字带路径就拒绝", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "img-"));
+    const store = createImageStore(root, "static/images");
+    const url = await store.put(bytes("一张图"), "a.png");
+    const name = url.slice("/images/".length);
+    expect(await store.list()).toEqual([name]);
+
+    await expect(store.remove("../别处.png")).rejects.toThrow("不能当文件名");
+    await store.remove(name);
+    expect(await store.list()).toEqual([]);
+  });
+
+  it("列表只认图片，别的文件不算", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "img-"));
+    const store = createImageStore(root, "static/images");
+    await store.put(bytes("x"), "a.png");
+    await writeFile(path.join(root, "static/images", ".DS_Store"), "");
+    expect(await store.list()).toHaveLength(1);
+  });
+});

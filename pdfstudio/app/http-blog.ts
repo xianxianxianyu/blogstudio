@@ -32,6 +32,10 @@ export interface BlogClient {
   trash(): Promise<Trashed[]>;
   /** 放回来，返回它的 slug。 */
   restore(name: string): Promise<string>;
+  /** 一张也没人用的图。**只报，不删。** */
+  orphanImages(): Promise<string[]>;
+  /** 删一张没人用的图。有人用服务端会拒绝。 */
+  removeImage(name: string): Promise<void>;
 }
 
 export function createHttpBlog(url: string): BlogClient {
@@ -60,6 +64,9 @@ export function createHttpBlog(url: string): BlogClient {
     restore: (name) =>
       (ask(`${url}/trash/${encodeURIComponent(name)}`, { method: "POST" }) as Promise<{ slug: string }>)
         .then((out) => out.slug),
+    orphanImages: () => ask(`${url}/images/orphans`) as Promise<string[]>,
+    removeImage: (name) =>
+      ask(`${url}/images/${encodeURIComponent(name)}`, { method: "DELETE" }).then(() => undefined),
 
     async uploadImage(file) {
       // 原始字节，不 base64：一张截图编码之后胖三分之一，而它要多绕几道。

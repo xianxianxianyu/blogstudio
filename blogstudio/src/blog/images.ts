@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
@@ -44,8 +44,13 @@ export function imagesIn(markdown: string): string[] {
 export interface ImageStore {
   /** 存一张，回报它在正文里该写的路径（`/images/xxx.png`）。 */
   put(bytes: Uint8Array, filename: string): Promise<string>;
-  /** 现在有哪些（文件名，不带路径）。 */
+  /** 现在有哪些（文件名，不带路径）。只认图片，`.DS_Store` 之类不算。 */
   list(): Promise<string[]>;
+  /**
+   * 删一张。**这一层不问它有没有人用**——那是索引的事（`index.orphans`），
+   * 应用层（`blog.ts`）先问再删。
+   */
+  remove(name: string): Promise<void>;
 }
 
 export function createImageStore(repoRoot: string, imagesDir: string): ImageStore {
@@ -60,6 +65,16 @@ export function createImageStore(repoRoot: string, imagesDir: string): ImageStor
       return `/images/${name}`;
     },
     // 目录还不存在是正常状态：一张图都还没有。
-    list: () => readdir(dir).catch(() => [] as string[]),
+    list: async () =>
+      (await readdir(dir).catch(() => [] as string[])).filter((name) =>
+        KINDS.has(name.slice(name.lastIndexOf(".") + 1).toLowerCase()),
+      ),
+    async remove(name) {
+      // 名字来自索引（也就是来自正文），不是自己起的——别让一个坏名字删到目录外面去。
+      if (name === "" || name.includes("/") || name.includes("\\") || name.includes("..")) {
+        throw new Error(`「${name}」不能当文件名`);
+      }
+      await rm(path.join(dir, name), { force: true });
+    },
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildArgs, outDirOf } from "./build";
+import { buildArgs, outDirOf, staleOutDirs } from "./build";
 
 const CN = {
   name: "moyutianzun.cn",
@@ -54,5 +54,19 @@ describe("buildArgs", () => {
     expect(args).not.toContain("-D");
     expect(args).not.toContain("-E");
     expect(args).not.toContain("--buildDrafts");
+  });
+});
+
+describe("staleOutDirs", () => {
+  it("不在去处表里的 public-* 是孤儿；别的目录不归这里管", () => {
+    // 去处改过名，旧名字的产物目录（实际留下过一个 public-cn）没有任何东西会再碰它。
+    const entries = ["public", "public-cn", "public-moyutianzun.cn", "content", "public-old"];
+    expect(staleOutDirs(entries, [CN])).toEqual(["public-cn", "public-old"]);
+  });
+
+  it("去处表是空的，一个都不清——那多半是配置没读出来，不是真的没有去处", () => {
+    // 这一条其实由调用方守（配置读不出来就不会走到构建），这里钉住的是纯函数本身
+    // 不会因为空表就把所有 public-* 当孤儿……它会。所以调用方必须先确认配置在。
+    expect(staleOutDirs(["public-a"], [])).toEqual(["public-a"]);
   });
 });

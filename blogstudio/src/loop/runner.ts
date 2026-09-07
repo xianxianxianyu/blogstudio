@@ -44,6 +44,8 @@ export type LoopConfig = {
   planPrompt: string;
   wrapPrompt: string;
   caps: { runUsd: number };
+  /** 用的哪个模型。只为写进 `intent.json`——人事后要靠它认出这笔钱花在哪儿。 */
+  model: string;
 };
 
 /** 报错里那句人话。整条链的处理在外面（`errorChain`），这里只要一句能写进报告的。 */
@@ -141,7 +143,7 @@ export function createRunner(store: LoopStore, agents: LoopAgents) {
             // 意图写在调用之前。从这一刻起这笔钱有可能已经花出去了（§4）。
             // 原文先落盘，再落意图，最后才调模型。顺序就是「事后能查到什么」的顺序。
             await store.saveTaskFile(project, n, task.id, source);
-            await store.beginTask(project, n, task.id, { model: "?", capUsd: task.budgetUsd });
+            await store.beginTask(project, n, task.id, { model: config.model, capUsd: task.budgetUsd });
             const { report } = await agents.work(source);
             await store.finishTask(project, n, task.id, report);
             return { task, report };

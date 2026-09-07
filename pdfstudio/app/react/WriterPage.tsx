@@ -31,6 +31,8 @@ export function WriterPage({
   const [query, setQuery] = useState("");
   /** 回收站。`null` = 还没看过（不主动读——**读一次就会顺手清掉过期的**）。 */
   const [trash, setTrash] = useState<Trashed[] | null>(null);
+  /** 没人用的图。`null` = 收着。**只报不删**，删是下面每一行上人按的那一下。 */
+  const [orphans, setOrphans] = useState<string[] | null>(null);
 
   const said = (cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause));
 
@@ -53,6 +55,8 @@ export function WriterPage({
       await reload();
       // 回收站开着的时候，丢掉/放回都要让它跟着变。
       if (trash !== null) setTrash(await blog.trash());
+      // 图那一栏同理：丢掉一篇，它引用的图可能就没人用了。
+      if (orphans !== null) setOrphans(await blog.orphanImages());
     } catch (cause) {
       said(cause);
     }
@@ -176,6 +180,40 @@ export function WriterPage({
                   onClick={() => void act(async () => void (await blog.restore(one.name)))}
                 >
                   放回去
+                </button>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
+
+      <div className="writer-trash">
+        <button
+          className="btn"
+          onClick={() => void (orphans === null ? blog.orphanImages().then(setOrphans, said) : setOrphans(null))}
+        >
+          {orphans === null ? "没人用的图" : `收起（${orphans.length}）`}
+        </button>
+        {orphans !== null && (
+          <>
+            <p className="muted">
+              正文里没有任何一篇引用的图。<b>不自动删</b>——一张图今天没人用，可能是某篇还在下架，
+              也可能是你刚删错了一段。确定不要了再按。
+            </p>
+            {orphans.length === 0 && <p className="empty">每一张都有人用。</p>}
+            {orphans.map((name) => (
+              <div key={name} className="publish-row">
+                <span className="grow" title={name}>
+                  <code>{name}</code>
+                </span>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    if (!window.confirm(`删掉 ${name}？这一下不进回收站。`)) return;
+                    void act(() => blog.removeImage(name));
+                  }}
+                >
+                  删掉
                 </button>
               </div>
             ))}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createLoopStore } from "./loop-store";
@@ -55,7 +55,7 @@ describe("到点了就把该跑的项目跑一遍", () => {
     const store = createLoopStore(dir);
     const { agents, seen } = fakeAgents();
 
-    const done = await sweep(store, () => agents, 1000);
+    const done = await sweep(store, () => agents, 1000, "opus");
 
     expect(done).toEqual([{ project: "研究 KV cache", n: 1 }]);
     // 用的是配置里那段 prompt，不是别处来的。
@@ -69,11 +69,11 @@ describe("到点了就把该跑的项目跑一遍", () => {
     const store = createLoopStore(dir);
     const { agents } = fakeAgents();
 
-    await sweep(store, () => agents, 1000);
-    await sweep(store, () => agents, 1000 + 6 * HOUR);
+    await sweep(store, () => agents, 1000, "opus");
+    await sweep(store, () => agents, 1000 + 6 * HOUR, "opus");
     // 第三次：要接着第 2 轮往下数。看成最旧的那一轮的话会得出第 2 轮，
     // 而那一轮的产物已经在磁盘上了——盖掉它就是把付过钱的东西扔了。
-    const done = await sweep(store, () => agents, 1000 + 12 * HOUR);
+    const done = await sweep(store, () => agents, 1000 + 12 * HOUR, "opus");
 
     expect(done).toEqual([{ project: "p", n: 3 }]);
   });
@@ -83,9 +83,9 @@ describe("到点了就把该跑的项目跑一遍", () => {
     await project(dir, "p");
     const store = createLoopStore(dir);
     const { agents } = fakeAgents();
-    await sweep(store, () => agents, 1000);
+    await sweep(store, () => agents, 1000, "opus");
 
-    expect(await sweep(store, () => agents, 1000 + HOUR)).toEqual([]);
+    expect(await sweep(store, () => agents, 1000 + HOUR, "opus")).toEqual([]);
   });
 
   it("**配置坏掉的项目跳过，别的照跑**——一个项目的错字不该让全部停摆", async () => {
@@ -95,7 +95,7 @@ describe("到点了就把该跑的项目跑一遍", () => {
     const store = createLoopStore(dir);
     const { agents } = fakeAgents();
 
-    expect(await sweep(store, () => agents, 1000)).toEqual([{ project: "好的", n: 1 }]);
+    expect(await sweep(store, () => agents, 1000, "opus")).toEqual([{ project: "好的", n: 1 }]);
   });
 
   it("**关着的项目一轮都不跑**，哪怕早就到点了", async () => {
@@ -106,7 +106,7 @@ describe("到点了就把该跑的项目跑一遍", () => {
     const store = createLoopStore(dir);
     const { agents } = fakeAgents();
 
-    expect(await sweep(store, () => agents, 1000)).toEqual([{ project: "开着的", n: 1 }]);
+    expect(await sweep(store, () => agents, 1000, "opus")).toEqual([{ project: "开着的", n: 1 }]);
   });
 
   it("**每个项目用自己的那份配置建 agent**——两个项目的 task 上限不一样", async () => {
@@ -124,10 +124,32 @@ describe("到点了就把该跑的项目跑一遍", () => {
         return agents;
       },
       1000,
+      "opus",
     );
 
     // 拿一份配置去跑所有项目的话，「紧的」那个会按 1 块的上限派 task——
     // 它自己那一栏写的 0.1 就白写了。
     expect(caps.sort()).toEqual([0.1, 1]);
+  });
+
+  it("**跑完把太老的轮次清掉**：只留最近 N 轮，这一轮自己算在内", async () => {
+    const dir = await root();
+    await project(dir, "p");
+    const store = createLoopStore(dir);
+    const { agents } = fakeAgents();
+
+    for (let i = 0; i < 4; i += 1) await sweep(store, () => agents, 1000 + i * 6 * HOUR, "opus", 2);
+
+    expect((await store.runs("p")).map((r) => r.n)).toEqual([4, 3]);
+  });
+
+  it("模型名记进每个 task 的意图里——人事后要靠它认出这笔钱花在哪儿", async () => {
+    const dir = await root();
+    await project(dir, "p");
+    const { agents } = fakeAgents();
+    await sweep(createLoopStore(dir), () => agents, 1000, "gpt-x");
+
+    const intent = JSON.parse(await readFile(path.join(dir, "p", "runs", "0001", "tasks", "01.intent.json"), "utf8"));
+    expect(intent).toEqual({ model: "gpt-x", capUsd: 0.3 });
   });
 });

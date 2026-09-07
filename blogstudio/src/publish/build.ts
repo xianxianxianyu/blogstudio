@@ -16,6 +16,13 @@ import { slugOf } from "./slug";
  * sitemap、canonical 全指向 `.com`，而页面看着完全正常，没有任何地方会报错。
  */
 export function outDirOf(siteRoot: string, destination: Destination): string {
+  return path.join(siteRoot, outDirNameOf(destination));
+}
+
+const PREFIX = "public-";
+
+/** 产物目录的名字：`public-<去处的 slug>`。 */
+export function outDirNameOf(destination: Destination): string {
   /**
    * 名字要过一遍 slug。**去处的名字是人手写的**，而它在这里会变成一个目录名，
    * 紧接着交给 `--cleanDestinationDir`——那个参数会**清空**它指向的目录。
@@ -23,7 +30,19 @@ export function outDirOf(siteRoot: string, destination: Destination): string {
    */
   const safe = slugOf(destination.name);
   if (safe === "") throw new Error(`去处的名字「${destination.name}」没法当目录名`);
-  return path.join(siteRoot, `public-${safe}`);
+  return `${PREFIX}${safe}`;
+}
+
+/**
+ * 站点目录里哪些 `public-*` 不属于任何一个去处。
+ *
+ * 去处改个名，旧名字的产物目录就留在那儿，一份 70 MB，没有任何东西会再碰它——
+ * 实际留下过一个 `public-cn`。构建前把它们清掉。**只认这个前缀**：`public/`
+ * 是 `deploy.sh` 那条路的，别的目录更不归这里管。
+ */
+export function staleOutDirs(entries: string[], destinations: Destination[]): string[] {
+  const keep = new Set(destinations.map(outDirNameOf));
+  return entries.filter((name) => name.startsWith(PREFIX) && !keep.has(name)).sort();
 }
 
 export function buildArgs(siteRoot: string, destination: Destination): string[] {

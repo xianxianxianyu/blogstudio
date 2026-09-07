@@ -31,6 +31,13 @@ export interface Blog {
   purge(now: number): Promise<string[]>;
   /** 从回收站放回来，返回它的 slug。 */
   restore(name: string): Promise<string>;
+  /**
+   * 一张也没人用的图。**只报，不删**——一张图今天没人用，可能是某篇还在下架、
+   * 也可能是你刚删错了一段。删是下面那个动作，人按的。
+   */
+  orphanImages(): Promise<string[]>;
+  /** 删一张**没人用的**图。有人用就拒绝：那是页面上的一张破图。 */
+  removeImage(name: string): Promise<void>;
   close(): void;
 }
 
@@ -91,6 +98,19 @@ export function createBlog(config: Config, dbFile: string): Blog {
       const where = await articles.remove(slug, now);
       await refresh();
       return where;
+    },
+
+    async orphanImages() {
+      // 先重扫：正文可能刚在别的编辑器里改过，索引里那份「谁用了哪张」是上一次的。
+      await refresh();
+      return index.orphans(await images.list());
+    },
+
+    async removeImage(name) {
+      await refresh();
+      const users = index.using(name);
+      if (users.length > 0) throw new Error(`「${name}」还被 ${users.join("、")} 用着，不能删`);
+      await images.remove(name);
     },
 
     close: () => index.close(),

@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -27,6 +27,7 @@ import { createSshSite } from "../../../blogstudio/src/publish/ssh-site";
 import { createOssImages } from "../../../blogstudio/src/publish/oss-images";
 import type { ImageSide } from "../../../blogstudio/src/publish/deploy";
 import { previewSync, syncOnly } from "../../../blogstudio/src/publish/deploy";
+import { staleOutDirs } from "../../../blogstudio/src/publish/build";
 import { runHugo } from "../../../blogstudio/src/publish/hugo";
 import type { Context } from "../../../contextstudio/src/context";
 import { createLoopStore } from "../../../blogstudio/src/loop/loop-store";
@@ -209,6 +210,7 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
               taskBudgetUsd: settings.taskCapUsd,
             }),
           Date.now(),
+          model,
         );
 
       } catch (cause) {
@@ -365,6 +367,16 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
             };
           };
 
+          /**
+           * 构建前清掉不属于任何去处的 `public-*`。去处改个名，旧目录就成了没人碰的
+           * 70 MB（`build.ts` 的 `staleOutDirs`）。配置已经确认读出来了（上面那句
+           * `config === null` 就抛），所以这里的去处表不会是「读不出来」的空表。
+           */
+          const siteRoot = path.join(config.repo, config.site);
+          for (const dir of staleOutDirs(await readdir(siteRoot).catch(() => []), config.destinations)) {
+            await rm(path.join(siteRoot, dir), { recursive: true, force: true });
+          }
+
           const site = createSshSite(destination);
           if (request.method !== "POST") {
             return json(await previewSync(config, destination, site, runHugo, await imageSide()));
@@ -415,6 +427,14 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
           }
 
           if (slug === "images") {
+            // 没人用的图：`GET /__blog/images/orphans` 列，`DELETE /__blog/images/<名字>` 删。
+            // **列不删、删要人按**——一张图今天没人用，可能是某篇还在下架。
+            if (action === "orphans") return json(await it.orphanImages());
+            if (request.method === "DELETE") {
+              if (!action) throw new Error("缺少要删的那张图");
+              await it.removeImage(action);
+              return json({});
+            }
             if (request.method !== "POST") return json(await it.images.list());
             const url = new URL(request.url ?? "/", "http://127.0.0.1");
             const saved = await it.images.put(
@@ -636,6 +656,8 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
           if (request.method === "DELETE") {
             if (!id) throw new Error("缺少稿子的 id");
             await store.remove(id);
+            // 这条路绕过了 `blog.remove`，索引要自己刷——否则列表在下一次整扫之前还挂着它。
+            await (await blogOf()).refresh();
             return json({});
           }
           // 不给 id 就是要整个稿子架；给了就是要这一篇的正文。

@@ -246,4 +246,22 @@ describe("LoopStore", () => {
     // 一个字都不该动。界面去回写它，一次撞车就可能盖掉正在改的字。
     expect(await readFile(path.join(dir, "p", "loop.md"), "utf8")).toBe(config);
   });
+
+  it("**只留最近 N 轮**，更老的整个目录删掉；成绩单坏了的那一轮也算数", async () => {
+    const dir = await root();
+    const store = createLoopStore(dir);
+    const one = { phase: "wrap" as const, tasks: [], done: [], failed: [], skipped: [], startedAt: 1, endedAt: 2, capUsd: 0 };
+    for (const n of [1, 2, 3, 4]) await store.saveRun("p", { ...one, n });
+    // 第 2 轮的成绩单被手改坏了——它照样占着一个目录，照样要能被清掉。
+    await writeFile(path.join(dir, "p", "runs", "0002", "run.md"), "坏的", "utf8");
+
+    expect(await store.prune("p", 2)).toEqual([1, 2]);
+    expect((await store.runs("p")).map((r) => r.n)).toEqual([4, 3]);
+    // 没到 N 的什么都不动。
+    expect(await store.prune("p", 2)).toEqual([]);
+  });
+
+  it("从没跑过的项目，清一下也不报错", async () => {
+    expect(await createLoopStore(await root()).prune("p", 3)).toEqual([]);
+  });
 });
