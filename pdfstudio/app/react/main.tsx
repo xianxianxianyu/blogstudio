@@ -18,6 +18,7 @@ import { apiUrl, apiFetch } from "../api-base";
 import { createHttpEmbedder } from "../http-embedder";
 import { createHttpIndexCache } from "../http-index-cache";
 import { createModelClient } from "../../src/model/openai-compatible";
+import { createLiveClient } from "../../src/model/live-client";
 import type { ModelClient } from "../../src/model/model-client";
 import { parseConfig, resolveEndpoint, type Capability } from "../../src/config/config";
 import { createHttpClipStore } from "../http-clip-store";
@@ -57,8 +58,9 @@ const settings = createSettings({
 });
 await settings.load();
 settings.subscribe(() => {
-  // 改完设置后新建的 Recognizer 要用新配置。已经打开的文档不重建——它的
-  // Recognizer 是打开时接好的，换端点得重新打开这本书。
+  // 云端那几个客户端都是 `live()` 建的，每次调用现读这份配置——改完 key 立刻生效，
+  // 已经打开的书、正在写的稿子都不用重开。本地识别引擎那条路例外：它的地址来自
+  // 引擎进程，不来自这份配置。
   appConfig = settings.config;
 });
 
@@ -80,6 +82,15 @@ function endpoint(capability: Capability) {
   return { ...resolved, baseURL: viaProxy(resolved.baseURL) };
 }
 
+/**
+ * 某个能力的云端客户端，**每次调用现读配置**（`live-client.ts`）。
+ *
+ * 不这么做的话，设置页改了 key 之后，写作助手和问文档用的还是启动时那把——
+ * 而且不报错。设置页头上写着「改动立刻保存」，那就得真的立刻生效。
+ */
+const live = (capability: Capability): ModelClient =>
+  createLiveClient(() => createModelClient({ ...endpoint(capability), fetch: apiFetch }));
+
 // 缓存里记着它：换了模型向量就作废，不同模型的向量不在同一个空间里，混用不报错，
 // 只会让检索悄悄返回不相干的段落。
 const EMBEDDING_MODEL = "onnx-community/embeddinggemma-300m-ONNX@q8";
@@ -96,9 +107,9 @@ const progress = createProgress();
 async function recognitionTier() {
   if (!settings.config.localRecognition) {
     return {
-      recognition: createModelClient({ ...endpoint("recognition"), fetch: apiFetch }),
+      recognition: live("recognition"),
       // 翻译是独立配置的（ADR-0010）。漏掉它译文永远不出现，那个 bug 真的发生过一次。
-      translation: createModelClient({ ...endpoint("translation"), fetch: apiFetch }),
+      translation: live("translation"),
     };
   }
 
@@ -134,7 +145,7 @@ const ws = createWorkspace({
     const chat = createChat({
       document,
       docId: doc.id,
-      model: createModelClient({ ...endpoint("chat"), fetch: apiFetch }),
+      model: live("chat"),
       // 本地 embedding：不接的话中文问英文论文是**零召回**（关键词那一路抽不出中文词元）。
       // 权重是首次真正检索时才下载的，开一本书不会触发。
       embedder,
@@ -174,7 +185,7 @@ const writer = createWriter({
 const talk = createWritingTalk({
   chat: createWriterChat({
     // 写作与问文档是两件事，各配各的端点（ADR-0010 的口径；能力清单见 config.ts）。
-    model: createModelClient({ ...endpoint("writing"), fetch: apiFetch }),
+    model: live("writing"),
     // 现取而不是钉一份快照：刚在 Context Studio 那边收了一批，这边就该召回得到。
     materials: async () => (await contextStudio.view()).contexts,
     // 用与问文档同一个向量服务：同一个模型、同一个空间，省掉第二份权重。
@@ -189,7 +200,7 @@ const talk = createWritingTalk({
  * 换端点，钉死一个实例就会让改完的配置不生效，而且不报错（`settings.subscribe` 那边
  * 已经为同样的理由踩过一次）。
  */
-const tocModel = () => createModelClient({ ...endpoint("recognition"), fetch: apiFetch });
+const tocModel = () => live("recognition");
 
 /**
  * 认扫描版目录页用的**本地** OCR。
