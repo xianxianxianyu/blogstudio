@@ -12,6 +12,7 @@ import { WriterPage } from "./WriterPage";
 import { DraftPage } from "./DraftPage";
 import { PublishPage } from "./PublishPage";
 import { Endpoints } from "./SettingsPage";
+import { PanelBar } from "./PanelBar";
 
 /**
  * `/write` 的外壳：**只有写和发**。
@@ -22,6 +23,10 @@ import { Endpoints } from "./SettingsPage";
  *
  * 不复用 `App` 再把三根藏起来：`App` 起手就要 `Workspace` 和 `PdfHost`，那意味着
  * 网页版也得加载 pdf.js 和整个阅读侧的状态机，只为了不用它。
+ *
+ * 顶上多一条 Panel 的栏（`PanelBar`），配色跟 Panel 走深色（`write.css`）：它挂在
+ * `research.moyutianzun.com/write/`，与 Robot、Projects 是同一个应用的三个入口——
+ * 用起来该是一个东西，那是壳和颜色的事，不是把页面搬进另一个仓库的事。
  */
 export function WriteApp({
   settings,
@@ -81,73 +86,77 @@ export function WriteApp({
   };
 
   return (
-    <Shell
-      active={active}
-      roots={["writer", "export"]}
-      onRoot={(kind) => {
-        leave();
-        setActive({ kind });
-      }}
-      desk={desk}
-      titleOf={(item) =>
-        (writing.openId === item.id ? writing.title : writing.drafts.find((one) => one.id === item.id)?.title) ??
-        "（这篇文章没了）"
-      }
-      onPick={(item) => {
-        if (item.id === writing.openId) {
-          setActive({ kind: "draft", id: item.id });
-          return;
+    <div className="write-frame">
+      <PanelBar />
+      <Shell
+        active={active}
+        roots={["writer", "export"]}
+        onRoot={(kind) => {
+          leave();
+          setActive({ kind });
+        }}
+        desk={desk}
+        titleOf={(item) =>
+          (writing.openId === item.id ? writing.title : writing.drafts.find((one) => one.id === item.id)?.title) ??
+          "（这篇文章没了）"
         }
-        leave();
-        void openDraft(item.id);
-      }}
-      onClose={(item) => {
-        leave();
-        const next = closeOnDesk(desk, item.kind, item.id, active);
-        setDesk(next.desk);
-        setActive(next.active);
-        if (next.active.kind === "draft" && next.active.id !== writing.openId) void openDraft(next.active.id);
-      }}
-      onSettings={() => {
-        leave();
-        setActive(openSettings(active));
-      }}
-    >
-      {error !== null && <pre className="err">{error}</pre>}
-      {active.kind === "settings" ? (
-        <div className="settings">
-          <header className="settings-bar">
-            <h1>设置</h1>
-            <p className="muted grow">
-              改动立刻保存，下次打开还在。
-              {note && <b className={note.bad ? "err" : undefined}> {note.text}</b>}
-            </p>
-          </header>
-          <div className="settings-body">
-            <main className="settings-main">
-              <Endpoints config={config} settings={settings} save={save} />
-            </main>
+        onPick={(item) => {
+          if (item.id === writing.openId) {
+            setActive({ kind: "draft", id: item.id });
+            return;
+          }
+          leave();
+          void openDraft(item.id);
+        }}
+        onClose={(item) => {
+          leave();
+          const next = closeOnDesk(desk, item.kind, item.id, active);
+          setDesk(next.desk);
+          setActive(next.active);
+          if (next.active.kind === "draft" && next.active.id !== writing.openId) void openDraft(next.active.id);
+        }}
+        onSettings={() => {
+          leave();
+          setActive(openSettings(active));
+        }}
+      >
+        {error !== null && <pre className="err">{error}</pre>}
+        {active.kind === "settings" ? (
+          <div className="settings">
+            <header className="settings-bar">
+              <h1>设置</h1>
+              <p className="muted grow">
+                改动立刻保存，下次打开还在。
+                {note && <b className={note.bad ? "err" : undefined}> {note.text}</b>}
+              </p>
+            </header>
+            {/* 只有一栏：没有子页可切，左边那列不画（`.settings-body.solo`）。 */}
+            <div className="settings-body solo">
+              <main className="settings-main">
+                <Endpoints config={config} settings={settings} save={save} capabilities={["writing"]} localEngine={false} />
+              </main>
+            </div>
           </div>
-        </div>
-      ) : active.kind === "export" ? (
-        <PublishPage blog={blog} publishing={publishing} />
-      ) : isWriting(active, writing.openId) ? (
-        <DraftPage
-          writer={writer}
-          talk={talk}
-          progress={progress}
-          contexts={contexts}
-          onUploadImage={(file) => blog.uploadImage(file)}
-          // 这里没有知识库，每段要出处的纪律不成立（`checks.ts`）。
-          provenance={false}
-          onBack={() => {
-            leave();
-            setActive({ kind: "writer" });
-          }}
-        />
-      ) : (
-        <WriterPage writer={writer} blog={blog} onOpen={(id) => void openDraft(id)} />
-      )}
-    </Shell>
+        ) : active.kind === "export" ? (
+          <PublishPage blog={blog} publishing={publishing} />
+        ) : isWriting(active, writing.openId) ? (
+          <DraftPage
+            writer={writer}
+            talk={talk}
+            progress={progress}
+            contexts={contexts}
+            onUploadImage={(file) => blog.uploadImage(file)}
+            // 这里没有知识库，每段要出处的纪律不成立（`checks.ts`）。
+            provenance={false}
+            onBack={() => {
+              leave();
+              setActive({ kind: "writer" });
+            }}
+          />
+        ) : (
+          <WriterPage writer={writer} blog={blog} onOpen={(id) => void openDraft(id)} />
+        )}
+      </Shell>
+    </div>
   );
 }

@@ -367,6 +367,8 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 .settings-bar h1 { font-size: 17px; margin: 0; }
 .settings-bar p { margin: 0; font-size: 13px; }
 .settings-body { flex: 1; display: grid; grid-template-columns: 148px 1fr; min-height: 0; }
+/* 没有子页那一列时（`/write` 只有端点一段），正文不能落进 148px 那一格里。 */
+.settings-body.solo { grid-template-columns: 1fr; }
 
 .settings-nav {
   display: flex; flex-direction: column; gap: 2px;

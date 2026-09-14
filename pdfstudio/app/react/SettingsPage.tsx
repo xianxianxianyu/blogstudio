@@ -131,10 +131,21 @@ export function Endpoints({
   config,
   settings,
   save,
+  capabilities = CAPABILITIES,
+  localEngine = true,
 }: {
   config: Settings["config"];
   settings: Settings;
   save: (run: () => Promise<{ ok: boolean; reason?: string }>) => void;
+  /**
+   * 画哪几个能力。默认全部。
+   *
+   * `/write` 只用「写作助手」一个：那台机器上没有 PDF，识别、翻译、问文档三段
+   * 是三块摆着但谁也不会碰的表单，还让人以为改了会有用。
+   */
+  capabilities?: readonly Capability[];
+  /** 本地识别引擎那一段要不要画。`/write` 不画：那是桌面版才有的进程。 */
+  localEngine?: boolean;
 }) {
   const [checking, setChecking] = useState<Capability | null>(null);
   const [checked, setChecked] = useState<Partial<Record<Capability, string>>>({});
@@ -165,12 +176,14 @@ export function Endpoints({
         </label>
       ))}
 
-      <LocalEngineSection
-        enabled={config.localRecognition}
-        onToggle={(next) => save(() => settings.setLocalRecognition(next))}
-      />
+      {localEngine && (
+        <LocalEngineSection
+          enabled={config.localRecognition}
+          onToggle={(next) => save(() => settings.setLocalRecognition(next))}
+        />
+      )}
 
-      {CAPABILITIES.map((capability) => (
+      {capabilities.map((capability) => (
         <div key={capability}>
           <h3>
             {COPY[capability].label}{" "}

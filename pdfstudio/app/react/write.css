@@ -1,0 +1,156 @@
+/* `/write` 的皮：**只有这个入口加载它**（`write.html`），桌面版不认识这个文件。
+
+   两件事，都是「跟 Panel 是一个应用」的事：
+   1. 顶上那条 Panel 的栏（`PanelBar.tsx`），颜色与 research-panel `frontend/src/styles.css`
+      的 `.bar` 一字不差；
+   2. 整个壳跟 Panel 走深色——`app.css` 只让代码块跟随系统，纸、书架、设置一直只有浅色
+      一套，那是桌面版的选择。在 Panel 里，深色栏下面接一整片纸白，一眼就是两个应用。
+
+   **稿纸例外**：`.draft-editor` 那一块仍然是白纸黑字。编辑器读起来舒服比整体一致重要，
+   而且一张纸摆在深色桌面上本来就是对的画面。
+
+   做法是换 `app.css` 的那一组变量，再把它写死 `#fff` 的几处按同一套补上。
+   不改 `app.css`：那份 CSS 是桌面版和网页版共用的，在里面加深色分支就等于给桌面版也
+   加了一套没人测的皮。 */
+
+:root {
+  /* Panel 的四个底色，名字照它的。 */
+  --bg: #11131a;
+  --panel: #191c26;
+  /* 比 --panel 再浮一层：app.css 里 `#fff` 的那些地方（按钮、卡片、选中的一行）。 */
+  --raised: #232736;
+
+  /* app.css 的那一组，按 Panel 的深色重配。 */
+  --ink: #e6e8ee;
+  --muted: #939aad;
+  --faint: #6c7389;
+  --line: #2b3040;
+  --paper: var(--panel);
+  --accent: #6ea8fe;
+  --accent-soft: rgba(110, 168, 254, 0.14);
+  --mark: #f0c060;
+  --bad: #ff8f8f;
+
+  /* 代码块：深色那七个数不再等系统——壳已经是深的了。 */
+  --code-bg: #282c34;
+  --code-ink: #abb2bf;
+  --code-gutter: #4b5263;
+  --code-select: #3e4451;
+  --code-key: #c678dd;
+  --code-str: #98c379;
+  --code-num: #d19a66;
+  --code-note: #7f848e;
+  --code-fn: #61afef;
+  --code-type: #e5c07b;
+  --code-mark: #56b6c2;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); }
+
+/* ── 布局：栏在上，壳在下 ─────────────────────────────────── */
+
+.write-frame { display: flex; flex-direction: column; height: 100vh; }
+/* `.shell` 自己是 100vh 的；有了顶栏之后改成填满剩下的空间，否则多出一条页面滚动条。 */
+.write-frame > .shell { flex: 1; min-height: 0; height: auto; }
+
+/* ── Panel 的栏：与 research-panel `styles.css` 的 `.bar` 同一份数 ─────── */
+
+.panel-bar {
+  display: flex; align-items: center; gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  flex: none;
+}
+.panel-bar a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.panel-bar a:hover { color: var(--ink); }
+/* 当前项：亮一档、底下一条线。Panel 那边同一个写法（`aria-current`）。 */
+.panel-bar a[aria-current="page"] {
+  color: var(--ink);
+  box-shadow: 0 1.2rem 0 -1.1rem var(--accent);
+}
+.panel-bar .spacer { flex: 1; }
+.panel-bar .muted { margin: 0; font-size: 0.9rem; }
+.panel-bar button.link {
+  margin: 0; padding: 0; border: 0; background: none;
+  color: var(--accent); font-size: 0.9rem; font-weight: 500;
+}
+
+/* ── app.css 里写死 `#fff` 的那些处，按深色补齐 ───────────────── */
+
+.btn { background: var(--raised); }
+.btn:hover { background: #2b3044; }
+.btn.primary { color: #0b0d13; }
+
+.book { background: var(--raised); }
+.book .spine { background: linear-gradient(160deg, #3b4a7a, #2a355c); }
+.book .spine.paper { background: linear-gradient(160deg, #3a3f52, #262a38); }
+
+.rail-tighten:hover,
+.root:hover,
+.desk-item:hover,
+.settings-nav button:hover,
+.publish-row:hover { background: var(--raised); }
+.root.on,
+.desk-item.on,
+.settings-nav button.on,
+.publish-row.on { background: var(--raised); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); }
+.rail-foot { background: var(--raised); }
+.rail-tip { background: var(--ink); color: var(--bg); }
+
+.writer-search,
+.writer-tags button { background: var(--raised); color: var(--muted); }
+.writer-search { color: var(--ink); }
+.writer-off { background: rgba(240, 192, 96, 0.16); }
+.writer-html { background: var(--raised); }
+
+.msg pre { background: var(--bg); }
+.cite { background: var(--raised); }
+.cite.none { background: rgba(255, 143, 143, 0.1); }
+.notice { border-color: #7a5a1a; background: rgba(240, 192, 96, 0.12); }
+.finding { background: var(--raised); }
+.sel-menu { background: var(--raised); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5); }
+.note-input:focus { background: var(--raised); }
+
+.publish-kind.update { background: rgba(240, 192, 96, 0.16); }
+.publish-stop { background: rgba(255, 143, 143, 0.1); }
+.publish-warn { background: rgba(240, 192, 96, 0.12); }
+
+input, textarea, .about-field input, .about-field textarea, .export-list-head input, .publish-slug input {
+  color: var(--ink); background: var(--bg); border-color: var(--line);
+}
+input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.field input.inherited { background: var(--panel); }
+
+/* ── 稿纸例外：编辑器那一块回到白纸黑字 ─────────────────────── */
+
+/* 纸周围的桌面是深的，纸本身是白的：`.draft-editor` 里把整组变量换回 app.css 的浅色。 */
+.stage.paper { background: var(--bg); }
+.draft-editor {
+  --ink: #18181b;
+  --muted: #71717a;
+  --faint: #a1a1aa;
+  --line: #e4e4e7;
+  --paper: #fafafa;
+  --accent: #2563eb;
+  --accent-soft: #eef2ff;
+  --mark: #b45309;
+  --bad: #b91c1c;
+  --code-bg: #f6f7f9;
+  --code-ink: #24292f;
+  --code-gutter: #b8bfc7;
+  --code-select: #cfe0ff;
+  --code-key: #cf222e;
+  --code-str: #0a3069;
+  --code-num: #0550ae;
+  --code-note: #6e7781;
+  --code-fn: #8250df;
+  --code-type: #953800;
+  --code-mark: #57606a;
+  color-scheme: light;
+  color: var(--ink);
+  background: #fff;
+  box-shadow: 0 0 0 1px #3a3f52, 0 8px 30px rgba(0, 0, 0, 0.45);
+}
