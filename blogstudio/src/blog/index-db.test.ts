@@ -32,6 +32,17 @@ describe("citationsOf", () => {
 });
 
 describe("索引", () => {
+  it("顺序与文件那一层一致：没有日期的按改动时刻排，刚起的在最上面", async () => {
+    const it_ = await ready();
+    await it_.store.save({ slug: "老的", title: "老的", markdown: "", draft: false, date: "2020-01-01T00:00:00+08:00" });
+    await it_.store.save({ slug: "刚起的", title: "刚起的", markdown: "", draft: true });
+    const db = it_.index();
+    await db.reindex(it_.store);
+    expect(db.articles().map((one) => one.slug)).toEqual((await it_.store.list()).map((one) => one.slug));
+    expect(db.articles()[0]!.slug).toBe("刚起的");
+    db.close();
+  });
+
   it("扫一遍，列得出文章", async () => {
     const it_ = await ready();
     await it_.store.save({ slug: "甲", title: "甲文", markdown: "", draft: false, tags: ["a"], date: "2026-01-01" });

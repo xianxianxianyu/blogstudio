@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import type { ArticleStore, ArticleSummary } from "./article-store";
+import { byRecency, type ArticleStore, type ArticleSummary } from "./article-store";
 import { imagesIn } from "./images";
 
 /**
@@ -68,7 +68,7 @@ const searchable = (markdown: string): string =>
  * 而写迁移意味着从此要维护一条只增不减的迁移链——为一份随时能从文件重扫出来的缓存
  * 背那个，不划算。
  */
-const SCHEMA = 2;
+const SCHEMA = 3;
 
 /** 正则里的特殊字符。查询词是人打进来的，`c++` 里那两个加号不该被当成量词。 */
 const escaped = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -103,6 +103,8 @@ export function openIndex(file: string): Index {
       tags text,
       categories text,
       html integer not null default 0,
+      -- 文件的改动时刻（毫秒）。没有 date 的那些靠它排序（article-store 的 recencyOf）。
+      updated_at real,
       -- 搜正文用：剥掉 HTML 标签、转小写。不剥的话搜 style 会命中所有文章
       -- （那 87 篇正文里满是 p style=""）。见下面的 searchable。
       body text not null default ''
@@ -139,7 +141,7 @@ export function openIndex(file: string): Index {
         db.exec("delete from citations");
         db.exec("delete from uses");
         const put = db.prepare(
-          "insert into articles (slug,title,date,draft,tags,categories,html,body) values (?,?,?,?,?,?,?,?)",
+          "insert into articles (slug,title,date,draft,tags,categories,html,updated_at,body) values (?,?,?,?,?,?,?,?,?)",
         );
         const cite = db.prepare("insert or ignore into citations (slug,context_id) values (?,?)");
         const uses = db.prepare("insert or ignore into uses (slug,image) values (?,?)");
@@ -152,6 +154,7 @@ export function openIndex(file: string): Index {
             one.tags === undefined ? null : JSON.stringify(one.tags),
             one.categories === undefined ? null : JSON.stringify(one.categories),
             one.html ? 1 : 0,
+            one.updatedAt ?? null,
             "",
           );
           // 引用要读正文，所以这一步比列表贵——但它是这张索引存在的理由。
@@ -169,21 +172,22 @@ export function openIndex(file: string): Index {
     },
 
     articles() {
-      // 新的在前，与 `ArticleStore.list` 同一个顺序——两处不一样的话，
-      // 界面在「刚扫过」和「还没扫」之间会跳。
-      const rows = db
-        .prepare("select * from articles order by coalesce(date,'') desc")
-        .all() as Record<string, string | number | null>[];
-      return rows.map((row) => ({
-        slug: row.slug as string,
-        title: row.title as string,
-        date: (row.date as string | null) ?? undefined,
-        draft: row.draft === 1,
-        // 正文是原始 HTML 的那 87 篇：列表要能一眼标出来，它们在编辑器里改不得。
-        html: row.html === 1,
-        tags: list(row.tags as string | null),
-        categories: list(row.categories as string | null),
-      }));
+      // 新的在前，与 `ArticleStore.list` 同一个顺序（`byRecency`）——两处不一样的话，
+      // 界面在「刚扫过」和「还没扫」之间会跳。百来行，在 JS 里排。
+      const rows = db.prepare("select * from articles").all() as Record<string, string | number | null>[];
+      return rows
+        .map((row) => ({
+          slug: row.slug as string,
+          title: row.title as string,
+          date: (row.date as string | null) ?? undefined,
+          draft: row.draft === 1,
+          // 正文是原始 HTML 的那 87 篇：列表要能一眼标出来，它们在编辑器里改不得。
+          html: row.html === 1,
+          tags: list(row.tags as string | null),
+          categories: list(row.categories as string | null),
+          updatedAt: (row.updated_at as number | null) ?? undefined,
+        }))
+        .sort(byRecency);
     },
 
     citing(contextId) {

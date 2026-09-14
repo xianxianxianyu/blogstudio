@@ -135,6 +135,16 @@ describe("ArticleStore", () => {
     expect((await it_.list()).map((one) => one.slug)).toEqual(["新的", "老的"]);
   });
 
+  it("**刚起的一篇没有日期，按文件的改动时刻排——在最上面**，不是沉到 96 篇的底下", async () => {
+    const root = await repo();
+    const it_ = store(root);
+    await it_.save({ slug: "老的", title: "老的", markdown: "", draft: false, date: "2020-01-01T00:00:00+08:00" });
+    await it_.save({ slug: "去年的", title: "去年的", markdown: "", draft: false, date: "2025-06-01T00:00:00+08:00" });
+    // 新起的一篇：只有标题，没有 date（那是面世的日子，还没到）。mtime 是现在。
+    await it_.save({ slug: "刚起的", title: "刚起的", markdown: "", draft: true });
+    expect((await it_.list()).map((one) => one.slug)).toEqual(["刚起的", "去年的", "老的"]);
+  });
+
   it("列表里在架和下架都在，各自标着", async () => {
     const root = await repo();
     const it_ = store(root);

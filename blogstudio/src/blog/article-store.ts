@@ -61,6 +61,20 @@ export interface Trashed {
  */
 export const KEEP_DAYS = 30;
 
+/**
+ * 列表里这一篇算「多新」：有 `date` 用 `date`；**没有的用文件的改动时刻**。
+ *
+ * 原来没日期的排最后。「它多半是刚起的一篇，还没决定发不发」——正因为是刚起的一篇，
+ * 它才该在最上面：排到 96 篇的底下，人看到的是「我刚建的那篇没了」（真发生过）。
+ * `date` 是 ISO 字符串，mtime 转成同一种字符串后可以直接比。
+ */
+export const recencyOf = (one: { date?: string; updatedAt?: number }): string =>
+  one.date ?? (one.updatedAt === undefined ? "" : new Date(one.updatedAt).toISOString());
+
+/** 新的在前。`ArticleStore.list` 与索引的 `articles()` 都按它排——两处不一样界面会跳。 */
+export const byRecency = (a: { date?: string; updatedAt?: number }, b: { date?: string; updatedAt?: number }): number =>
+  recencyOf(b).localeCompare(recencyOf(a));
+
 export interface ArticleStore {
   list(): Promise<ArticleSummary[]>;
   load(slug: string): Promise<Article | null>;
@@ -163,8 +177,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string, trashD
         .filter((one): one is Article => one !== null)
         // 列表不带正文：92 篇里每篇几万字，列一次不该整篇拿在手上。
         .map(({ markdown, ...rest }) => ({ ...rest, html: isRawHtml(markdown) }))
-        // 新的在前。没有日期的排最后——它多半是刚起的一篇，还没决定发不发。
-        .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+        .sort(byRecency);
     },
 
     load: read,

@@ -110,7 +110,10 @@ export function createWriter(deps: {
       await deps.store.save(draft);
       open = draft;
       // 列表里那一行跟着更新：改完标题回到稿子架，看到的还是旧名字会让人以为没存住。
-      const one = summarize(draft);
+      // **正文没有标题行的，架上的名字不动**——那名字在 frontmatter 里（`drafts-on-articles.ts`），
+      // 打几个字不该把它换成正文第一行。与 `state.title` 同一条规矩。
+      const known = drafts.find((other) => other.id === draft.id)?.title;
+      const one = { ...summarize(draft), title: draft.title ?? headingOf(text) ?? known ?? titleOf(text) };
       drafts = [one, ...drafts.filter((other) => other.id !== draft.id)];
       // 写盘期间又打了字的话，`text` 已经跑在前面了——那就还是脏的，等下一拍。
       status = text === draft.markdown ? "saved" : "dirty";

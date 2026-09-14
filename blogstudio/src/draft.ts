@@ -48,10 +48,24 @@ const cut = (text: string, limit: number): string =>
  * 退回「第一行」而不是直接给未命名，是因为写的人经常先敲一行字再回头补 `#`——那一行
  * 已经足以在列表里认出这篇是什么了。
  */
-/** 正文里第一个标题行的字；没有就是 null。与 `titleOf` 的区别：不退回第一行。 */
+/**
+ * 正文里第一个**一级**标题的字；没有就是 null。与 `titleOf` 的区别：不退回第一行，
+ * 也不认 `##`——那 92 篇的名字在 frontmatter 里、正文从第一个小节开始，认 `##` 的话
+ * 顶栏显示的是第一个小节名（「获取当前程序的全局索引」），不是文章（「triton is all
+ * you need 之 GEMM」）。只有 `#` 才是「这篇叫什么」，与落盘时改名的规矩一致
+ * （`drafts-on-articles.ts` 的 `h1Of`）。代码块里的 `# 注释` 不算。
+ */
 export function headingOf(markdown: string): string | null {
-  const heading = markdown.split("\n").find((line) => /^\s*#{1,6}\s+\S/.test(line));
-  return heading === undefined ? null : cut(bare(heading), 60);
+  let fenced = false;
+  for (const line of markdown.split("\n")) {
+    if (/^\s{0,3}(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) continue;
+    if (/^\s{0,3}#\s+\S/.test(line)) return cut(bare(line), 60);
+  }
+  return null;
 }
 
 export function titleOf(markdown: string): string {
@@ -73,7 +87,9 @@ export function excerptOf(markdown: string): string {
 
 export const summarize = (draft: Draft): DraftSummary => ({
   id: draft.id,
-  title: titleOf(draft.markdown),
+  // 人起的名字优先：新起的一篇正文是空的，从正文猜只能猜出「未命名」——
+  // 或者更糟，第一行随手敲的那个字符。
+  title: draft.title ?? titleOf(draft.markdown),
   excerpt: excerptOf(draft.markdown),
   updatedAt: draft.updatedAt,
 });

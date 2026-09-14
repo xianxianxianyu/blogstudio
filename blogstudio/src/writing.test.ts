@@ -189,6 +189,29 @@ describe("新起一篇要标题", () => {
 });
 
 describe("顶栏的名字", () => {
+  it("**新起的一篇叫人起的那个名字**——正文空着、或随手敲了个字符，都不改它", async () => {
+    const it_ = writer([], 10_000);
+    await it_.writer.create("professional agent 的 eval");
+    expect(it_.writer.state.title).toBe("professional agent 的 eval");
+    expect(it_.writer.state.drafts[0]!.title).toBe("professional agent 的 eval");
+
+    it_.writer.edit("\\`");
+    await it_.writer.flush();
+    expect(it_.writer.state.title).toBe("professional agent 的 eval");
+    expect(it_.writer.state.drafts[0]!.title).toBe("professional agent 的 eval");
+  });
+
+  it("打开架上的一篇再打字，正文没标题行，架上的名字不动", async () => {
+    const it_ = writer([draft("gemm", "## 小节\n\n正文")], 0);
+    it_.store.list = async () => [{ id: "gemm", title: "triton is all you need 之 GEMM", excerpt: "", updatedAt: 1 }];
+    await it_.writer.refresh();
+    await it_.writer.open("gemm");
+    it_.writer.edit("## 小节\n\n正文多了一句");
+    await it_.writer.flush();
+    expect(it_.writer.state.title).toBe("triton is all you need 之 GEMM");
+    expect(it_.writer.state.drafts[0]!.title).toBe("triton is all you need 之 GEMM");
+  });
+
   it("正文没有标题行时用架上的名字，不用正文第一行", async () => {
     // 那 92 篇的正文多半没有 H1（Hugo 自己渲染标题），第一行往往是个小节名。
     const it_ = writer([draft("gemm", "## 获取当前程序的全局索引\n\n正文…")]);
@@ -197,7 +220,7 @@ describe("顶栏的名字", () => {
     it_.store.list = async () => [{ id: "gemm", title: "triton is all you need 之 GEMM", excerpt: "", updatedAt: 1 }];
     await it_.writer.refresh();
     await it_.writer.open("gemm");
-    expect(it_.writer.state.title).toBe("获取当前程序的全局索引");
+    expect(it_.writer.state.title).toBe("triton is all you need 之 GEMM");
   });
 
   it("正文有一级标题就用它——写的人刚敲下 `#` 那一行就该看到名字变", async () => {
