@@ -92,3 +92,15 @@ describe("确定性检查", () => {
     expect(report.findings.map((one) => one.line)).toEqual([1, 5, 7]);
   });
 });
+
+describe("没有知识库时", () => {
+  it("`provenance: false` 不查出处，别的规则照查", () => {
+    const text = "# 题\n\n一段没有出处的话。\n\n## 空的一节\n";
+    const strict = check(text, []);
+    const loose = check(text, [], { provenance: false });
+    expect(strict.findings.map((f) => f.rule)).toContain("no-provenance");
+    expect(loose.findings.map((f) => f.rule)).not.toContain("no-provenance");
+    // 空章节仍然拦：那不是出处的事。
+    expect(loose.findings.map((f) => f.rule)).toContain("empty-section");
+  });
+});

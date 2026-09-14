@@ -127,9 +127,15 @@ export function WriterPage({
           <div key={one.slug} className="book">
             <button
               className="open grow"
-              /* HTML 正文的那些点开也改不了（存回去会被改坏），**在点之前就说清楚**。 */
+              /* HTML 正文的那些（从 Halo 迁来的那批）**不进编辑器**：所见即所得那一套
+                 拿不住它，打开是一屏 `<p style="">` 字面量，打一个字就是「没存住」。
+                 点了就说清楚，改要去 Export 页的文本框。 */
               title={one.html ? "这篇的正文是原始 HTML，在这儿改不了" : undefined}
-              onClick={() => onOpen(one.slug)}
+              onClick={() =>
+                one.html
+                  ? setError(`《${one.title}》的正文是原始 HTML（从 Halo 迁来的那批），编辑器拿不住它——去 Export 页用文本框改，或先转成 markdown。`)
+                  : onOpen(one.slug)
+              }
             >
               <span className="spine paper" />
               <span className="grow">

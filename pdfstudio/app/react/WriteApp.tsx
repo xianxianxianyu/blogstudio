@@ -138,6 +138,8 @@ export function WriteApp({
           progress={progress}
           contexts={contexts}
           onUploadImage={(file) => blog.uploadImage(file)}
+          // 这里没有知识库，每段要出处的纪律不成立（`checks.ts`）。
+          provenance={false}
           onBack={() => {
             leave();
             setActive({ kind: "writer" });

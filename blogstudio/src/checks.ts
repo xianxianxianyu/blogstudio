@@ -106,13 +106,27 @@ function duplicates(claims: Claim[]): Finding[] {
  * 都变成「库里找不到」，满屏红字，而真正的问题只是库没读出来）。调用方要把「库读失败」
  * 与「库是空的」分开，所以这里收的是 `null` 而不是空数组。
  */
-export function check(markdown: string, pool: Context[] | null): Report {
+export function check(
+  markdown: string,
+  pool: Context[] | null,
+  options: {
+    /**
+     * 要不要查「每一段都得有出处或标成自己的观点」（§1.5）。
+     *
+     * 那条纪律是**接着知识库写**时的纪律：材料在库里，引了就标。没有知识库的地方
+     * （`/write` 上就没有），每一段都要手打 `[authored]` 只是仪式——一个永远红、
+     * 又不拦任何事的灯，人会学会无视它。默认查；没库的入口显式关掉。
+     */
+    provenance?: boolean;
+  } = {},
+): Report {
   const claims = claimsOf(markdown);
   const byId = new Map((pool ?? []).map((one) => [one.id, one]));
   const findings: Finding[] = [];
+  const provenance = options.provenance ?? true;
 
   for (const claim of claims) {
-    if (claim.provenance.kind === "none") {
+    if (provenance && claim.provenance.kind === "none") {
       findings.push({
         rule: "no-provenance",
         level: "blocked",

@@ -48,6 +48,12 @@ const cut = (text: string, limit: number): string =>
  * 退回「第一行」而不是直接给未命名，是因为写的人经常先敲一行字再回头补 `#`——那一行
  * 已经足以在列表里认出这篇是什么了。
  */
+/** 正文里第一个标题行的字；没有就是 null。与 `titleOf` 的区别：不退回第一行。 */
+export function headingOf(markdown: string): string | null {
+  const heading = markdown.split("\n").find((line) => /^\s*#{1,6}\s+\S/.test(line));
+  return heading === undefined ? null : cut(bare(heading), 60);
+}
+
 export function titleOf(markdown: string): string {
   const lines = markdown.split("\n");
   const heading = lines.find((line) => /^\s*#{1,6}\s+\S/.test(line));

@@ -187,3 +187,23 @@ describe("新起一篇要标题", () => {
     expect(await it_.writer.create()).toBe("new-id");
   });
 });
+
+describe("顶栏的名字", () => {
+  it("正文没有标题行时用架上的名字，不用正文第一行", async () => {
+    // 那 92 篇的正文多半没有 H1（Hugo 自己渲染标题），第一行往往是个小节名。
+    const it_ = writer([draft("gemm", "## 获取当前程序的全局索引\n\n正文…")]);
+    // 内存 store 的 list 把 markdown 当 title；真实 store 给的是 frontmatter 的 title——
+    // 这里直接把架上的名字放进列表，模拟真实形状。
+    it_.store.list = async () => [{ id: "gemm", title: "triton is all you need 之 GEMM", excerpt: "", updatedAt: 1 }];
+    await it_.writer.refresh();
+    await it_.writer.open("gemm");
+    expect(it_.writer.state.title).toBe("获取当前程序的全局索引");
+  });
+
+  it("正文有一级标题就用它——写的人刚敲下 `#` 那一行就该看到名字变", async () => {
+    const it_ = writer([draft("x", "# 我起的名字\n\n正文")]);
+    await it_.writer.refresh();
+    await it_.writer.open("x");
+    expect(it_.writer.state.title).toBe("我起的名字");
+  });
+});

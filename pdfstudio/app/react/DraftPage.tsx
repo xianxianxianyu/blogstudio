@@ -21,6 +21,7 @@ export function DraftPage({
   progress,
   contexts,
   onUploadImage,
+  provenance = true,
   onBack,
 }: {
   writer: Writer;
@@ -33,6 +34,8 @@ export function DraftPage({
    * **读不出来要给 null**，不能给空数组——那会让每一条引用都变成「库里找不到」。
    */
   contexts: () => Promise<Context[]>;
+  /** 查不查「每段都要有出处」。没有知识库的入口（`/write`）关掉，见 `checks.ts`。 */
+  provenance?: boolean;
   onBack: () => void;
 }) {
   const state = useSyncExternalStore(
@@ -70,8 +73,8 @@ export function DraftPage({
    */
   const text = state.openId === null ? null : writer.text();
   const report: Report | null = useMemo(
-    () => (text === null ? null : check(text, pool)),
-    [text, pool],
+    () => (text === null ? null : check(text, pool, { provenance })),
+    [text, pool, provenance],
   );
   const outline: Heading[] = useMemo(() => (text === null ? [] : outlineOf(text)), [text]);
 

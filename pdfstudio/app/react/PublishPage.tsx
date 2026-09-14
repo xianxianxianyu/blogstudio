@@ -115,7 +115,8 @@ function Row({ one, section, client, busy, run }: { one: ArticleSummary; section
       {one.draft && <button className="btn" disabled={busy} onClick={() => { const next = window.prompt("文章的新地址（保留 .en / .zh-cn 语言后缀）", one.slug); if (next && next !== one.slug) void run(() => client.rename(one.slug, next)); }}>修改地址</button>}
       <button className="btn" disabled={busy} onClick={() => void run(async () => { if (one.draft) { const out = await client.promote(one.slug); if (out.missing.length) return `已在本地上架，有 ${out.missing.length} 条引用待核对：${out.missing.join("、")}`; } else await client.withdraw(one.slug, true); })}>{one.draft ? "上架" : "下架"}</button>
       {one.draft && <button className="btn" disabled={busy} onClick={() => void run(() => client.move(one.slug, other))}>移至 {label}</button>}
-      <button className="btn" disabled={busy} onClick={() => void run(async () => { const { trashed } = await client.remove(one.slug); return `已移进回收站：${trashed}。同步后从线上移除。`; })}>移至回收站</button>
+      {/* 与 Writer 页的「丢掉」同一条规矩：进回收站不是消失，但要确认一下。 */}
+      <button className="btn" disabled={busy} onClick={() => { if (!window.confirm(`把《${one.title}》丢进回收站？`)) return; void run(async () => { const { trashed } = await client.remove(one.slug); return `已移进回收站：${trashed}。同步后从线上移除。`; }); }}>移至回收站</button>
     </div>
     {content && <fieldset className="export-content-editor" disabled={busy}>
       <label className="about-field"><span>标题</span><input value={content.title} onChange={e => setContent({ ...content, title: e.target.value })} /></label>

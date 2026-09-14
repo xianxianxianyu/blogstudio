@@ -1,4 +1,4 @@
-import { newDraft, summarize, titleOf, type Draft, type DraftStore, type DraftSummary } from "./draft";
+import { headingOf, newDraft, summarize, titleOf, type Draft, type DraftStore, type DraftSummary } from "./draft";
 import { markAuthored } from "./claims";
 import { slugOf, slugProblem } from "./publish/slug";
 
@@ -14,7 +14,13 @@ export interface WritingState {
   drafts: DraftSummary[];
   /** 正在写哪一篇。正文**不在这里**，见 `text()`。 */
   openId: string | null;
-  /** 当前这篇的名字（正文第一行派生）。案头和顶栏都用它。 */
+  /**
+   * 当前这篇的名字。案头和顶栏都用它。
+   *
+   * 正文里有标题行就是那一行；没有就是**架上的名字**（frontmatter 的 `title`，列表里
+   * 那个）。那 92 篇的正文多半没有 H1——Hugo 自己渲染标题——原来这里退回「正文第一行」，
+   * 于是顶栏显示的是第一个小节名，和列表里的名字对不上。
+   */
   title: string;
   status: "saved" | "dirty" | "saving";
   /**
@@ -87,7 +93,7 @@ export function createWriter(deps: {
     published = {
       drafts,
       openId: open?.id ?? null,
-      title: open ? titleOf(text) : "",
+      title: open ? (headingOf(text) ?? drafts.find((one) => one.id === open!.id)?.title ?? titleOf(text)) : "",
       status,
       epoch,
       error,
