@@ -581,6 +581,14 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 /* 设置是一个根，所以它会亮——与上面三个根同一套反馈（Shell.tsx）。 */
 .rail-foot.on { color: var(--accent); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,.07); }
 
+/* 藏起来的活动栏只剩这一根把手（Shell 的 `hidden`）：一指宽、贴左边，写的时候不占眼。 */
+.rail-handle {
+  flex: none; width: 22px; padding: 6px 0; border: none; border-right: 1px solid var(--line);
+  background: var(--paper); color: var(--faint); font-size: 13px; line-height: 1.2;
+  display: flex; align-items: flex-start; justify-content: center;
+}
+.rail-handle:hover { color: var(--ink); background: #fff; }
+
 /* ── 收起来的活动栏：只剩图标 ─────────────────────────────────
    规则只有两条：**藏掉一切文字，把剩下的图标居中**。没有第二套结构——DOM 一个
    节点都没变，所以收起状态下不会出现「展开时好好的、窄了就点不动」的那一类 bug。 */

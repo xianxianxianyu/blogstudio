@@ -58,6 +58,8 @@ export function Shell({
   onClose,
   onSettings,
   roots = ROOT_ORDER,
+  hidden = false,
+  onReveal,
   children,
 }: {
   active: Active;
@@ -75,6 +77,14 @@ export function Shell({
   onPick: (item: DeskItem) => void;
   onClose: (item: DeskItem) => void;
   onSettings: () => void;
+  /**
+   * 整条活动栏藏起来，只留左边一指宽的把手（`onReveal` 把它叫回来）。
+   *
+   * 写和读的时候要的是纸，不是导航：`/write` 进了编辑器就把它藏掉，把宽度留给正文。
+   * 与 `tight`（收成图标）不是一回事——那是人自己选的常态，这是某一页的临时形态。
+   */
+  hidden?: boolean;
+  onReveal?: () => void;
   children: React.ReactNode;
 }) {
   const [tight, setTight] = useRemembered("rail-tight", false);
@@ -120,6 +130,17 @@ export function Shell({
    */
   const isOn = (item: DeskItem): boolean =>
     "id" in active && active.kind === item.kind && active.id === item.id;
+
+  if (hidden) {
+    return (
+      <div className="shell">
+        <button className="rail-handle" title="显示侧栏" aria-label="显示侧栏" onClick={onReveal}>
+          »
+        </button>
+        <div className="shell-main">{children}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="shell">

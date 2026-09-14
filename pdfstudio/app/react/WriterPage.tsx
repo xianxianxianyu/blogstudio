@@ -72,9 +72,11 @@ export function WriterPage({
    *
    * **搜索缩小之后，标签栏跟着缩**——留着一堆点下去是空的标签，比不给标签更糟。
    */
-  const shown = view.articles.filter((one) =>
-    tag === null ? true : [...(one.tags ?? []), ...(one.categories ?? [])].includes(tag),
-  );
+  const shown = view.articles
+    .filter((one) => (tag === null ? true : [...(one.tags ?? []), ...(one.categories ?? [])].includes(tag)))
+    // **最近碰过的在前**：这一页是干活的地方，「我昨天写到一半的那篇」比「发得最晚的那篇」
+    // 要紧。改动时刻一样的（clone 下来那一批）再按 date。Export 页仍按 date——那边对的是网站。
+    .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0) || (b.date ?? "").localeCompare(a.date ?? ""));
   const present = new Set(view.articles.flatMap((one) => [...(one.tags ?? []), ...(one.categories ?? [])]));
   const labels = view.labels.filter(([name]) => present.has(name));
 

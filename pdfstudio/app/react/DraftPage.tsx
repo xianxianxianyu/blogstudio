@@ -6,6 +6,7 @@ import { check, type Report } from "../../../blogstudio/src/checks";
 import { outlineOf, type Heading } from "../../../blogstudio/src/outline";
 import type { Progress } from "../../src/app/progress";
 import { DraftEditor } from "./DraftEditor";
+import { useRemembered } from "./remember";
 import { WriterChatPanel } from "./WriterChatPanel";
 import { DraftPane } from "./DraftPane";
 
@@ -43,6 +44,8 @@ export function DraftPage({
     () => writer.state,
   );
   const [pane, setPane] = useState<"draft" | "chat">("draft");
+  /** 右栏开不开。写长文的时候常常一整天用不上它，收起来纸就宽一截；记住，下次照旧。 */
+  const [side, toggleSide] = useRemembered("draft-side", true);
   /**
    * 左边那块画布的 DOM 节点。**只用来滚动，不用来改内容**——改内容必须走编辑器自己的
    * 那条路（非受控，见 DraftEditor）。滚动不是编辑，为它多开一个命令接口不划算。
@@ -104,6 +107,9 @@ export function DraftPage({
         <span className={state.error !== null ? "err" : "faint"}>
           {state.error !== null ? `没存住：${state.error}` : SAVED[state.status]}
         </span>
+        <button className="btn" aria-pressed={side} title={side ? "收起右栏，纸更宽" : "展开右栏：大纲、检查、问稿子"} onClick={toggleSide}>
+          {side ? "收起右栏" : "右栏"}
+        </button>
       </div>
 
       <div className="panes">
@@ -119,27 +125,29 @@ export function DraftPage({
           />
         </div>
 
-        <div className="side">
-          <div className="seg">
-            <button className={pane === "draft" ? "on" : undefined} onClick={() => setPane("draft")}>
-              稿子 {report && report.findings.length > 0 && `· ${report.findings.length}`}
-            </button>
-            <button className={pane === "chat" ? "on" : undefined} onClick={() => setPane("chat")}>
-              问稿子
-            </button>
-          </div>
+        {side && (
+          <div className="side">
+            <div className="seg">
+              <button className={pane === "draft" ? "on" : undefined} onClick={() => setPane("draft")}>
+                稿子 {report && report.findings.length > 0 && `· ${report.findings.length}`}
+              </button>
+              <button className={pane === "chat" ? "on" : undefined} onClick={() => setPane("chat")}>
+                问稿子
+              </button>
+            </div>
 
-          {pane === "draft" ? (
-            <DraftPane
-              outline={outline}
-              report={report}
-              onJump={jumpTo}
-              onMarkAuthored={(line) => writer.markAuthored(line)}
-            />
-          ) : (
-            <WriterChatPanel talk={talk} progress={progress} count={pool?.length ?? null} />
-          )}
-        </div>
+            {pane === "draft" ? (
+              <DraftPane
+                outline={outline}
+                report={report}
+                onJump={jumpTo}
+                onMarkAuthored={(line) => writer.markAuthored(line)}
+              />
+            ) : (
+              <WriterChatPanel talk={talk} progress={progress} count={pool?.length ?? null} />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

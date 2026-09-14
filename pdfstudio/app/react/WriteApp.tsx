@@ -57,11 +57,17 @@ export function WriteApp({
   const [active, setActive] = useState<Active>({ kind: "writer" });
   const [desk, setDesk] = useState<DeskItem[]>([]);
   const [note, setNote] = useState<{ text: string; bad: boolean } | null>(null);
+  /**
+   * 编辑器里侧栏是藏着的（`Shell` 的 `hidden`）；按了把手才露出来，**直到下一次换页**。
+   * 「露出来」是为了去别处，到了别处这个位就该归零，否则下次进编辑器它还开着。
+   */
+  const [peek, setPeek] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   /** 走开之前先把稿子存住——丢的是刚写的字，不能靠「多半来得及」。 */
   const leave = () => {
     if (active.kind === "draft") void writer.flush();
+    setPeek(false);
   };
 
   const openDraft = async (id: string) => {
@@ -71,6 +77,7 @@ export function WriteApp({
       // `send` 会因为不知道在写哪篇而静默返回——字打了、什么都没发生。
       talk.attach(id);
       setActive({ kind: "draft", id });
+      setPeek(false);
       setDesk((was) => openDraftOnDesk(was, id));
       setError(null);
     } catch (cause) {
@@ -91,6 +98,9 @@ export function WriteApp({
       <Shell
         active={active}
         roots={["writer", "export"]}
+        // 写的时候只留纸：侧栏藏起来，把手叫回来。
+        hidden={active.kind === "draft" && !peek}
+        onReveal={() => setPeek(true)}
         onRoot={(kind) => {
           leave();
           setActive({ kind });
