@@ -20,6 +20,7 @@ import { createLoopAgents } from "../../../blogstudio/src/loop/agents";
 import { createPlainChat } from "../model/plain-chat";
 import { parseConfig } from "../config/config";
 import type { Draft } from "../../../blogstudio/src/draft";
+import type { WebSearch } from "../../../blogstudio/src/search";
 import { JSON_TYPE, forwardModel, json, readBody, readBytes, respond, segments, type Route } from "./http";
 
 /**
@@ -42,6 +43,11 @@ export interface WritingApiOptions {
    * 由它传进来；没传 = 这边没有书架，扫就是报错。
    */
   contextSweep?: (studio: ContextStudio) => Promise<{ added: number }>;
+  /**
+   * 联网搜索（`blogstudio/src/search.ts`）。key 只活在服务端，浏览器走 `/__search` 转一手
+   * ——同模型 key 的待遇。不接就是没配，那条路由回 503，写作搭子照答、只是少一种材料。
+   */
+  webSearch?: WebSearch;
 }
 
 export const WRITING_ROUTES = {
@@ -52,6 +58,7 @@ export const WRITING_ROUTES = {
   loops: "/__loops",
   publish: "/__publish",
   blog: "/__blog",
+  search: "/__search",
 } as const;
 
 export interface WritingApi {
@@ -162,6 +169,20 @@ export function createWritingApi(options: WritingApiOptions): WritingApi {
   ticker.unref();
 
   const routes: Route[] = [
+    {
+      // 联网搜索转一手：`POST { query }` → `WebHit[]`。key 在这边，不在页面里。
+      prefix: ROUTES.search,
+      handler: (request, response) =>
+        respond(response, async () => {
+          if (!options.webSearch) {
+            response.statusCode = 503;
+            return { type: "text/plain; charset=utf-8", data: "没配联网搜索（TAVILY_API_KEY）。" };
+          }
+          if (request.method !== "POST") throw new Error("搜索要用 POST");
+          const { query } = JSON.parse(await readBody(request)) as { query: string };
+          return json(await options.webSearch.search(query));
+        }),
+    },
     /**
      * Loop。
      *

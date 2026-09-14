@@ -1,5 +1,6 @@
 import type { Context } from "../../contextstudio/src/context";
 import type { Recaller } from "./recall";
+import type { WebHit, WebSearch } from "./search";
 
 /**
  * 写的时候在旁边说话的那一个。
@@ -39,6 +40,10 @@ export interface WriterAnswer {
   recalled: Context[];
   /** 回答里真的引用了的那几条。摆出来给人点回去核对。 */
   cited: Context[];
+  /** 这一问联网查到的网页。没开联网、或没配搜索，就是空数组。 */
+  hits: WebHit[];
+  /** 联网搜了但没搜成（key 错、额度完、断网）。回答照给，这句摆在旁边。 */
+  searchFailed: string | null;
 }
 
 export interface AskOptions {
@@ -47,6 +52,8 @@ export interface AskOptions {
   signal?: AbortSignal;
   /** 边生成边报，给的是**累计文本**（同 PDF Studio 那侧，理由见 ADR-0009 的注释）。 */
   onText?: (text: string) => void;
+  /** 这一问要不要先联网搜一下。没接 `search` 时这个开关不起作用。 */
+  web?: boolean;
 }
 
 export interface WriterChat {
@@ -86,11 +93,16 @@ const RULES = [
   "你是这篇文章作者的写作搭子。用中文回答，说话直接，不要客套。",
   "**你不动正文。** 要改哪里就说改成什么样，由作者自己落笔——这样每一处改动都是他当场看见的。",
   "引用下面给的材料时必须带上它的记号，写成 [ctx:xxxx] 的样子，一句话用了哪几条就标哪几条。",
+  "引用联网查到的网页时写成 markdown 链接 [标题](地址)，地址只能是下面列出的那几个，不要编。",
   "材料之外的判断照说不误，但要说清那是你的推断，不是材料里的。",
   "材料与稿子冲突时先说出冲突，不要替作者圆过去。",
 ].join("\n");
 
 const NO_MATERIAL = "这一问在知识库里没有找到相关材料。**不要编造 [ctx:...] 记号。**";
+
+/** 网页进 prompt 的样子：标题、地址、摘录。地址必须原样出现，模型才引得回去。 */
+const renderHit = (hit: WebHit, index: number): string =>
+  `${index + 1}. [${hit.title}](${hit.url})\n${hit.content}`;
 
 /** 回答里真的引用了的那几条：只认确实在这次材料里的 id，模型编出来的记号一律不算数。 */
 function citedIn(text: string, recalled: Context[]): Context[] {
@@ -103,6 +115,8 @@ export function createWriterChat(deps: {
   /** 知识库当前有哪些 context。函数而不是数组：库随时在变，快照会让新入库的永远召不回。 */
   materials: () => Promise<Context[]>;
   recaller: Recaller;
+  /** 联网搜索。不接就没有这一种材料；接了也要 `AskOptions.web` 打开才搜。 */
+  search?: WebSearch;
 }): WriterChat {
   return {
     async ask(turns: WriterTurn[], options: AskOptions): Promise<WriterAnswer> {
@@ -115,6 +129,21 @@ export function createWriterChat(deps: {
       const hits = await deps.recaller.recall([last.quoted ?? "", last.text].join("\n").trim(), pool);
       const recalled = hits.map((hit) => hit.context);
 
+      /**
+       * 联网：拿问题（加选中的那段）去搜一次。**搜不成不拦回答**——key 错了、额度完了、
+       * 断网了，都只是少一种材料，答照给，那句原因摆在旁边让人看见。
+       */
+      let web: WebHit[] = [];
+      let searchFailed: string | null = null;
+      if (deps.search && options.web) {
+        try {
+          web = await deps.search.search([last.quoted ?? "", last.text].join("\n").trim(), options.signal);
+        } catch (cause) {
+          if (options.signal?.aborted) throw cause;
+          searchFailed = cause instanceof Error ? cause.message : String(cause);
+        }
+      }
+
       const messages: Message[] = [
         { role: "system", content: RULES },
         {
@@ -124,6 +153,9 @@ export function createWriterChat(deps: {
               ? NO_MATERIAL
               : `这一问相关的材料：\n\n${recalled.map(renderMaterial).join("\n\n")}`,
         },
+        ...(web.length > 0
+          ? [{ role: "system" as const, content: `联网查到的网页：\n\n${web.map(renderHit).join("\n\n")}` }]
+          : []),
         { role: "system", content: `作者正在写的稿子：\n\n${fold(options.draft)}` },
         ...turns.map((turn) => ({
           role: turn.role,
@@ -139,7 +171,7 @@ export function createWriterChat(deps: {
 
       // 停止按钮按下时，已经生成的半段照样是一个合法回答（同 PDF Studio 的不变量⑥）：
       // 白问一次却什么都不留，只会让人重打一遍字。
-      return { text, recalled, cited: citedIn(text, recalled) };
+      return { text, recalled, cited: citedIn(text, recalled), hits: web, searchFailed };
     },
   };
 }

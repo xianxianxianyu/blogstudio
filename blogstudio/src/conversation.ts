@@ -17,6 +17,8 @@ export interface WritingTalkState {
   /** 选中、还没发出去的那一段正文。看得见也撤得掉，同那边贴摘录的规矩。 */
   quoted: string | null;
   error: string | null;
+  /** 发问时先联网搜一下。**默认开**：接了搜索就是为了用它；不想搜的那一问关掉就是。 */
+  web: boolean;
 }
 
 export interface WritingTalk {
@@ -28,6 +30,7 @@ export interface WritingTalk {
   unquote(): void;
   send(text: string): Promise<void>;
   stop(): void;
+  setWeb(on: boolean): void;
 }
 
 export function createWritingTalk(deps: {
@@ -41,13 +44,14 @@ export function createWritingTalk(deps: {
   let answer: WriterAnswer | null = null;
   let quoted: string | null = null;
   let error: string | null = null;
+  let web = true;
   let controller: AbortController | null = null;
 
-  let snapshot: WritingTalkState = { turns, streaming, answer, quoted, error };
+  let snapshot: WritingTalkState = { turns, streaming, answer, quoted, error, web };
   const listeners = new Set<() => void>();
 
   function publish(): void {
-    snapshot = { turns, streaming, answer, quoted, error };
+    snapshot = { turns, streaming, answer, quoted, error, web };
     for (const listener of listeners) listener();
   }
 
@@ -104,6 +108,7 @@ export function createWritingTalk(deps: {
         const result = await deps.chat.ask(turns, {
           draft: deps.draft(),
           signal: controller.signal,
+          web,
           onText: (accumulated) => {
             streaming = accumulated;
             publish();
@@ -123,6 +128,11 @@ export function createWritingTalk(deps: {
 
     stop(): void {
       controller?.abort();
+    },
+
+    setWeb(on: boolean): void {
+      web = on;
+      publish();
     },
   };
 }

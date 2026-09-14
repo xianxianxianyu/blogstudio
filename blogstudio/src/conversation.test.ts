@@ -9,7 +9,7 @@ const chatSaying = (text: string): WriterChat & { seen: { turns: WriterTurn[]; d
     async ask(turns: WriterTurn[], options: AskOptions) {
       seen.push({ turns, draft: options.draft });
       options.onText?.(text);
-      return { text, recalled: [], cited: [] };
+      return { text, recalled: [], cited: [], hits: [], searchFailed: null };
     },
   };
 };
@@ -105,7 +105,7 @@ describe("写作时的对话", () => {
       chat: {
         ask: async (_turns, options) => {
           options.signal?.addEventListener("abort", aborted);
-          return { text: "半段", recalled: [], cited: [] };
+          return { text: "半段", recalled: [], cited: [], hits: [], searchFailed: null };
         },
       },
       draft: () => "正文",

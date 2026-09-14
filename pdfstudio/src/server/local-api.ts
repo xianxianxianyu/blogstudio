@@ -17,6 +17,7 @@ import type { Embedder } from "../model/embedder";
 import type { Context } from "../../../contextstudio/src/context";
 import { JSON_TYPE, guarded, json, readBody, readBytes, respond, segments, type Route } from "./http";
 import { WRITING_ROUTES, createWritingApi } from "./writing-api";
+import { createTavilySearch } from "../../../blogstudio/src/search";
 
 export type { Handler, Route } from "./http";
 
@@ -113,6 +114,8 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
   const writing = createWritingApi({
     dataRoot: path.resolve(options.libraryRoot, ".."),
     configFile: options.configFile,
+    // 桌面版与 dev 从环境变量拿搜索的 key；没有就是没配，搭子照答。
+    webSearch: process.env.TAVILY_API_KEY ? createTavilySearch({ apiKey: process.env.TAVILY_API_KEY }) : undefined,
     /**
      * 临时桥：把书架里已入库（promoted）的摘录扫成 context。
      *

@@ -46,9 +46,9 @@ export function WriterChatPanel({
       <div style={{ flex: 1, overflow: "auto", padding: 14 }}>
         {state.turns.length === 0 && (
           <p className="muted">
-            边写边问。它看得见整篇稿子，也会去知识库里找相关的 context 当材料，
-            用到哪条就把哪条摆出来。
-            {count === 0 && " 现在库里一条 context 都没有——先去 Context Studio 那边收一批。"}
+            边写边问。它看得见整篇稿子；开着「联网」它会先搜一下，引用的网页写成链接，
+            粘进正文时链接跟着一起走。
+            {count !== null && count > 0 && " 知识库里相关的 context 也会当材料摆出来。"}
             <br />
             <br />
             <span className="faint">它只说，不动正文——改哪里由你自己落笔。</span>
@@ -70,6 +70,7 @@ export function WriterChatPanel({
         )}
 
         {!busy && state.answer && <Materials answer={state.answer} />}
+        {!busy && state.answer && <Hits answer={state.answer} />}
 
         {state.error !== null && <pre className="err">{state.error}</pre>}
       </div>
@@ -90,6 +91,10 @@ export function WriterChatPanel({
       )}
 
       <div className="composer">
+        {/* 联网是这一问的事，不是设置里的事：查最新动态时要，改一句措辞时不要。 */}
+        <label className="faint" title="发问前先联网搜一次，引用的网页写成链接">
+          <input type="checkbox" checked={state.web} onChange={(event) => talk.setWeb(event.target.checked)} /> 联网
+        </label>
         <textarea
           rows={2}
           className="grow"
@@ -161,6 +166,34 @@ function Materials({ answer }: { answer: WriterAnswer }) {
           <span className="faint">
             《{context.source.title}》{context.source.locator}
           </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * 联网查到的网页。**全列，不只列引用了的**：网页的引用是 markdown 链接，模型写没写、
+ * 写对没写对都不好机器判；把搜到的摆出来，人自己对。搜不成那句也在这儿。
+ */
+function Hits({ answer }: { answer: WriterAnswer }) {
+  if (answer.searchFailed !== null) {
+    return (
+      <div className="cite none">
+        <div className="what">联网没搜成，以上是不带网页材料答的：{answer.searchFailed}</div>
+      </div>
+    );
+  }
+  if (answer.hits.length === 0) return null;
+  return (
+    <div className="cite">
+      <div className="what">这一问联网查到的</div>
+      {answer.hits.map((hit) => (
+        <div key={hit.url} className="material">
+          <a href={hit.url} target="_blank" rel="noreferrer">
+            <b>{hit.title}</b>
+          </a>
+          <span className="evidence clamp2">{hit.content}</span>
         </div>
       ))}
     </div>

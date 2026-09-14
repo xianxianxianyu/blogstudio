@@ -62,6 +62,9 @@ export function WriteApp({
   const openDraft = async (id: string) => {
     try {
       await writer.open(id);
+      // 一篇文章一场对话：换篇就换场（`conversation.ts` 的 attach）。不接的话
+      // `send` 会因为不知道在写哪篇而静默返回——字打了、什么都没发生。
+      talk.attach(id);
       setActive({ kind: "draft", id });
       setDesk((was) => openDraftOnDesk(was, id));
       setError(null);

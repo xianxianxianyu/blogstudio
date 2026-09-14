@@ -138,3 +138,49 @@ describe("写作搭子", () => {
     expect(fake.prompt()).toContain("中间略去");
   });
 });
+
+describe("联网搜索", () => {
+  const search = (hits: { title: string; url: string; content: string }[]) => ({
+    search: vi.fn(async () => hits),
+  });
+
+  it("开着联网就先搜一次，网页进 prompt、也回给界面", async () => {
+    const fake = fakeModel("见 [文档](https://a)");
+    const web = search([{ title: "文档", url: "https://a", content: "甲" }]);
+    const chat = createWriterChat({ model: fake.model, materials: async () => [], recaller: recaller([]), search: web });
+
+    const answer = await chat.ask([{ role: "user", text: "kv cache 最近有什么" }], { draft: "", web: true });
+
+    expect(web.search).toHaveBeenCalledWith("kv cache 最近有什么", undefined);
+    expect(fake.prompt()).toContain("[文档](https://a)");
+    expect(answer.hits).toEqual([{ title: "文档", url: "https://a", content: "甲" }]);
+    expect(answer.searchFailed).toBeNull();
+  });
+
+  it("关着联网就不搜；没接搜索时开关也不起作用", async () => {
+    const fake = fakeModel("好");
+    const web = search([]);
+    const chat = createWriterChat({ model: fake.model, materials: async () => [], recaller: recaller([]), search: web });
+    await chat.ask([{ role: "user", text: "x" }], { draft: "", web: false });
+    expect(web.search).not.toHaveBeenCalled();
+
+    const bare = createWriterChat({ model: fake.model, materials: async () => [], recaller: recaller([]) });
+    const answer = await bare.ask([{ role: "user", text: "x" }], { draft: "", web: true });
+    expect(answer.hits).toEqual([]);
+  });
+
+  it("**搜不成不拦回答**：答照给，原因摆在旁边", async () => {
+    const fake = fakeModel("照答");
+    const chat = createWriterChat({
+      model: fake.model,
+      materials: async () => [],
+      recaller: recaller([]),
+      search: { search: async () => { throw new Error("搜索失败：HTTP 432 额度用完"); } },
+    });
+    const answer = await chat.ask([{ role: "user", text: "x" }], { draft: "", web: true });
+    expect(answer.text.trim()).toBe("照答");
+    expect(answer.searchFailed).toContain("432");
+    // RULES 里也有这几个字，所以认的是材料那一段的标题（带冒号）。
+    expect(fake.prompt()).not.toContain("联网查到的网页：");
+  });
+});

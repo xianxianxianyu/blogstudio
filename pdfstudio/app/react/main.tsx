@@ -30,6 +30,7 @@ import { createHttpPublishing } from "../http-publish";
 import { createHttpBlog } from "../http-blog";
 import { createHttpContextStudio } from "../http-context-studio";
 import { createHttpLoopReader } from "../http-loops";
+import { createHttpSearch } from "../http-search";
 import { createHttpDraftStore } from "../http-drafts";
 import { createWriter } from "../../../blogstudio/src/writing";
 import { createRecaller } from "../../../blogstudio/src/recall";
@@ -189,6 +190,8 @@ const talk = createWritingTalk({
     // 现取而不是钉一份快照：刚在 Context Studio 那边收了一批，这边就该召回得到。
     materials: async () => (await contextStudio.view()).contexts,
     // 用与问文档同一个向量服务：同一个模型、同一个空间，省掉第二份权重。
+    // 联网搜索走本机 API 转一手；开关在聊天栏上（`conversation.ts` 的 `web`）。
+    search: createHttpSearch(apiUrl("/__search")),
     recaller: createRecaller({ embed: embedder }),
   }),
   // 每次发问现取正文——稿子一直在变，钉住快照就是在答上一版。

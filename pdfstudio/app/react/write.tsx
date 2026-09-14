@@ -15,6 +15,7 @@ import type { ModelClient } from "../../src/model/model-client";
 import { parseConfig, resolveEndpoint, type Capability } from "../../src/config/config";
 import { createHttpPublishing } from "../http-publish";
 import { createHttpBlog } from "../http-blog";
+import { createHttpSearch } from "../http-search";
 import { createHttpDraftStore } from "../http-drafts";
 import { createHttpConfigStore } from "../http-config";
 import { createSettings } from "../../src/app/settings";
@@ -63,6 +64,8 @@ const talk = createWritingTalk({
     model: live("writing"),
     // 不接知识库：这一版的搭子只看正在写的这篇。
     materials: async () => [],
+    // 联网搜索走本机 API 转一手；开关在聊天栏上（`conversation.ts` 的 `web`）。
+    search: createHttpSearch(apiUrl("/__search")),
     recaller: createRecaller({}),
   }),
   draft: () => writer.text(),

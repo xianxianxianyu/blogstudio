@@ -4,6 +4,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { createWritingApi } from "../src/server/writing-api";
 import { guarded, type Route } from "../src/server/http";
+import { createTavilySearch } from "../../blogstudio/src/search";
 
 /**
  * `/write` 的服务端：**只有写作那一半**（`writing-api.ts`），加一份静态的 `write.html`。
@@ -19,6 +20,7 @@ import { guarded, type Route } from "../src/server/http";
  *   WRITE_DATA_ROOT     数据根：config.json / destinations.json / contexts/ / loops/ / 索引
  *   WRITE_RENDERER      构建好的渲染层目录（含 write.html 与 assets/）
  *   WRITE_SHARED_SECRET Panel 转发时带在 `x-write-secret` 头里的那个值。**必填**
+ *   TAVILY_API_KEY      联网搜索的 key。可选：没有就是没配，写作搭子照答、只是少一种材料
  */
 const PREFIX = "/write";
 const SECRET_HEADER = "x-write-secret";
@@ -34,7 +36,11 @@ const dataRoot = env("WRITE_DATA_ROOT");
 const renderer = env("WRITE_RENDERER");
 const secret = env("WRITE_SHARED_SECRET");
 
-const api = createWritingApi({ dataRoot, configFile: path.join(dataRoot, "config.json") });
+const api = createWritingApi({
+  dataRoot,
+  configFile: path.join(dataRoot, "config.json"),
+  webSearch: process.env.TAVILY_API_KEY ? createTavilySearch({ apiKey: process.env.TAVILY_API_KEY }) : undefined,
+});
 // 写保护令牌留空：跨站写的防线在 Panel（session cookie 是 SameSite=Lax）和那个
 // 共享密钥头上，不在页面 URL 里再塞一个令牌。
 const routes: Route[] = guarded(api.routes, "");
