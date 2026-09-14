@@ -97,23 +97,37 @@ export function DraftPage({
 
   return (
     <div className="book-view">
-      <div className="topbar">
-        <button className="btn" onClick={onBack}>
-          ← 稿子
-        </button>
-        <div className="title grow">{state.title}</div>
-
-        {/* 顶栏没有设置按钮：设置在外壳左下角，同一张表两个入口正是要躲的毛病。 */}
-        <span className={state.error !== null ? "err" : "faint"}>
-          {state.error !== null ? `没存住：${state.error}` : SAVED[state.status]}
-        </span>
-        <button className="btn" aria-pressed={side} title={side ? "收起右栏，纸更宽" : "展开右栏：大纲、检查、问稿子"} onClick={toggleSide}>
-          {side ? "收起右栏" : "右栏"}
-        </button>
-      </div>
-
       <div className="panes">
         <div className="stage paper" ref={setStage}>
+          {/* 没有顶栏。写和读的时候整个高度都该是纸——回去、名字、存没存、右栏开不开，
+              四样都浮在纸的上沿，`sticky` 跟着滚也不占高度。名字只是让人知道在哪一篇，
+              所以是灰的小字；存没存是一盏灯，**只有没存住才说话**（`.light`）。 */}
+          <div className="draft-chrome">
+            <div className="draft-chrome-side">
+              <button className="float-btn" title="回到稿子架" aria-label="回到稿子架" onClick={onBack}>
+                ←
+              </button>
+              <span className="float-title">{state.title}</span>
+            </div>
+            <div className="draft-chrome-side">
+              {state.error !== null && <span className="err float-title">没存住：{state.error}</span>}
+              <span
+                className={`light ${state.error !== null ? "bad" : state.status}`}
+                role="status"
+                aria-label={state.error !== null ? `没存住：${state.error}` : SAVED[state.status]}
+                title={state.error !== null ? `没存住：${state.error}` : SAVED[state.status]}
+              />
+              <button
+                className="float-btn"
+                aria-pressed={side}
+                aria-label={side ? "收起右栏" : "展开右栏"}
+                title={side ? "收起右栏，纸更宽" : "展开右栏：大纲、检查、问稿子"}
+                onClick={toggleSide}
+              >
+                {side ? "◨" : "◧"}
+              </button>
+            </div>
+          </div>
           {/* `key` 换了才换文本：编辑器是非受控的（见 DraftEditor）。换稿子换 `openId`，
               打记号换 `epoch`——日常打字两个都不动。 */}
           <DraftEditor
