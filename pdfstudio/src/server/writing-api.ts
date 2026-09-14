@@ -5,7 +5,7 @@ import { createContextStudio, type ContextStudio } from "../../../contextstudio/
 import { createPublishStore } from "../../../blogstudio/src/publish/publish-store";
 import { createBlog, indexFileOf, type Blog } from "../../../blogstudio/src/blog/blog";
 import { draftsOnArticles } from "../../../blogstudio/src/blog/drafts-on-articles";
-import { createSshSite } from "../../../blogstudio/src/publish/ssh-site";
+import { siteOf } from "../../../blogstudio/src/publish/ssh-site";
 import { createOssImages } from "../../../blogstudio/src/publish/oss-images";
 import type { ImageSide } from "../../../blogstudio/src/publish/deploy";
 import { previewSync, syncOnly } from "../../../blogstudio/src/publish/deploy";
@@ -258,7 +258,7 @@ export function createWritingApi(options: WritingApiOptions): WritingApi {
             await rm(path.join(siteRoot, dir), { recursive: true, force: true });
           }
 
-          const site = createSshSite(destination);
+          const site = siteOf(destination);
           if (request.method !== "POST") {
             return json(await previewSync(config, destination, site, runHugo, await imageSide()));
           }

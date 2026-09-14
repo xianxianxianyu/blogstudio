@@ -10,7 +10,8 @@ import type { Changes } from "./rsync-plan";
 export interface Destination {
   name: string;
   /**
-   * `~/.ssh/config` 里的别名（`vps`、`myblog-preview`）。
+   * `~/.ssh/config` 里的别名（`vps`、`myblog-preview`），或者 **`"local"`——就是这台机器**
+   * （`/write` 跑在 VPS 上时，`.com` 的去处是隔壁目录，不该 ssh 自己）。
    *
    * **不写 IP、端口、用户名、密钥路径**：那些已经在 ssh config 里了，抄一份就会漂——
    * 而且这样我们依旧一个字节的凭证都不存（ADR-0003 决策 1 的理由不变）。
@@ -46,6 +47,9 @@ export interface Destination {
    */
   images?: string;
 }
+
+/** `host` 写这个值表示去处在本机：rsync 到一个目录，probe 直接读文件系统。 */
+export const LOCAL_HOST = "local";
 
 /** 远端那个目录现在是什么样。 */
 export interface Probe {

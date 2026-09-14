@@ -10,8 +10,15 @@
  */
 export const API_BASE = new URLSearchParams(location.search).get("api") ?? "";
 
+/**
+ * 挂在 `/write/` 下时（`research.moyutianzun.com/write/`，见 `pdfstudio/web/main.ts`），
+ * 本机 API 也在那个前缀下面：Panel 把 `/write/*` 整个转给 Node，Node 再剥掉前缀。
+ * dev 下页面是 `/write.html`，不带斜杠，不算——那时 API 在根上。
+ */
+const BASE_PATH = location.pathname === "/write" || location.pathname.startsWith("/write/") ? "/write" : "";
+
 /** 拼成绝对地址。SDK 会拿 baseURL 去构造 URL 对象，相对路径直接抛。 */
-export const apiUrl = (route: string): string => `${API_BASE || location.origin}${route}`;
+export const apiUrl = (route: string): string => `${API_BASE || location.origin + BASE_PATH}${route}`;
 
 /**
  * 写保护的令牌（`src/server/guard.ts`），主进程每次启动新生成，跟地址一起从查询串进来。

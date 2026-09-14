@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createSite } from "./ssh-site";
+import { createLocalSite, siteOf } from "./ssh-site";
 
 /**
  * 对着**真 rsync** 测，不 mock。
@@ -15,17 +15,8 @@ import { createSite } from "./ssh-site";
  * 就能测到最容易出错的那部分（`-8`、`-c`、`--delete` 少一个都是静悄悄的错）。
  */
 
-/** 本地版的 probe：跟 ssh 那版问的是同样三件事。 */
-const localSite = (dir: string, exclude: string[] = []) =>
-  createSite(
-    `${dir}/`,
-    async () => ({
-    exists: await stat(dir).then(() => true, () => false),
-    looksLikeSite: await stat(path.join(dir, "index.html")).then(() => true, () => false),
-      slugs: await readdir(path.join(dir, "blog")).catch(() => [] as string[]),
-    }),
-    exclude,
-  );
+/** 本机去处就是生产代码里那一个（`createLocalSite`），这里不另抄一份。 */
+const localSite = createLocalSite;
 const dirs = async (): Promise<{ from: string; to: string }> => {
   const root = await mkdtemp(path.join(tmpdir(), "site-"));
   const from = path.join(root, "from");
@@ -174,5 +165,16 @@ describe("站点同步", () => {
 
     expect(await readFile(path.join(to, "blog/a`touch pwned`b.html"), "utf8")).toBe("x\n");
     await expect(readFile(path.join(to, "pwned"), "utf8")).rejects.toThrow();
+  });
+
+  it("`host: \"local\"` 选本机适配器，别的选 ssh", async () => {
+    const { to } = await dirs();
+    const local = siteOf({ name: "com", host: "local", path: to, baseURL: "https://x/" });
+    // 本机的 probe 直接读文件系统——不走 ssh，所以这里不用一台服务器就能问到。
+    // 空目录**不像站点**（没有 index.html），放一个进去才像：`--delete` 指错目录会清空它。
+    expect(await local.probe()).toEqual({ exists: true, looksLikeSite: false, slugs: [] });
+    await put(to, "index.html", "<h1>hi</h1>");
+    await mkdir(path.join(to, "blog", "一篇"), { recursive: true });
+    expect(await local.probe()).toEqual({ exists: true, looksLikeSite: true, slugs: ["一篇"] });
   });
 });

@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
+import { readdir, stat } from "node:fs/promises";
+import path from "node:path";
 import { promisify } from "node:util";
-import type { CloudSite, Destination, Probe } from "./cloud-site";
+import { LOCAL_HOST, type CloudSite, type Destination, type Probe } from "./cloud-site";
 import { EXPORT_EXCLUDES } from "./scope";
 import { parseChanges } from "./rsync-plan";
 import type { Changes } from "./rsync-plan";
@@ -92,6 +94,31 @@ export function createSite(
   };
 }
 
+
+/**
+ * **本机**上的一个站点：rsync 的目标就是一个目录，`probe` 直接读文件系统。
+ *
+ * `/write` 跑在 VPS 上之后，`.com` 的去处就是同一台机器上的 `/srv/blog`——不该为了
+ * 同步到隔壁目录去 ssh 自己一次。`host` 写 `"local"` 就走这条（`cloud-site.ts`）。
+ * 同一条 rsync 命令、同一份解析，只是目标不带 `主机:`。
+ */
+export function createLocalSite(dir: string, exclude: string[] = []): CloudSite {
+  return createSite(
+    `${dir}/`,
+    async () => ({
+      exists: await stat(dir).then(() => true, () => false),
+      looksLikeSite: await stat(path.join(dir, "index.html")).then(() => true, () => false),
+      slugs: await readdir(path.join(dir, "blog")).catch(() => [] as string[]),
+    }),
+    exclude,
+  );
+}
+
+/** 按去处的 `host` 选适配器：`"local"` 是这台机器，其余是 ssh 别名。 */
+export const siteOf = (destination: Destination): CloudSite =>
+  destination.host === LOCAL_HOST
+    ? createLocalSite(destination.path, destination.exclude ?? [])
+    : createSshSite(destination);
 
 /**
  * 一个真的云端站点：rsync 走 ssh，`probe` 也走 ssh。

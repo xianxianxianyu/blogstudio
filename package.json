@@ -22,6 +22,7 @@
     "eval:clips": "tsx pdfstudio/eval/retrieval/build-clips.ts",
     "build:pdfstudio": "vite build --config pdfstudio/vite.app.config.ts --outDir ../dist/renderer --emptyOutDir",
     "build:electron": "esbuild pdfstudio/electron/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=pdfstudio/dist/main.mjs --external:electron && esbuild pdfstudio/electron/web-preload.ts --bundle --platform=node --format=cjs --target=node22 --outfile=pdfstudio/dist/web-preload.js --external:electron && esbuild pdfstudio/electron/shell-preload.ts --bundle --platform=node --format=cjs --target=node22 --outfile=pdfstudio/dist/shell-preload.js --external:electron",
+    "build:write": "esbuild pdfstudio/web/main.ts --bundle --platform=node --format=esm --target=node22 --outfile=pdfstudio/dist/write/main.mjs --banner:js=\"import { createRequire } from 'node:module'; const require = createRequire(import.meta.url);\"",
     "dev:electron": "npm run build:electron && PDFSTUDIO_DEV_SERVER=http://localhost:5174 electron pdfstudio/dist/main.mjs",
     "app:pdfstudio": "npm run build:pdfstudio && npm run build:electron && electron pdfstudio/dist/main.mjs",
     "dist:pdfstudio": "npm run build:pdfstudio && npm run build:electron && node pdfstudio/electron/write-app-package.mjs && (electron-builder --config pdfstudio/electron-builder.yml; git checkout -- package.json)"
