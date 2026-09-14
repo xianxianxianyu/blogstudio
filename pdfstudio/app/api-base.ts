@@ -33,8 +33,25 @@ const TOKEN = new URLSearchParams(location.search).get("token") ?? "";
  * **一个统一出口，而不是每处自己加头**：漏一处的表现是那一条路悄悄 403，
  * 而 403 会被各适配器自己的错误处理吞成「保存失败」之类，很难追到这里。
  */
-export const apiFetch: typeof fetch = (input, init) =>
-  fetch(input, {
+/**
+ * 站在 Panel 后面时（`/write/`），写请求要带 Panel 的 CSRF 令牌：它的 `csrf_guard` 是
+ * 应用级依赖，`/write/*` 和它自己的接口一视同仁。令牌在一个脚本读得到的 cookie 里
+ * （`__Host-panel_csrf`，http 下叫 `panel_csrf`），照它前端的做法原样回给它。
+ * 不在 Panel 后面时没有这个 cookie，也就不带这个头。
+ */
+const panelCsrf = (): string | null => {
+  const hit = /(?:^|;\s*)(?:__Host-)?panel_csrf=([^;]+)/.exec(document.cookie);
+  return hit ? decodeURIComponent(hit[1]!) : null;
+};
+
+export const apiFetch: typeof fetch = (input, init) => {
+  const csrf = panelCsrf();
+  return fetch(input, {
     ...init,
-    headers: { ...(init?.headers as Record<string, string> | undefined), "x-studio-token": TOKEN },
+    headers: {
+      ...(init?.headers as Record<string, string> | undefined),
+      "x-studio-token": TOKEN,
+      ...(csrf !== null ? { "x-csrf-token": csrf } : {}),
+    },
   });
+};
