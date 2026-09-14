@@ -101,8 +101,10 @@ body { background: var(--bg); }
 .rail-tip { background: var(--ink); color: var(--bg); }
 
 .writer-search,
+.writer-new input,
 .writer-tags button { background: var(--raised); color: var(--muted); }
-.writer-search { color: var(--ink); }
+.writer-search,
+.writer-new input { color: var(--ink); }
 .writer-off { background: rgba(240, 192, 96, 0.16); }
 .writer-html { background: var(--raised); }
 

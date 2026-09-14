@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Writer } from "../../../blogstudio/src/writing";
+import { slugOf, slugProblem } from "../../../blogstudio/src/publish/slug";
 import type { BlogClient, BlogView, Trashed } from "../http-blog";
 
 /**
@@ -18,11 +19,13 @@ export function WriterPage({
   blog: BlogClient;
   onOpen: (id: string) => void;
 }) {
-  useSyncExternalStore(
+  const writing = useSyncExternalStore(
     useCallback((listener: () => void) => writer.subscribe(listener), [writer]),
     () => writer.state,
   );
   const [view, setView] = useState<BlogView | null>(null);
+  /** 正在起名的新文章。`null` = 没在起。 */
+  const [naming, setNaming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   /** 选中的标签。`null` = 不筛。 */
   const [tag, setTag] = useState<string | null>(null);
@@ -79,19 +82,31 @@ export function WriterPage({
     <div className="shelf-page">
       <header>
         <h1 className="grow">文章 · {shown.length}</h1>
-        <button
-          className="btn primary"
-          onClick={() => {
-            // 先要标题：它就是地址，也是 frontmatter 里的 `title`——不问就是一篇 uuid 命名的「未命名」，
-            // 真发生过。取消就什么都不建。
-            const title = window.prompt("这篇叫什么？（标题就是地址）");
-            if (title === null || title.trim() === "") return;
-            void act(async () => onOpen(await writer.create(title)));
-          }}
-        >
-          新起一篇
-        </button>
+        {naming === null && (
+          <button className="btn primary" onClick={() => setNaming("")}>
+            新起一篇
+          </button>
+        )}
       </header>
+
+      {/* 先要标题：它就是地址，也是 frontmatter 里的 `title`——不问就是一篇 uuid 命名的
+          「未命名」，真发生过。**在这一页里问，不弹浏览器的对话框**：那个框是浏览器的
+          脸，不是这个应用的；而且地址要边打边看得见，对话框给不了。 */}
+      {naming !== null && (
+        <NewArticle
+          title={naming}
+          taken={(slug) => writing.drafts.some((one) => one.id === slug)}
+          onChange={setNaming}
+          onCancel={() => setNaming(null)}
+          onCreate={() =>
+            act(async () => {
+              const id = await writer.create(naming);
+              setNaming(null);
+              onOpen(id);
+            })
+          }
+        />
+      )}
 
       {error !== null && <pre className="err">{error}</pre>}
 
@@ -245,6 +260,62 @@ export function WriterPage({
           )}
         </p>
       )}
+    </div>
+  );
+}
+
+/**
+ * 起名那一行：标题、它会变成的地址、建 / 取消。
+ *
+ * 地址**边打边算**（`slugOf`），撞了名或起不出地址就当场说，按钮跟着灰——等按下去
+ * 再报错，等于让人把标题重打一遍。Enter 建，Esc 取消。
+ */
+function NewArticle({
+  title,
+  taken,
+  onChange,
+  onCancel,
+  onCreate,
+}: {
+  title: string;
+  taken: (slug: string) => boolean;
+  onChange: (title: string) => void;
+  onCancel: () => void;
+  onCreate: () => void;
+}) {
+  const slug = slugOf(title);
+  const problem =
+    title.trim() === "" ? null : (slugProblem(slug) ?? (taken(slug) ? `已经有一篇在 /${slug} 了，换个标题` : null));
+  const ready = title.trim() !== "" && problem === null;
+  // 这一行是按「新起一篇」才出现的，光标该直接落进去——那一下按的就是「我要打字」。
+  const box = useRef<HTMLInputElement>(null);
+  useEffect(() => box.current?.focus(), []);
+
+  return (
+    <div className="writer-new">
+      <div className="row">
+        <input
+          ref={box}
+          className="grow"
+          value={title}
+          placeholder="这篇叫什么？"
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === "Enter" && ready) onCreate();
+            if (event.key === "Escape") onCancel();
+          }}
+        />
+        <button className="btn primary" disabled={!ready} onClick={onCreate}>
+          建
+        </button>
+        <button className="btn" onClick={onCancel}>
+          取消
+        </button>
+      </div>
+      <p className={problem === null ? "faint" : "err"}>
+        {problem ?? (slug === "" ? "标题就是地址：文件名、URL 的最后一截，建了之后不改。" : `地址 /blog/${slug}/`)}
+      </p>
     </div>
   );
 }

@@ -889,6 +889,15 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
   border: 1px solid var(--line); border-radius: 8px; background: #fff;
 }
 .writer-search:focus { outline: none; border-color: var(--accent); }
+
+/* 起名那一行：跟搜索框同一副样子，只是多了地址那一句在底下。 */
+.writer-new { margin-bottom: 14px; padding: 12px 14px; border: 1px solid var(--accent); border-radius: var(--radius); }
+.writer-new input {
+  padding: 7px 12px; font: inherit; font-size: 15px;
+  border: 1px solid var(--line); border-radius: 8px; background: #fff;
+}
+.writer-new input:focus { outline: none; border-color: var(--accent); }
+.writer-new p { margin: 8px 0 0; font-size: 12.5px; }
 /* 标签会很多（47 篇带 categories、46 篇带 tags），所以换行铺开而不是横着滚——
    横滚的那几个永远没人点。 */
 .writer-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
