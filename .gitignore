@@ -54,5 +54,7 @@ pdfstudio/.models/
 pdfstudio/dist/
 pdfstudio/release/
 
-# Project 的可重建索引
+# 两份可重建的索引（ADR-0005 决策 6：删了能从文件重扫出来）。dev 的数据根就是
+# pdfstudio/，所以它们落在这儿；此前 blog-index.db 被跟踪了，每列一次文章仓库就脏。
+pdfstudio/blog-index.db*
 pdfstudio/projects-index.db*
