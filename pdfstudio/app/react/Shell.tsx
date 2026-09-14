@@ -135,7 +135,9 @@ export function Shell({
     return (
       <div className="shell">
         <button className="rail-handle" title="显示侧栏" aria-label="显示侧栏" onClick={onReveal}>
-          »
+          <span className="what" aria-hidden>
+            »
+          </span>
         </button>
         <div className="shell-main">{children}</div>
       </div>

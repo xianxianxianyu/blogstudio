@@ -165,3 +165,46 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
   background: #fff;
   box-shadow: 0 0 0 1px #3a3f52, 0 12px 40px rgba(0, 0, 0, 0.5);
 }
+
+/* ── 编辑器周边：跟浮着的胶囊同一套语言 ─────────────────────────
+   纸和右栏是桌面上的两张圆角卡片，中间留一条桌面；胶囊沉在纸里 12px；右栏顶上的
+   「稿子 / 问稿子」是一枚分段胶囊；叫回侧栏的把手是一粒圆钮，不再是一根贴边的条。 */
+
+.write-frame .panes { gap: 12px; padding: 0 12px 12px; }
+.write-frame .stage.paper { border-radius: 0; }
+.write-frame .draft-editor {
+  margin: 12px auto 0; min-height: calc(100% - 12px);
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px #3a3f52, 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+/* 胶囊：纸上沿再往下 12px（纸自己离顶 12px），完全落在纸里，不骑在纸边上。 */
+.write-frame .draft-chrome { padding: 24px 26px 0; }
+
+.write-frame .side {
+  margin: 12px 0 0; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--panel); overflow: hidden;
+}
+.write-frame .seg {
+  margin: 12px 12px 4px; padding: 3px; gap: 2px;
+  border: 1px solid var(--line); border-bottom: 1px solid var(--line); border-radius: 999px;
+  background: var(--bg);
+}
+.write-frame .seg button { padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 500; }
+.write-frame .seg button:hover { color: var(--ink); background: var(--raised); }
+.write-frame .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.write-frame .composer { border-top: 1px solid var(--line); background: var(--panel); }
+
+/* 叫回侧栏的把手：一粒圆钮，跟纸上的胶囊同一个身材，在桌面的左上角。 */
+.write-frame .rail-handle {
+  width: 40px; padding: 24px 0 0; border: 0; background: none;
+  align-items: flex-start; justify-content: center;
+}
+.write-frame .rail-handle .what {
+  width: 28px; height: 28px; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--raised); color: var(--muted);
+  font-size: 13px; line-height: 1;
+  transition: background 0.12s, color 0.12s;
+}
+.write-frame .rail-handle:hover { background: none; }
+.write-frame .rail-handle:hover .what { color: var(--ink); background: #2b3044; }
