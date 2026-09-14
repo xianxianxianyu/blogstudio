@@ -129,10 +129,9 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 
 /* ── 稿纸例外：编辑器那一块回到白纸黑字 ─────────────────────── */
 
-.float-btn:hover { background: var(--raised); }
 
 /* 侧栏藏了、右栏也能收，宽度是留给纸的：比桌面版的 760 宽一截。 */
-.draft-editor { max-width: 860px; }
+.draft-editor, .draft-chrome { max-width: 860px; }
 
 /* 纸周围的桌面是深的，纸本身是白的：`.draft-editor` 里把整组变量换回 app.css 的浅色。 */
 .stage.paper { background: var(--bg); }

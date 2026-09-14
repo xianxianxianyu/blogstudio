@@ -626,37 +626,49 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 /* 编辑器那一栏是「纸」：内容居中、两侧留白，不是铺满整屏的输入框。 */
 .stage.paper { background: var(--paper); padding: 0; display: block; overflow: auto; }
 
-/* 纸上方一条窄的桌面（DraftPage 的 `.draft-chrome`）：回去、名字、灯、右栏开关都在这条
-   桌面上，**不压在纸上**——压在纸上就是四块贴纸。`sticky` 跟着滚，底色跟桌面走，
-   所以滚过去的正文是从它底下钻过去，不是透出来。 */
-.stage.paper { padding: 0 24px 48px; }
+/* ── 浮在纸上的家具（DraftPage 的 `.draft-chrome`）────────────────
+   一套小设计系统，四条规矩：
+   1. **跟纸一样宽、贴纸的上沿**：`sticky` + 零高度，跟着滚、不占一行；宽度锁到纸的
+      宽度，屏幕再宽它也在纸上，不会飘到桌面上去。
+   2. **两个胶囊，不是四块贴纸**：同类的东西装进同一个 `.float-group`，中间一道 `.float-sep`。
+   3. **玻璃**：半透明的白 + 背景模糊，正文滚到它底下时能隐约看见，知道它是浮着的。
+   4. **永远浅色**：它是纸上的家具，跟代码块的工具条同一条规矩——纸是白的，家具就是
+      浅的，不管桌面什么颜色。所以这一段写的是字面色，不走 `var(--ink)` 那一组。 */
 .draft-chrome {
-  position: sticky; top: 0; z-index: 5;
-  height: 44px; margin: 0 -24px; padding: 0 14px 0 10px;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  background: inherit;
+  position: sticky; top: 0; z-index: 5; height: 0;
+  max-width: 760px; margin: 0 auto; padding: 12px 14px;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
+  pointer-events: none;
 }
-.draft-chrome-side { display: flex; align-items: center; gap: 6px; min-width: 0; }
-/* 幽灵按钮：没有边、没有底，悬停才显出一块。桌面上的东西越轻越好。 */
+.float-group {
+  display: flex; align-items: center; height: 32px; min-width: 0; padding: 0 4px;
+  border-radius: 999px; pointer-events: auto;
+  background: rgba(255, 255, 255, .82);
+  -webkit-backdrop-filter: blur(10px) saturate(1.3); backdrop-filter: blur(10px) saturate(1.3);
+  border: 1px solid rgba(24, 24, 27, .08);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .05), 0 4px 14px rgba(0, 0, 0, .07);
+  color: #52525b;
+}
+.float-sep { width: 1px; height: 14px; margin: 0 2px; background: rgba(24, 24, 27, .12); flex: none; }
 .float-btn {
-  width: 30px; height: 30px; padding: 0; border: none; border-radius: 8px;
-  background: none; color: var(--muted); font-size: 15px; line-height: 1;
+  width: 26px; height: 26px; padding: 0; border: none; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; color: inherit;
 }
-.float-btn:hover { color: var(--ink); background: rgba(0, 0, 0, .06); }
-.float-btn[aria-pressed="true"] { color: var(--accent); }
+.float-btn:hover { color: #18181b; background: rgba(24, 24, 27, .07); }
+.float-btn[aria-pressed="true"] { color: #2563eb; }
 .float-title {
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  color: var(--muted); font-size: 13px; padding: 0 4px;
+  min-width: 0; max-width: 30em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  padding: 0 8px 0 6px; font-size: 12.5px; letter-spacing: .01em;
 }
+.float-title.err { color: #b91c1c; }
 /* 存没存：一盏灯。绿存住了、琥珀还没到点、蓝闪正在写、红没存住（旁边会有字）。 */
-.light { width: 8px; height: 8px; margin: 0 8px; border-radius: 50%; flex: none; }
-.light.saved { background: #3fb950; }
-.light.dirty { background: var(--mark); }
-.light.saving { background: var(--accent); animation: light-pulse .9s ease-in-out infinite; }
-.light.bad { background: var(--bad); }
+.light { width: 7px; height: 7px; margin: 0 8px 0 10px; border-radius: 50%; flex: none; }
+.light.saved { background: #22c55e; }
+.light.dirty { background: #d97706; }
+.light.saving { background: #2563eb; animation: light-pulse .9s ease-in-out infinite; }
+.light.bad { background: #dc2626; }
 @keyframes light-pulse { 50% { opacity: .35; } }
-/* 纸本身：圆角、离桌面一点距离。 */
-.stage.paper .draft-editor { border-radius: 10px; min-height: calc(100% - 44px); }
 .draft-editor { max-width: 760px; margin: 0 auto; min-height: 100%; background: #fff; box-shadow: 0 0 0 1px var(--line); }
 
 /* Crepe 自带一套主题变量，这里只把它拉到应用的排版语言上——字号、行距、正文宽度
@@ -669,7 +681,8 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
   --crepe-color-outline: var(--line);
   --crepe-color-primary: var(--accent);
 }
-.draft-editor .milkdown .ProseMirror { padding: 42px 52px 40vh; }
+/* 顶上那 72px 是给浮着的家具让的路：第一行不能从胶囊底下开始。 */
+.draft-editor .milkdown .ProseMirror { padding: 72px 52px 40vh; }
 /* 底部那一大块留白是有意的：写到最后一行时，那一行应该还在屏幕中间，
    而不是贴着窗口下沿。 */
 

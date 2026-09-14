@@ -99,24 +99,26 @@ export function DraftPage({
     <div className="book-view">
       <div className="panes">
         <div className="stage paper" ref={setStage}>
-          {/* 没有顶栏。写和读的时候整个高度都该是纸——回去、名字、存没存、右栏开不开，
-              四样都浮在纸的上沿，`sticky` 跟着滚也不占高度。名字只是让人知道在哪一篇，
-              所以是灰的小字；存没存是一盏灯，**只有没存住才说话**（`.light`）。 */}
+          {/* 没有顶栏：回去、名字、灯、右栏开关**浮在纸上**，跟着滚，不占高度。
+              两组胶囊，不是四块贴纸——左边「回去 · 这是哪一篇」，右边「存没存 · 右栏」。
+              它们是纸上的家具，所以永远是浅色的，跟代码块的工具条同一条规矩（app.css）。 */}
           <div className="draft-chrome">
-            <div className="draft-chrome-side">
+            <div className="float-group">
               <button className="float-btn" title="回到稿子架" aria-label="回到稿子架" onClick={onBack}>
-                ←
+                <Icon d="M15 5 8 12l7 7" />
               </button>
+              <span className="float-sep" />
               <span className="float-title">{state.title}</span>
             </div>
-            <div className="draft-chrome-side">
-              {state.error !== null && <span className="err float-title">没存住：{state.error}</span>}
+            <div className="float-group">
+              {state.error !== null && <span className="float-title err">没存住：{state.error}</span>}
               <span
                 className={`light ${state.error !== null ? "bad" : state.status}`}
                 role="status"
                 aria-label={state.error !== null ? `没存住：${state.error}` : SAVED[state.status]}
                 title={state.error !== null ? `没存住：${state.error}` : SAVED[state.status]}
               />
+              <span className="float-sep" />
               <button
                 className="float-btn"
                 aria-pressed={side}
@@ -124,7 +126,7 @@ export function DraftPage({
                 title={side ? "收起右栏，纸更宽" : "展开右栏：大纲、检查、问稿子"}
                 onClick={toggleSide}
               >
-                {side ? "◨" : "◧"}
+                <Icon d="M4 5h16v14H4zM15 5v14" fill={side ? "M15 5h5v14h-5z" : undefined} />
               </button>
             </div>
           </div>
@@ -164,6 +166,16 @@ export function DraftPage({
         )}
       </div>
     </div>
+  );
+}
+
+/** 一枚线条图标。字符（← ◨）在不同字体里粗细各异，线条画出来的才跟得上同一套。 */
+function Icon({ d, fill }: { d: string; fill?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden>
+      {fill !== undefined && <path d={fill} fill="currentColor" stroke="none" />}
+      <path d={d} fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
