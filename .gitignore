@@ -53,3 +53,6 @@ pdfstudio/.models/
 # Electron 构建产物
 pdfstudio/dist/
 pdfstudio/release/
+
+# Project 的可重建索引
+pdfstudio/projects-index.db*

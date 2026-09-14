@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Build } from "./deploy";
@@ -12,6 +14,13 @@ const run = promisify(execFile);
  */
 export const runHugo: Build = async (args) => {
   try {
+    const source = args[args.indexOf("-s") + 1];
+    const destination = args[args.indexOf("-d") + 1];
+    if (!source || !destination || path.dirname(destination) !== source || !path.basename(destination).startsWith("public-")) {
+      throw new Error("构建必须使用站点下的独立 public- 产物目录");
+    }
+    // Hugo 的 cleanDestinationDir 不保证移除已删文章的旧输出，先清理本次独立产物。
+    await rm(destination, { recursive: true, force: true });
     // argv 数组，不过 shell：路径来自配置文件（`ssh-site.ts` 同款）。
     await run("hugo", args, { maxBuffer: 32 * 1024 * 1024 });
   } catch (error) {

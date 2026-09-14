@@ -1,3 +1,4 @@
+import type { AboutContent, AboutLanguage, AboutView } from "../../blogstudio/src/publish/about";
 import { apiFetch } from "./api-base";
 import type { Destination } from "../../blogstudio/src/publish/cloud-site";
 import type { Deployed } from "../../blogstudio/src/publish/deploy";
@@ -16,6 +17,8 @@ export interface PublishView {
 
 export interface Publishing {
   view(): Promise<PublishView>;
+  about(): Promise<AboutView>;
+  saveAbout(language: AboutLanguage, content: AboutContent, revision: string): Promise<AboutView>;
   /** 干跑：这次同步会动什么。**会先构建，但不写远端。** */
   previewSync(destination: string): Promise<Changes & { images: string[] }>;
   /** 真跑。**唯一不可逆的一步。** */
@@ -39,6 +42,12 @@ export function createHttpPublishing(url: string): Publishing {
       return response.ok
         ? ((await response.json()) as PublishView)
         : { destinations: [], problems: [], syncs: {} };
+    },
+    about: () => ask(`${url}/_about`) as Promise<AboutView>,
+    async saveAbout(language, content, revision) {
+      const response = await apiFetch(`${url}/_about`, { method: "POST", body: JSON.stringify({ language, content, revision }) });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json() as Promise<AboutView>;
     },
     previewSync: (destination) => ask(at(destination)) as Promise<Changes & { images: string[] }>,
     sync: (destination) => ask(at(destination), "POST") as Promise<Deployed>,

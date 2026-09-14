@@ -106,3 +106,7 @@ subagent 单独做（**它只看得到那一个任务文件**）→ 一个 agent
 
 那份清单里最近的一格是 **Review**：可判定的红绿已经在了；可回退的 revision 随决策 5
 退休，等 agent 真的开始改文本时再连同 Diff 一起回来。
+
+## Export 的栏目边界（2026-09-09）
+
+Export 管理 Blog、Project、About。Project 的文章放在 `site/content/projects/`，索引和回收站与 Blog 分开；About 使用结构化数据和专属表单。Recommend 及旧 Loop 路径由同步层保护，继续独立发布。具体规则见 [Export](docs/export.md)。

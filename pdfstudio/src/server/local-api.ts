@@ -28,6 +28,9 @@ import { createOssImages } from "../../../blogstudio/src/publish/oss-images";
 import type { ImageSide } from "../../../blogstudio/src/publish/deploy";
 import { previewSync, syncOnly } from "../../../blogstudio/src/publish/deploy";
 import { staleOutDirs } from "../../../blogstudio/src/publish/build";
+import { articleSection, type ArticleSection } from "../../../blogstudio/src/publish/scope";
+import { createAboutStore } from "../../../blogstudio/src/publish/about-store";
+import { moveArticle } from "../../../blogstudio/src/publish/move-article";
 import { runHugo } from "../../../blogstudio/src/publish/hugo";
 import type { Context } from "../../../contextstudio/src/context";
 import { createLoopStore } from "../../../blogstudio/src/loop/loop-store";
@@ -146,9 +149,15 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
    * 而那份文件可能还没写。建不出来时整个 API 照常起——只是博客那几条路由会说清原因。
    */
   let blog: Blog | null = null;
-  const blogOf = async (): Promise<Blog> => {
+  let projects: Blog | null = null;
+  let about: ReturnType<typeof createAboutStore> | null = null;
+  const blogOf = async (section: ArticleSection = "blog"): Promise<Blog> => {
     const { config, problems } = await publishing.config();
     if (config === null) throw new Error(problems.join("；") || "还没配过 destinations.json");
+    if (section === "projects") {
+      projects ??= createBlog(config, path.resolve(options.libraryRoot, "../projects-index.db"), section);
+      return projects;
+    }
     blog ??= createBlog(config, indexFileOf(path.resolve(options.libraryRoot, "..")));
     return blog;
   };
@@ -346,6 +355,14 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
           }
           if (config === null) throw new Error(problems.join("；") || "还没配过去处");
 
+          if (name === "_about") {
+            about ??= createAboutStore(path.join(config.repo, config.site));
+            if (request.method === "GET") return json(await about.read());
+            if (request.method !== "POST") throw new Error("About 只支持读取和保存");
+            const body = JSON.parse(await readBody(request));
+            return json(await about.save(body.language, body.content, body.revision));
+          }
+
           const destination = config.destinations.find((one) => one.name === name);
           if (!destination) throw new Error(`没有叫「${name}」的去处`);
 
@@ -357,12 +374,15 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
            * ——这就是「针对性」。
            */
           const imageSide = async (): Promise<ImageSide> => {
-            const it = await blogOf();
-            await it.refresh();
-            const live = it.index.articles().filter((one) => !one.draft).map((one) => one.slug);
+            const collections = await Promise.all([blogOf(), blogOf("projects")]);
+            const needed: string[] = [];
+            for (const it of collections) {
+              await it.refresh();
+              needed.push(...it.index.imagesOf(it.index.articles().filter(one => !one.draft).map(one => one.slug)));
+            }
             return {
               target: destination.images === undefined ? null : createOssImages(destination.images),
-              needed: it.index.imagesOf(live),
+              needed: [...new Set(needed)],
               dir: path.join(config.repo, config.site, "static/images"),
             };
           };
@@ -407,7 +427,8 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
       handler: (request, response) => {
         const [slug, action] = segments(request);
         respond(response, async () => {
-          const it = await blogOf();
+          const section = articleSection(new URL(request.url ?? "/", "http://127.0.0.1").searchParams.get("section"));
+          const it = await blogOf(section);
 
           /**
            * 粘一张图进编辑器。**存本地，回一个相对路径。**
@@ -429,9 +450,16 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
           if (slug === "images") {
             // 没人用的图：`GET /__blog/images/orphans` 列，`DELETE /__blog/images/<名字>` 删。
             // **列不删、删要人按**——一张图今天没人用，可能是某篇还在下架。
-            if (action === "orphans") return json(await it.orphanImages());
+            if (action === "orphans") {
+              const other = await blogOf(section === "blog" ? "projects" : "blog");
+              await other.refresh();
+              return json((await it.orphanImages()).filter(name => other.index.using(name).length === 0));
+            }
             if (request.method === "DELETE") {
               if (!action) throw new Error("缺少要删的那张图");
+              const other = await blogOf(section === "blog" ? "projects" : "blog");
+              await other.refresh();
+              if (other.index.using(action).length > 0) throw new Error("另一栏目仍在使用这张图片，不能删除");
               await it.removeImage(action);
               return json({});
             }
@@ -465,7 +493,13 @@ export function createLocalApi(options: LocalApiOptions): LocalApi {
 
           const body = await readBody(request);
           const now = Date.now();
-          if (action === "retag") {
+          if (action === "move") {
+            const { config } = await publishing.config();
+            if (!config) throw new Error("还没配过去处");
+            await moveArticle(config, slug, section, body);
+            await it.refresh();
+            await (await blogOf(articleSection(body))).refresh();
+          } else if (action === "retag") {
             await it.retag(slug, JSON.parse(body) as string[]);
           } else if (action === "withdraw") {
             await it.withdraw(slug, body === "true");

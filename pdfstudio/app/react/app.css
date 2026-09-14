@@ -911,3 +911,36 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 .writer-trash > .muted { font-size: 12.5px; margin: 10px 0; }
 .writer-trash .publish-row { padding: 6px 10px; }
 .writer-trash .publish-row .faint { flex: none; font-size: 12px; }
+
+/* Export：栏目管理与同步去处分开；About 用字段编辑现有页面元素。 */
+.export-page { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.export-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 24px 12px; border-bottom: 1px solid var(--line); }
+.export-heading h2 { margin: 0; font-size: 21px; }
+.export-heading p { margin: 6px 0 0; }
+.export-page .publish { flex: 1; min-height: 0; }
+.export-page .publish-list { flex: 1; min-width: 300px; width: auto; }
+.export-page .publish-main { flex: 0 0 340px; min-width: 0; }
+.export-list-head { justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.export-list-head input { min-width: 0; width: 58%; }
+.export-article { border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin: 12px 0; }
+.export-article > .row { gap: 8px; align-items: baseline; }
+.export-article .publish-tagline { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+.about-editor fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.about-field { display: flex; flex-direction: column; gap: 6px; margin: 16px 0; font-size: 13px; }
+.about-field input, .about-field textarea, .export-list-head input { box-sizing: border-box; border: 1px solid var(--line); border-radius: 6px; padding: 9px 11px; font: inherit; color: var(--ink); background: var(--paper); }
+.about-field textarea { resize: vertical; min-height: 65px; line-height: 1.6; }
+.about-toolbar, .about-actions { gap: 8px; flex-wrap: wrap; }
+.about-actions { margin-top: 14px; }
+.about-card { border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 16px 0; }
+.about-preview { overflow-wrap: anywhere; line-height: 1.7; }
+.about-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.about-chips span { border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px; }
+@media (max-width: 950px) {
+  .export-page { overflow-y: auto; }
+  .export-page .publish { flex-direction: column; overflow: visible; }
+  .export-page .publish-list, .export-page .publish-main { flex: none; width: auto; overflow: visible; }
+  .export-heading { align-items: flex-start; flex-direction: column; }
+}
+.export-content-editor { border: 0; padding: 0; margin: 12px 0 0; min-width: 0; }
+
+.about-editor > .about-actions { position: sticky; bottom: -12px; padding: 12px 0; background: var(--paper); border-top: 1px solid var(--line); z-index: 1; }

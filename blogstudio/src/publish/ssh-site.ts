@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { CloudSite, Destination, Probe } from "./cloud-site";
+import { EXPORT_EXCLUDES } from "./scope";
 import { parseChanges } from "./rsync-plan";
 import type { Changes } from "./rsync-plan";
 
@@ -58,7 +59,9 @@ export function createSite(
         "--delete",
         // 一条路径一个 `--exclude`。**干跑和真跑必须带同一份**，否则预览说的
         // 和实际做的是两回事——而这里面有 `--delete`。
-        ...exclude.flatMap((one) => ["--exclude", one]),
+        ...Array.from(new Set([...EXPORT_EXCLUDES, ...exclude])).flatMap((one) => ["--exclude", one]),
+        // 推荐页可能仍引用上次构建的指纹资源；允许更新资源，但不清理旧版本。
+        "--filter", "P /assets/***",
         ...extra,
         ...shell,
         `${localDir}/`,

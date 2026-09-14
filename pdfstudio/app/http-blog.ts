@@ -18,6 +18,7 @@ export interface BlogClient {
   /** `q` 有词就搜标题、标签、正文；空串是「不筛」。 */
   list(q?: string): Promise<BlogView>;
   load(slug: string): Promise<Article>;
+  save(slug: string, content: { title: string; markdown: string }): Promise<void>;
   retag(slug: string, tags: string[]): Promise<void>;
   withdraw(slug: string, draft: boolean): Promise<void>;
   /** 上架：`draft: false`，并把 `[ctx:]` 落成脚注。回报库里认不出的那些 id。 */
@@ -26,6 +27,7 @@ export interface BlogClient {
   remove(slug: string): Promise<{ trashed: string }>;
   /** 换地址。**只在下架时能用**（服务端拦着）。 */
   rename(slug: string, to: string): Promise<void>;
+  move(slug: string, section: "blog" | "projects"): Promise<void>;
   /** 粘进编辑器的图：存进仓库，回报正文里该写的路径。 */
   uploadImage(file: File): Promise<string>;
   /** 回收站里有什么。**读一次就顺手清掉超过一个月的**。 */
@@ -38,9 +40,10 @@ export interface BlogClient {
   removeImage(name: string): Promise<void>;
 }
 
-export function createHttpBlog(url: string): BlogClient {
+export function createHttpBlog(url: string, section: "blog" | "projects" = "blog"): BlogClient {
+  const scoped = (at: string) => `${at}${at.includes("?") ? "&" : "?"}section=${section}`;
   const ask = async (at: string, init?: RequestInit): Promise<unknown> => {
-    const response = await apiFetch(at, init);
+    const response = await apiFetch(scoped(at), init);
     // **失败必须响。** 吞掉的话界面会显示「改好了」，而文件根本没变。
     if (!response.ok) throw new Error(await response.text());
     return response.json();
@@ -50,16 +53,18 @@ export function createHttpBlog(url: string): BlogClient {
 
   return {
     async list(q = "") {
-      const response = await apiFetch(q === "" ? url : `${url}?q=${encodeURIComponent(q)}`);
+      const response = await apiFetch(scoped(q === "" ? url : `${url}?q=${encodeURIComponent(q)}`));
       // 读不到就当空——「还没配过 destinations.json」是正常状态，不该让整页打不开。
       return response.ok ? ((await response.json()) as BlogView) : { articles: [], labels: [] };
     },
     load: (slug) => ask(`${url}/${encodeURIComponent(slug)}`) as Promise<Article>,
+    save: (slug, content) => act(slug, "save", JSON.stringify(content)).then(() => undefined),
     retag: (slug, tags) => act(slug, "retag", JSON.stringify(tags)).then(() => undefined),
     withdraw: (slug, draft) => act(slug, "withdraw", String(draft)).then(() => undefined),
     promote: (slug) => act(slug, "promote") as Promise<{ missing: string[] }>,
     remove: (slug) => act(slug, "remove") as Promise<{ trashed: string }>,
     rename: (slug, to) => act(slug, "rename", to).then(() => undefined),
+    move: (slug, to) => act(slug, "move", to).then(() => undefined),
     trash: () => ask(`${url}/trash`) as Promise<Trashed[]>,
     restore: (name) =>
       (ask(`${url}/trash/${encodeURIComponent(name)}`, { method: "POST" }) as Promise<{ slug: string }>)
@@ -70,7 +75,7 @@ export function createHttpBlog(url: string): BlogClient {
 
     async uploadImage(file) {
       // 原始字节，不 base64：一张截图编码之后胖三分之一，而它要多绕几道。
-      const response = await apiFetch(`${url}/images?name=${encodeURIComponent(file.name)}`, {
+      const response = await apiFetch(scoped(`${url}/images?name=${encodeURIComponent(file.name)}`), {
         method: "POST",
         body: file,
       });

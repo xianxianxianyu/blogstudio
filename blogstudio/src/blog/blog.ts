@@ -1,4 +1,5 @@
 import path from "node:path";
+import type { ArticleSection } from "../publish/scope";
 import type { Context } from "../../../contextstudio/src/context";
 import type { Config } from "../publish/publish-store";
 import { createArticleStore, type Article, type ArticleStore, type Trashed } from "./article-store";
@@ -41,8 +42,8 @@ export interface Blog {
   close(): void;
 }
 
-export function createBlog(config: Config, dbFile: string): Blog {
-  const articles = createArticleStore(config.repo, config.articles);
+export function createBlog(config: Config, dbFile: string, section: ArticleSection = "blog"): Blog {
+  const articles = createArticleStore(config.repo, section === "blog" ? config.articles : `${config.site}/content/projects`, section === "blog" ? ".trash" : ".trash/projects");
   // 图片落在 Hugo 的 static 下：它把 `static/` 原样拷进产物，所以图片不需要任何
   // 额外的管道——跟文章走完全同一条路。
   const images = createImageStore(config.repo, `${config.site}/static/images`);

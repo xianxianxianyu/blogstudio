@@ -123,7 +123,7 @@ function fileOf(slug: string): string {
   return `${slug}.md`;
 }
 
-export function createArticleStore(repoRoot: string, articlesDir: string): ArticleStore {
+export function createArticleStore(repoRoot: string, articlesDir: string, trashDir = ".trash"): ArticleStore {
   const dir = path.join(repoRoot, articlesDir);
   const at = (slug: string): string => path.join(dir, fileOf(slug));
 
@@ -156,7 +156,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string): Artic
       const names = await readdir(dir).catch(() => [] as string[]);
       const all = await Promise.all(
         names
-          .filter((name) => name.endsWith(".md"))
+          .filter((name) => name.endsWith(".md") && !/^_index(?:\.|$)/.test(name))
           .map(async (name) => read(name.slice(0, -3)).catch(() => null)),
       );
       return all
@@ -190,7 +190,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string): Artic
     },
 
     async purge(now) {
-      const dir = path.join(repoRoot, ".trash");
+      const dir = path.join(repoRoot, trashDir);
       // 没有这个目录是正常状态：还没丢过东西。
       const names = await readdir(dir).catch(() => [] as string[]);
       const gone: string[] = [];
@@ -207,7 +207,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string): Artic
       // 打开回收站时也清一次：秒表可能刚好没轮到，而这一刻人正看着它。
       await this.purge(now);
 
-      const dir = path.join(repoRoot, ".trash");
+      const dir = path.join(repoRoot, trashDir);
       const names = await readdir(dir).catch(() => [] as string[]);
       const all: Trashed[] = [];
       for (const name of names.filter((one) => one.endsWith(".md"))) {
@@ -230,7 +230,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string): Artic
       // **不覆盖。** 丢掉之后又写了一篇同名的，是最容易撞上的那种。
       if ((await read(slug)) !== null) throw new Error(`已经有一篇叫「${slug}」了，先给它换个地址`);
       await mkdir(dir, { recursive: true });
-      await rename_(path.join(repoRoot, ".trash", name), at(slug));
+      await rename_(path.join(repoRoot, trashDir, name), at(slug));
       return slug;
     },
 
@@ -240,7 +240,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string): Artic
     },
 
     async remove(slug, now) {
-      const trash = path.join(repoRoot, ".trash");
+      const trash = path.join(repoRoot, trashDir);
       await mkdir(trash, { recursive: true });
       /**
        * 时间戳前缀不是装饰：**同一个 slug 删两次，不能后一次盖掉前一次**
@@ -248,7 +248,7 @@ export function createArticleStore(repoRoot: string, articlesDir: string): Artic
        */
       const name = trashNameOf(slug, now);
       await rename_(at(slug), path.join(trash, name));
-      return path.join(".trash", name);
+      return path.join(trashDir, name);
     },
   };
 }
