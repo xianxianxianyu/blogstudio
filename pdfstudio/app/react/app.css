@@ -626,33 +626,37 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
 /* 编辑器那一栏是「纸」：内容居中、两侧留白，不是铺满整屏的输入框。 */
 .stage.paper { background: var(--paper); padding: 0; display: block; overflow: auto; }
 
-/* 浮在纸上沿的那几样（DraftPage）。`sticky` + 高度为零：跟着滚、不占一行。
-   两头各一组，中间空着——正文的第一行就从这条线开始。 */
+/* 纸上方一条窄的桌面（DraftPage 的 `.draft-chrome`）：回去、名字、灯、右栏开关都在这条
+   桌面上，**不压在纸上**——压在纸上就是四块贴纸。`sticky` 跟着滚，底色跟桌面走，
+   所以滚过去的正文是从它底下钻过去，不是透出来。 */
+.stage.paper { padding: 0 24px 48px; }
 .draft-chrome {
-  position: sticky; top: 0; height: 0; z-index: 5;
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 8px 10px; pointer-events: none;
+  position: sticky; top: 0; z-index: 5;
+  height: 44px; margin: 0 -24px; padding: 0 14px 0 10px;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  background: inherit;
 }
-.draft-chrome-side { display: flex; align-items: center; gap: 8px; pointer-events: auto; min-width: 0; }
+.draft-chrome-side { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* 幽灵按钮：没有边、没有底，悬停才显出一块。桌面上的东西越轻越好。 */
 .float-btn {
-  width: 28px; height: 28px; padding: 0; border: 1px solid var(--line); border-radius: 999px;
-  background: rgba(255, 255, 255, .85); color: var(--muted); font-size: 14px; line-height: 1;
-  backdrop-filter: blur(4px);
+  width: 30px; height: 30px; padding: 0; border: none; border-radius: 8px;
+  background: none; color: var(--muted); font-size: 15px; line-height: 1;
 }
-.float-btn:hover { color: var(--ink); border-color: var(--accent); }
+.float-btn:hover { color: var(--ink); background: rgba(0, 0, 0, .06); }
 .float-btn[aria-pressed="true"] { color: var(--accent); }
 .float-title {
-  max-width: 34em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  padding: 3px 9px; border-radius: 999px; background: rgba(255, 255, 255, .85);
-  color: var(--muted); font-size: 12.5px; backdrop-filter: blur(4px);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--muted); font-size: 13px; padding: 0 4px;
 }
-/* 存没存：一盏灯。绿是存住了，琥珀是还没到点，蓝闪是正在写，红是没存住（旁边会有字）。 */
-.light { width: 9px; height: 9px; border-radius: 50%; flex: none; box-shadow: 0 0 0 3px rgba(255, 255, 255, .85); }
+/* 存没存：一盏灯。绿存住了、琥珀还没到点、蓝闪正在写、红没存住（旁边会有字）。 */
+.light { width: 8px; height: 8px; margin: 0 8px; border-radius: 50%; flex: none; }
 .light.saved { background: #3fb950; }
 .light.dirty { background: var(--mark); }
 .light.saving { background: var(--accent); animation: light-pulse .9s ease-in-out infinite; }
 .light.bad { background: var(--bad); }
 @keyframes light-pulse { 50% { opacity: .35; } }
+/* 纸本身：圆角、离桌面一点距离。 */
+.stage.paper .draft-editor { border-radius: 10px; min-height: calc(100% - 44px); }
 .draft-editor { max-width: 760px; margin: 0 auto; min-height: 100%; background: #fff; box-shadow: 0 0 0 1px var(--line); }
 
 /* Crepe 自带一套主题变量，这里只把它拉到应用的排版语言上——字号、行距、正文宽度

@@ -129,9 +129,7 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
 
 /* ── 稿纸例外：编辑器那一块回到白纸黑字 ─────────────────────── */
 
-/* 浮在纸上沿的那几样落在深色的桌面上（纸比桌面窄），底色跟桌面走。 */
-.float-btn, .float-title { background: rgba(25, 28, 38, .85); border-color: var(--line); }
-.light { box-shadow: 0 0 0 3px rgba(25, 28, 38, .85); }
+.float-btn:hover { background: var(--raised); }
 
 /* 侧栏藏了、右栏也能收，宽度是留给纸的：比桌面版的 760 宽一截。 */
 .draft-editor { max-width: 860px; }
@@ -162,5 +160,5 @@ input:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: 
   color-scheme: light;
   color: var(--ink);
   background: #fff;
-  box-shadow: 0 0 0 1px #3a3f52, 0 8px 30px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 1px #3a3f52, 0 12px 40px rgba(0, 0, 0, 0.5);
 }
