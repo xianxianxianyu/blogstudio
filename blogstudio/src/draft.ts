@@ -13,6 +13,11 @@
 
 export interface Draft {
   id: string;
+  /**
+   * 新起一篇时人起的名字。**只在这一篇还没落盘时有意义**：落成文章之后名字在
+   * frontmatter 里（`drafts-on-articles.ts`），改它是 Export 页上的一个动作。
+   */
+  title?: string;
   /** 正文。它就是磁盘上那个 `.md` 文件里 frontmatter 之后的全部内容。 */
   markdown: string;
   createdAt: number;
@@ -74,8 +79,9 @@ export const summarize = (draft: Draft): DraftSummary => ({
  * 一排「未命名」，看不出哪篇是哪篇。空稿子在编辑器里显示的是提示语（placeholder），
  * 它比一行占位的正文更接近「这里还什么都没有」。
  */
-export const newDraft = (id: string, now: number): Draft => ({
+export const newDraft = (id: string, now: number, title?: string): Draft => ({
   id,
+  ...(title === undefined ? {} : { title }),
   markdown: "",
   createdAt: now,
   updatedAt: now,

@@ -165,3 +165,25 @@ describe("写", () => {
     });
   });
 });
+
+describe("新起一篇要标题", () => {
+  it("按标题起地址，名字跟着落盘", async () => {
+    const it_ = writer();
+    const id = await it_.writer.create("Test VPS Blog");
+    expect(id).toBe("test-vps-blog");
+    expect(it_.files.get("test-vps-blog")).toMatchObject({ id: "test-vps-blog", title: "Test VPS Blog", markdown: "" });
+  });
+
+  it("地址撞了就拒绝——文件名就是 id，覆盖等于把另一篇悄悄抹掉", async () => {
+    const it_ = writer([draft("同一篇", "# 旧的")]);
+    await it_.writer.refresh();
+    await expect(it_.writer.create("同一篇")).rejects.toThrow("已经有一篇");
+    expect(it_.files.get("同一篇")!.markdown).toBe("# 旧的");
+  });
+
+  it("起不出地址的标题拒绝；不给标题仍走 uuid（桌面版老路）", async () => {
+    const it_ = writer();
+    await expect(it_.writer.create("...")).rejects.toThrow("起不出地址");
+    expect(await it_.writer.create()).toBe("new-id");
+  });
+});

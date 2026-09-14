@@ -1,5 +1,6 @@
 import { newDraft, summarize, titleOf, type Draft, type DraftStore, type DraftSummary } from "./draft";
 import { markAuthored } from "./claims";
+import { slugOf, slugProblem } from "./publish/slug";
 
 /**
  * 写这一屏的应用层（同 ADR-0013：规则、顺序、落盘都不在视图里）。
@@ -35,7 +36,13 @@ export interface Writer {
   text(): string;
   refresh(): Promise<void>;
   /** 新起一篇，返回它的 id。 */
-  create(): Promise<string>;
+  /**
+   * 新起一篇。给了标题就按标题起地址（`slugOf`），文章从此就叫这个名；不给就是 uuid
+   * ——那是桌面版早先的形态，留着只为兼容，**网页上一律要标题**。
+   *
+   * 地址撞了就拒绝：文件名就是 id，覆盖等于把另一篇悄悄抹掉。
+   */
+  create(title?: string): Promise<string>;
   open(id: string): Promise<void>;
   /** 编辑器报上来的新正文。落盘防抖，不是每一键都写。 */
   edit(markdown: string): void;
@@ -164,11 +171,18 @@ export function createWriter(deps: {
       publish();
     },
 
-    async create(): Promise<string> {
+    async create(title?: string): Promise<string> {
+      const named = title?.trim() || undefined;
+      const id = named === undefined ? deps.newId() : slugOf(named);
+      if (named !== undefined) {
+        const bad = slugProblem(id);
+        if (bad !== null) throw new Error(`「${named}」起不出地址：${bad}`);
+        if (drafts.some((one) => one.id === id)) throw new Error(`已经有一篇在 /${id} 了，换个标题`);
+      }
       // 新的一篇先落盘再打开：不落的话它只活在内存里，人以为「新建了一篇」，
       // 关掉窗口就没了，而且不会有任何报错。
       await flush();
-      const draft = newDraft(deps.newId(), deps.now());
+      const draft = newDraft(id, deps.now(), named);
       await deps.store.save(draft);
       drafts = [summarize(draft), ...drafts];
       open = draft;

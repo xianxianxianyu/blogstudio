@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createArticleStore } from "./article-store";
@@ -135,5 +135,17 @@ describe("Writer 直接编辑统一目录", () => {
     await it_.drafts.save({ id: "要删的", markdown: "正文", createdAt: 0, updatedAt: 0 });
     await it_.drafts.remove("要删的");
     expect(await it_.drafts.load("要删的")).toBeNull();
+  });
+});
+
+describe("新起一篇的名字", () => {
+  it("人起的标题进 frontmatter；没起才从正文猜", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "blog-"));
+    await mkdir(path.join(root, "site/content/blog"), { recursive: true });
+    const store = draftsOnArticles(createArticleStore(root, "site/content/blog"));
+    await store.save({ id: "test-vps-blog", title: "Test VPS Blog", markdown: "", createdAt: 1, updatedAt: 1 });
+    await store.save({ id: "old-way", markdown: "# 正文里的标题", createdAt: 1, updatedAt: 1 });
+    expect(await readFile(path.join(root, "site/content/blog/test-vps-blog.md"), "utf8")).toContain('title: "Test VPS Blog"');
+    expect(await readFile(path.join(root, "site/content/blog/old-way.md"), "utf8")).toContain('title: "正文里的标题"');
   });
 });

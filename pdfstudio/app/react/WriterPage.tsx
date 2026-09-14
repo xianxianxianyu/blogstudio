@@ -81,7 +81,13 @@ export function WriterPage({
         <h1 className="grow">文章 · {shown.length}</h1>
         <button
           className="btn primary"
-          onClick={() => void act(async () => onOpen(await writer.create()))}
+          onClick={() => {
+            // 先要标题：它就是地址，也是 frontmatter 里的 `title`——不问就是一篇 uuid 命名的「未命名」，
+            // 真发生过。取消就什么都不建。
+            const title = window.prompt("这篇叫什么？（标题就是地址）");
+            if (title === null || title.trim() === "") return;
+            void act(async () => onOpen(await writer.create(title)));
+          }}
         >
           新起一篇
         </button>

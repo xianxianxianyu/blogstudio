@@ -55,8 +55,8 @@ export function draftsOnArticles(articles: ArticleStore): DraftStore {
     async save(draft: Draft): Promise<void> {
       const had = await articles.load(draft.id);
       if (had === null) {
-        // 新起的一篇：**下架**，标题从正文现算。
-        await articles.save({ slug: draft.id, title: titleOf(draft.markdown), markdown: draft.markdown, draft: true });
+        // 新起的一篇：**下架**。名字用人起的那个；没起（老的 uuid 那条路）才从正文猜。
+        await articles.save({ slug: draft.id, title: draft.title ?? titleOf(draft.markdown), markdown: draft.markdown, draft: true });
         return;
       }
       /**
