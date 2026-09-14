@@ -57,10 +57,18 @@ export function Shell({
   onPick,
   onClose,
   onSettings,
+  roots = ROOT_ORDER,
   children,
 }: {
   active: Active;
   onRoot: (kind: RootKind) => void;
+  /**
+   * 画哪几个根，按这个顺序。默认全部。
+   *
+   * `/write` 那个入口只有 Writer 和 Export——那台机器上没有书、没有 context 库、
+   * Loop 在服务端自己跑。画一个点了没反应的 Book 比不画更糟。
+   */
+  roots?: RootKind[];
   desk: DeskItem[];
   /** 拿案头上的一项换它的名字。外壳自己不认识书，也不认识稿子，只认识 id。 */
   titleOf: (item: DeskItem) => string;
@@ -132,7 +140,7 @@ export function Shell({
         {/* 四个根，竖排。它们和下面那一列是同一种东西（都是「可以活着的一样」），
             只是永远在，所以放在上面并且不可关闭。 */}
         <div className="roots">
-          {ROOT_ORDER.map((kind) => (
+          {roots.map((kind) => (
             <button
               key={kind}
               className={`root${active.kind === kind ? " on" : ""}`}

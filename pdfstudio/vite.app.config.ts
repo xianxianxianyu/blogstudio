@@ -24,6 +24,8 @@ export default defineConfig({
   // 和 eval 脚本一起打进应用——25 MB 的评测语料跟着产品分发出去。
   publicDir: false,
   server: { port: 5174 },
+  // 两个入口：`index.html` 是桌面版整个应用，`write.html` 只有写和发（`react/write.tsx`）。
+  build: { rolldownOptions: { input: { index: path.join(import.meta.dirname, "app/index.html"), write: path.join(import.meta.dirname, "app/write.html") } } },
   plugins: [
     react(),
     {

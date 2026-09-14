@@ -127,7 +127,7 @@ const SIDE_NAME: Record<Side, string> = { book: "Book", context: "Context", writ
  * 只在每个能力旁边标出「谁在用」——按产品分栏的话，「同一个端点、写作换个更大的模型」
  * 这种最常见的配法就得把地址和 key 再抄一遍。
  */
-function Endpoints({
+export function Endpoints({
   config,
   settings,
   save,
