@@ -59,22 +59,25 @@ export function PanelBar() {
 
   return (
     <header className="panel-bar">
-      <strong>Panel</strong>
-      <a href="/projects">Projects</a>
-      <a href="/robot">Robot 工作台</a>
-      <a href="/security">Security</a>
-      {/* 当前项。`aria-current` 既是样式钩子也是可访问名——Panel 那边同一个写法。 */}
-      <a href="/write/" aria-current="page">
-        Write
-      </a>
+      {/* 没有栏，只有两枚浮在桌面上的胶囊：去哪儿、你是谁。当前项反白，不上色。 */}
+      <div className="pill-group">
+        <strong>Panel</strong>
+        <a href="/projects">Projects</a>
+        <a href="/robot">Robot 工作台</a>
+        <a href="/security">Security</a>
+        {/* 当前项。`aria-current` 既是样式钩子也是可访问名——Panel 那边同一个写法。 */}
+        <a href="/write/" aria-current="page">
+          Write
+        </a>
+      </div>
       <span className="spacer" />
       {who !== null && (
-        <>
+        <div className="pill-group">
           <span className="muted">{who.username}</span>
           <button type="button" className="link" onClick={() => void leave()}>
             Sign out
           </button>
-        </>
+        </div>
       )}
     </header>
   );

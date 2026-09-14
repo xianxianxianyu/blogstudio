@@ -636,7 +636,9 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
       浅的，不管桌面什么颜色。所以这一段写的是字面色，不走 `var(--ink)` 那一组。 */
 .draft-chrome {
   position: sticky; top: 0; z-index: 5; height: 0;
-  max-width: 760px; margin: 0 auto; padding: 12px 14px;
+  /* 高度是零，但 padding 仍占流——负的下边距把它抵掉，纸才真的从顶上开始，
+     胶囊落在纸里而不是骑在纸边上。 */
+  max-width: 760px; margin: 0 auto -12px; padding: 12px 14px;
   display: flex; justify-content: space-between; align-items: flex-start; gap: 12px;
   pointer-events: none;
 }
@@ -656,7 +658,9 @@ h3.section { margin: 14px 0 5px; font-size: 12px; color: var(--muted); text-tran
   background: none; color: inherit;
 }
 .float-btn:hover { color: #18181b; background: rgba(24, 24, 27, .07); }
-.float-btn[aria-pressed="true"] { color: #2563eb; }
+/* 按下去是反白（黑底白字），不是换一种颜色：纸上的家具也是黑白的。 */
+.float-btn[aria-pressed="true"] { color: #fff; background: #18181b; }
+.float-btn[aria-pressed="true"]:hover { color: #fff; background: #18181b; }
 .float-title {
   min-width: 0; max-width: 30em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   padding: 0 8px 0 6px; font-size: 12.5px; letter-spacing: .01em;
