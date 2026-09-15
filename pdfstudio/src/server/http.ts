@@ -81,6 +81,32 @@ export function respond(
  * 头，浏览器直连必被拦在预检那一步。
 
  */
+/**
+ * 不往模型端点带的头。
+ *
+ * `host` 必须去掉，否则上游按它路由会 404；`content-length` 让 fetch 自己算。其余几个是
+ * **我们自己这条链上的凭证**：网页形态下 Panel 加的共享密钥和用户名、CSRF 令牌、
+ * 桌面版的写保护令牌——它们只该在本机流动，转给第三方的模型网关就是把家门钥匙
+ * 一起寄出去。上游要的只有 `authorization` 和 `content-type`。
+ */
+const NOT_FORWARDED = new Set([
+  "host",
+  "content-length",
+  "cookie",
+  "x-write-secret",
+  "x-panel-user",
+  "x-csrf-token",
+  "x-studio-token",
+]);
+
+/** 转出去的头：`request.headers` 去掉 `NOT_FORWARDED`。单列出来是为了能测——转发本身要真网络。 */
+export const forwardedHeaders = (headers: IncomingMessage["headers"]): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(headers)
+      .filter(([name]) => !NOT_FORWARDED.has(name))
+      .map(([name, value]) => [name, String(value)]),
+  );
+
 export async function forwardModel(request: IncomingMessage, response: ServerResponse): Promise<void> {
   try {
     const [encoded, ...rest] = (request.url ?? "/").split("?")[0].split("/").filter(Boolean);
@@ -93,12 +119,7 @@ export async function forwardModel(request: IncomingMessage, response: ServerRes
 
     const upstream = await fetch(target, {
       method: request.method,
-      headers: Object.fromEntries(
-        Object.entries(request.headers)
-          // host 必须去掉，否则上游按它路由会 404；content-length 让 fetch 自己算。
-          .filter(([name]) => name !== "host" && name !== "content-length")
-          .map(([name, value]) => [name, String(value)]),
-      ),
+      headers: forwardedHeaders(request.headers),
       body,
     });
 
