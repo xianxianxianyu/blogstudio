@@ -308,6 +308,44 @@ describe("重试与计费", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("**网关说「上游没接」的 502 重试**——同 429，那一次上游一个字都没跑", async () => {
+    const refused = () =>
+      new Response(JSON.stringify({ error: { type: "upstream_error", message: "Upstream access forbidden" } }), {
+        status: 502,
+        headers: { "content-type": "application/json" },
+      });
+    let n = 0;
+    const { calls, fetchImpl } = recordingFetch(() => (++n === 1 ? refused() : completionResponse("好的")));
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl, sleep: async () => {} });
+
+    expect((await client.complete({ messages: [{ role: "user", content: "hi" }] })).text).toBe("好的");
+    expect(calls).toHaveLength(2);
+
+    // 流式的那条路，第一个字之前同样重试。
+    n = 0;
+    const streaming = recordingFetch(() => (++n === 1 ? refused() : streamResponse(["好", "的"])));
+    const out: string[] = [];
+    for await (const chunk of createModelClient({ ...CONFIG, fetch: streaming.fetchImpl, sleep: async () => {} })
+      .streamComplete({ messages: [{ role: "user", content: "hi" }] })) {
+      out.push(chunk.textDelta);
+    }
+    expect(out.join("")).toBe("好的");
+    expect(streaming.calls).toHaveLength(2);
+  });
+
+  it("网关的那句话要出现在错误里——「HTTP 502」和「HTTP 502：Upstream access forbidden」是两个排查方向", async () => {
+    const { fetchImpl } = recordingFetch(
+      () =>
+        new Response(JSON.stringify({ error: { type: "upstream_error", message: "Upstream access forbidden" } }), {
+          status: 502,
+        }),
+    );
+    const client = createModelClient({ ...CONFIG, fetch: fetchImpl, sleep: async () => {} });
+    await expect(client.complete({ messages: [{ role: "user", content: "hi" }] })).rejects.toThrow(
+      /HTTP 502：Upstream access forbidden/,
+    );
+  });
+
   it("**429 重试**——限流是上游明确回话说「我没做」，那一次不可能计过费", async () => {
     let n = 0;
     const { calls, fetchImpl } = recordingFetch(() =>

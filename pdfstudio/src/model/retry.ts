@@ -26,11 +26,43 @@ export const RETRIES = 2;
 /** 越等越久。限流时立刻重来，只是把同一堵墙再撞一次。 */
 export const backoffMs = (attempt: number): number => 1000 * 2 ** attempt;
 
+/**
+ * 网关自己回话说「上游没接」——同一条判据的另一种写法。
+ *
+ * 前面那个 `v1.codx.qzz.io` 是一池账号轮着用的网关：轮到坏账号时它回 502
+ * `{"error":{"type":"upstream_error","message":"Upstream access forbidden"}}`，那一次
+ * 上游一个字都没跑，跟 429 一样干净；隔几秒再来多半就换到好账号了（真测过：同一分钟
+ * 里 502 和 200 交替）。**只认这个形状**：裸的 502 / 504 仍然不碰，理由见 `RETRY_STATUS`。
+ */
+export function refusedByGateway(cause: unknown): boolean {
+  const status = statusOf(cause);
+  if (status !== 502 && status !== 503) return false;
+  const body = (cause as { responseBody?: unknown } | null)?.responseBody;
+  if (typeof body !== "string") return false;
+  try {
+    return (JSON.parse(body) as { error?: { type?: unknown } })?.error?.type === "upstream_error";
+  } catch {
+    return false;
+  }
+}
+
 export const retryable = (error: unknown, attempt: number): boolean =>
   attempt < RETRIES &&
   error instanceof ModelError &&
   error.status !== undefined &&
-  RETRY_STATUS.has(error.status);
+  (RETRY_STATUS.has(error.status) || refusedByGateway(error.cause));
+
+/** 上游响应体里那句人话（`{"error":{"message":…}}`），有就带上；没有就空串。 */
+function upstreamMessage(cause: unknown): string {
+  const body = (cause as { responseBody?: unknown } | null)?.responseBody;
+  if (typeof body !== "string") return "";
+  try {
+    const message = (JSON.parse(body) as { error?: { message?: unknown } })?.error?.message;
+    return typeof message === "string" ? message.slice(0, 200) : "";
+  } catch {
+    return "";
+  }
+}
 
 /** SDK 各处对 HTTP 状态的叫法不一：`statusCode` 与 `status` 都见过。 */
 export function statusOf(cause: unknown): number | undefined {
@@ -44,7 +76,10 @@ export function statusOf(cause: unknown): number | undefined {
 export function toModelError(cause: unknown): ModelError {
   const status = statusOf(cause);
   if (typeof status === "number") {
-    return new ModelError("http", `模型端点返回 HTTP ${status}`, { cause, status });
+    // 把上游那句话带上：SDK 只报状态行，而「HTTP 502」和「HTTP 502：Upstream access
+    // forbidden」在界面上是两种排查方向。
+    const said = upstreamMessage(cause);
+    return new ModelError("http", `模型端点返回 HTTP ${status}${said ? `：${said}` : ""}`, { cause, status });
   }
   return new ModelError("http", "模型调用失败", { cause });
 }
